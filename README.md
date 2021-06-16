@@ -16,7 +16,7 @@ You can use ffplay for this time being.
 
 ### How to build
 This project uses git submodule.
-Please run `git submodule init` after cloning.
+Please use `git clone --recursive` or run `git submodule update --init --recursive` after cloning.
 
 Please consult CMakeLists.txt on root directory for build options.
 
