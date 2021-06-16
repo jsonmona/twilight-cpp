@@ -1,3 +1,6 @@
+# Prebuilt packages
+ffmpeg-windows-prebuilt
+
 # Visual Studio
 out/
 .vs/

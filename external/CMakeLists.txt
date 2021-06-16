@@ -1,9 +1,9 @@
 # FFmpeg
 
 if(WIN32)
-	# FFmpeg 4.4 (f68ab9de4e) prebuilt library
-	# Obtained from https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-full-shared.7z
-	# Plan is to compile this myself. But for now, this should be enough.
+	# Get a prebuilt package from somewhere and name it ffmpeg-windows-prebuilt
+	# I'm using one from https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-full-shared.7z
+	# Directory structure should look like: bin/*.dll, include/, lib/*.lib
 	set(FFMPEG_LIBS avcodec avdevice avformat avutil swscale swresample)
 	set(FFMPEG_LIBS ${FFMPEG_LIBS} PARENT_SCOPE)
 	
