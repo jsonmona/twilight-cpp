@@ -1,0 +1,21 @@
+# Visual Studio
+out/
+.vs/
+CMakeSettings.json
+
+# CLion
+.idea/
+cmake-build-*/
+
+# Qt Creator
+*.autosave
+*.qmlproject.user
+*.qmlproject.user.*
+CMakeLists.txt.user*
+compile_commands.json
+*creator.user*
+*_qmlcache.qrc
+
+# Other common build directories
+[Bb]uild/
+[Cc]ompile/
