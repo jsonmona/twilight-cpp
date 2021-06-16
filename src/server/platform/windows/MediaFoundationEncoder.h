@@ -1,0 +1,10 @@
+#ifndef SERVER_WINDOWS_MEDIA_FOUNDATION_ENCODER_H_
+#define SERVER_WINDOWS_MEDIA_FOUNDATION_ENCODER_H_
+
+
+class MediaFoundationEncoder {
+
+};
+
+
+#endif
