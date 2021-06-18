@@ -7,6 +7,15 @@ set(COMMON_WINDOWS_SRC
     ${CMAKE_CURRENT_SOURCE_DIR}/common/platform/windows/ComWrapper.h
 )
 
+set(CLIENT_SRC
+    ${CMAKE_CURRENT_SOURCE_DIR}/client/StreamViewer.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/client/StreamViewer.cpp
+)
+
+set(CLIENT_WINDOWS_SRC
+    ${CMAKE_CURRENT_SOURCE_DIR}/client/platform/windows/main.cpp
+)
+
 set(SERVER_WINDOWS_SRC
     ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/main.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/ColorConvD3D.h
@@ -19,6 +28,14 @@ add_library(common STATIC ${COMMON_SRC} ${COMMON_WINDOWS_SRC})
 target_include_directories(common PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(common PUBLIC spdlog::spdlog ${FFMPEG_LIBS})
 
+add_executable(client WIN32 ${CLIENT_SRC} ${CLIENT_WINDOWS_SRC})
+target_link_libraries(client PUBLIC
+	common
+    Qt6::Widgets Qt6::OpenGLWidgets
+	"dxgi.lib" "d3d11.lib"
+)
+target_compile_definitions(client PUBLIC "-DUNICODE" "-D_UNICODE")
+
 add_executable(server WIN32 ${SERVER_WINDOWS_SRC})
 target_link_libraries(server PUBLIC
 	common
@@ -27,6 +44,52 @@ target_link_libraries(server PUBLIC
 	"ws2_32.lib"
 )
 target_compile_definitions(server PUBLIC "-DUNICODE" "-D_UNICODE")
+
+
+# Separate binaries for better packaging 
+set_target_properties(server
+    PROPERTIES
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/server"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/server"
+)
+set_target_properties(client
+    PROPERTIES
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/client"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/client"
+)
+
+
+# Compile protobuf definitions
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/pb)
+set(PB_GENERATED_FILES)
+macro(FN_GEN_PB FILE)
+    add_custom_command(
+        OUTPUT "pb/${FILE}.pb.h" "pb/${FILE}.pb.cc"
+        COMMAND protoc "-I=${CMAKE_CURRENT_SOURCE_DIR}/common" "--cpp_out=${CMAKE_CURRENT_BINARY_DIR}/pb/" "${CMAKE_CURRENT_SOURCE_DIR}/common/${FILE}.proto"
+        MAIN_DEPENDENCY "${CMAKE_CURRENT_SOURCE_DIR}/common/${FILE}.proto"
+        DEPENDS protoc
+        COMMENT "Compiling protobuf: ${FILE}.proto"
+        VERBATIM
+    )
+    list(APPEND PB_GENERATED_FILES "pb/${FILE}.pb.h" "pb/${FILE}.pb.cc")
+endmacro()
+
+fn_gen_pb(packets)
+add_custom_target(gen_pb ALL DEPENDS ${PB_GENERATED_FILES})
+
+target_include_directories(common SYSTEM PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/pb")
+add_dependencies(common gen_pb)
+target_link_libraries(common PUBLIC libprotobuf-lite)
+
+add_custom_command(TARGET server POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:libprotobuf-lite>" "${CMAKE_BINARY_DIR}/bin/server"
+	VERBATIM
+)
+add_custom_command(TARGET client POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:libprotobuf-lite>" "${CMAKE_BINARY_DIR}/bin/client"
+	VERBATIM
+)
+
 
 # Compile HLSL shader
 if(WIN32)
@@ -57,5 +120,20 @@ if(WIN32)
     
     add_custom_target(fx ALL DEPENDS ${FXC_FILES})
 
+    add_dependencies(client fx)
     add_dependencies(server fx)
+endif()
+
+
+# Copy Qt libraries
+if(WIN32)
+    find_program(WINDEPLOYQT windeployqt DOC "Qt windows deployment tool")
+
+    macro(FN_DEPLOY_QT EXE)
+        add_custom_command(TARGET ${EXE} POST_BUILD
+                       COMMAND ${WINDEPLOYQT} --verbose 0 ${EXE}.exe
+                       WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin/${EXE})
+    endmacro()
+
+    fn_deploy_qt(client)
 endif()
