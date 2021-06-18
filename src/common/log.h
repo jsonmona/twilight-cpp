@@ -9,6 +9,7 @@
 #endif
 
 #include <spdlog/spdlog.h>
+#include <spdlog/sinks/msvc_sink.h>
 
 #ifdef _MSC_VER
 	#pragma warning(pop)

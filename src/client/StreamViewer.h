@@ -6,7 +6,9 @@
 
 #include <QtOpenGLWidgets/qopenglwidget.h>
 #include <QtGui/qopenglfunctions.h>
+#include <QtCore/qtimer.h>
 
+#include <chrono>
 #include <cstdio>
 
 
@@ -19,6 +21,7 @@ class StreamViewer : public QOpenGLWidget, protected QOpenGLFunctions {
 	GLuint vertexShader, fragShader, program;
 	GLuint posAttrib;
 
+	std::chrono::steady_clock::time_point lastUpdate;
 	bool hasTexture = false;
 
 	LoggerPtr log;
@@ -26,6 +29,11 @@ class StreamViewer : public QOpenGLWidget, protected QOpenGLFunctions {
 	FILE* f;
 	AVCodec* decoder;
 	AVCodecContext* decoderContext;
+
+	QTimer timer;
+
+public slots:
+	void executeUpdate();
 
 public:
 	StreamViewer();

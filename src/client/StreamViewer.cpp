@@ -16,6 +16,9 @@ StreamViewer::StreamViewer() : QOpenGLWidget() {
 	tex = 0;
 
 	setMouseTracking(true);
+	timer.setInterval(16);
+	connect(&timer, &QTimer::timeout, this, &StreamViewer::executeUpdate);
+	timer.start();
 
 	decoder = avcodec_find_decoder(AV_CODEC_ID_H264);
 	check_quit(decoder == nullptr, log, "Failed to find H264 decoder");
@@ -36,6 +39,10 @@ StreamViewer::~StreamViewer() {
 
 	glDeleteTextures(1, &tex);
 	glDeleteBuffers(1, &quadBuffer);
+}
+
+void StreamViewer::executeUpdate() {
+	update();
 }
 
 void StreamViewer::mouseMoveEvent(QMouseEvent* ev) {
@@ -120,8 +127,9 @@ void StreamViewer::paintGL() {
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, tex);
 
-	if (!hasTexture) {
+	if (!hasTexture || (std::chrono::steady_clock::now() - lastUpdate).count() >= 16'666'666) {
 		hasTexture = true;
+		lastUpdate = std::chrono::steady_clock::now();
 		AVFrame* frame = av_frame_alloc();
 
 		while (true) {
@@ -136,9 +144,14 @@ void StreamViewer::paintGL() {
 				int readsize = 0;
 				while (readsize < packetLen) {
 					int result = fread(buf + readsize, 1, packetLen - readsize, f);
-					check_quit(result <= 0, log, "Failed to read server stream dump");
+					if (result <= 0)
+						break;
 					// TODO: flush stream and stop
 					readsize += result;
+				}
+				if (readsize != packetLen) {
+					av_frame_free(&frame);
+					break;
 				}
 
 				packet->data = reinterpret_cast<uint8_t*>(buf);
@@ -156,21 +169,23 @@ void StreamViewer::paintGL() {
 				break;
 		}
 
-		SwsContext* ctx = sws_getContext(frame->width, frame->height, static_cast<AVPixelFormat>(frame->format),
-			frame->width, frame->height, AV_PIX_FMT_RGBA, SWS_BILINEAR, nullptr, nullptr, nullptr);
+		if (frame) {
+			SwsContext* ctx = sws_getContext(frame->width, frame->height, static_cast<AVPixelFormat>(frame->format),
+				frame->width, frame->height, AV_PIX_FMT_RGBA, SWS_BILINEAR, nullptr, nullptr, nullptr);
 
-		int stride = frame->width * 4;
-		int bufSize = stride * frame->height;
-		uint8_t* plane = reinterpret_cast<uint8_t*>(av_malloc(bufSize));
+			int stride = frame->width * 4;
+			int bufSize = stride * frame->height;
+			uint8_t* plane = reinterpret_cast<uint8_t*>(av_malloc(bufSize));
 
-		int ret = sws_scale(ctx, frame->data, frame->linesize, 0, frame->height, &plane, &stride);
+			int ret = sws_scale(ctx, frame->data, frame->linesize, 0, frame->height, &plane, &stride);
 
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, frame->width, frame->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, plane);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, frame->width, frame->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, plane);
 
-		sws_freeContext(ctx);
-		av_frame_free(&frame);
+			sws_freeContext(ctx);
+			av_frame_free(&frame);
 
-		av_free(plane);
+			av_free(plane);
+		}
 	}
 	
 	glBindBuffer(GL_ARRAY_BUFFER, quadBuffer);
