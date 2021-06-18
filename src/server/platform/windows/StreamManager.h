@@ -1,6 +1,7 @@
 #ifndef STREAM_MANAGER_H_
 #define STREAM_MANAGER_H_
 
+#include "common/log.h"
 #include "common/platform/windows/ComWrapper.h"
 #include "ColorConvD3D.h"
 
@@ -27,6 +28,7 @@ struct VideoFrame {
 //TODO: Use subclass to support win8.1 (dxgifactory1)
 class StreamManager {
 	// Valid after constructor
+	LoggerPtr log;
 	DxgiFactory5 dxgiFactory;
 	void* videoCallbackData;
 	std::function<void(void*, const VideoFrame&)> videoCallback;

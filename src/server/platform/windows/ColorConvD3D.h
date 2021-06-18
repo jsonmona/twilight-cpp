@@ -3,6 +3,7 @@
 
 
 #include "common/platform/windows/ComWrapper.h"
+#include "common/log.h"
 
 #include <memory>
 
@@ -21,6 +22,8 @@ public:
 	};
 
 protected:
+	LoggerPtr log;
+
 	D3D11Device device;
 	D3D11DeviceContext context;
 	Color color;
@@ -46,7 +49,7 @@ protected:
 public:
 	static std::unique_ptr<ColorConvD3D> createInstance(Type in, Type out, Color color);
 
-	ColorConvD3D();
+	ColorConvD3D(LoggerPtr logger);
 	virtual ~ColorConvD3D();
 	virtual void init(const D3D11Device& device, const D3D11DeviceContext& context);
 

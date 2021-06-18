@@ -3,6 +3,7 @@
 #include <cassert>
 #include <vector>
 #include <utility>
+#include <optional>
 
 
 static void getMainAdapterWithOutput(const DxgiFactory5& factory, DxgiAdapter1* outAdapter, DxgiOutput5* outOutput) {
@@ -30,7 +31,7 @@ static void getMainAdapterWithOutput(const DxgiFactory5& factory, DxgiAdapter1* 
 	outOutput->release();
 }
 
-static MFTransform getVideoEncoder(const MFDxgiDeviceManager& deviceManager) {
+MFTransform getVideoEncoder(const MFDxgiDeviceManager& deviceManager) {
 	HRESULT hr;
 	MFTransform transform;
 	IMFActivate** mftActivate;
@@ -45,9 +46,10 @@ static MFTransform getVideoEncoder(const MFDxgiDeviceManager& deviceManager) {
 		MFT_ENUM_FLAG_TRANSCODE_ONLY | MFT_ENUM_FLAG_SORTANDFILTER,
 		nullptr, &outputType,
 		&mftActivate, &arraySize);
-	if (!SUCCEEDED(hr)) {
-		MessageBox(nullptr, L"Unable to enumerate MFTs!", nullptr, 0);
-		abort();
+	
+	if (FAILED(hr)) {
+		mftActivate = nullptr;
+		arraySize = 0;
 	}
 
 	bool foundTransform = false;
@@ -86,14 +88,18 @@ static MFTransform getVideoEncoder(const MFDxgiDeviceManager& deviceManager) {
 		}
 		mftActivate[i]->Release();
 	}
-	CoTaskMemFree(mftActivate);
+
+	if(mftActivate)
+		CoTaskMemFree(mftActivate);
 
 	if (!foundTransform)
 		transform.release();
+
 	return transform;
 }
 
 StreamManager::StreamManager(decltype(videoCallback) callback, void* callbackData) :
+	log(createNamedLogger("StreamManager")),
 	videoCallback(callback), videoCallbackData(callbackData)
 {
 	HRESULT hr;
@@ -103,8 +109,7 @@ StreamManager::StreamManager(decltype(videoCallback) callback, void* callbackDat
 	flags |= DXGI_CREATE_FACTORY_DEBUG;
 #endif
 	hr = CreateDXGIFactory2(flags, dxgiFactory.guid(), (void**) dxgiFactory.data());
-	if (FAILED(hr))
-		abort();
+	check_quit(FAILED(hr), log, "Failed to create DXGI factory 5");
 
 	_initDevice();
 	_initDuplication();
@@ -115,8 +120,7 @@ void StreamManager::_initDevice() {
 	HRESULT hr = S_OK;
 
 	getMainAdapterWithOutput(dxgiFactory, &adapter, &output);
-	if (adapter.isInvalid())
-		abort();
+	check_quit(adapter.isInvalid(), log, "Failed to find main adapter and output");
 
 	UINT flag = D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_VIDEO_SUPPORT;
 #ifndef NDEBUG
@@ -126,18 +130,15 @@ void StreamManager::_initDevice() {
 	D3D_FEATURE_LEVEL featureLevels[] = { D3D_FEATURE_LEVEL_11_1 };
 	hr = D3D11CreateDevice(adapter.ptr(), D3D_DRIVER_TYPE_UNKNOWN, nullptr, flag,
 		featureLevels, 1, D3D11_SDK_VERSION, device.data(), nullptr, context.data());
-	if (FAILED(hr))
-		abort();
+	check_quit(FAILED(hr), log, "Failed to create D3D11 device");
 
 	device.castTo<ID3D10Multithread>()->SetMultithreadProtected(true);
 
 	hr = MFCreateDXGIDeviceManager(&deviceManagerResetToken, deviceManager.data());
-	if (FAILED(hr))
-		abort();
+	check_quit(FAILED(hr), log, "Failed to create Media Foundation DXGI device manager");
 
 	hr = deviceManager->ResetDevice(device.ptr(), deviceManagerResetToken);
-	if (FAILED(hr))
-		abort();
+	check_quit(FAILED(hr), log, "Failed to reset device");
 
 	device.castTo<ID3D10Multithread>()->SetMultithreadProtected(true);
 }
@@ -147,8 +148,7 @@ void StreamManager::_initDuplication() {
 
 	DXGI_FORMAT supportedFormats[] = { DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM };
 	hr = output->DuplicateOutput1(device.ptr(), 0, 2, supportedFormats, outputDuplication.data());
-	if (FAILED(hr))
-		abort();
+	check_quit(FAILED(hr), log, "Failed to duplicate output");
 
 	//TODO: Add a timer here
 	while (true) {
@@ -157,8 +157,7 @@ void StreamManager::_initDuplication() {
 		hr = outputDuplication->AcquireNextFrame(1000, &frameInfo, resource.data());
 		if (hr == DXGI_ERROR_WAIT_TIMEOUT)
 			continue;
-		if (FAILED(hr))
-			abort();
+		check_quit(FAILED(hr), log, "Failed to acquire next frame");
 		frameAcquired = true;
 
 		D3D11_TEXTURE2D_DESC desc;
@@ -183,15 +182,11 @@ void StreamManager::_initEncoder() {
 	HRESULT hr;
 
 	encoder = getVideoEncoder(deviceManager);
-	if (encoder.isInvalid())
-		abort();
+	check_quit(encoder.isInvalid(), log, "Failed to create encoder");
 
 	DWORD inputStreamCnt, outputStreamCnt;
 	hr = encoder->GetStreamCount(&inputStreamCnt, &outputStreamCnt);
-	if (!SUCCEEDED(hr)) {
-		MessageBox(nullptr, L"Failed to get stream count!", nullptr, 0);
-		abort();
-	}
+	check_quit(FAILED(hr), log, "Failed to get stream count");
 
 	encoderInputStreamId.resize(inputStreamCnt);
 	encoderOutputStreamId.resize(outputStreamCnt);
@@ -202,13 +197,10 @@ void StreamManager::_initEncoder() {
 		for (int i = 0; i < outputStreamCnt; i++)
 			encoderOutputStreamId[i] = i;
 	}
-	else if (!SUCCEEDED(hr))
-		abort();
+	check_quit(FAILED(hr), log, "Failed to duplicate output");
 
-	if (inputStreamCnt < 1 || outputStreamCnt < 1) {
-		MessageBox(nullptr, L"Function not implemented!\nNeed to add stream manually", nullptr, 0);
-		abort();
-	}
+	if (inputStreamCnt < 1 || outputStreamCnt < 1)
+		error_quit(log, "Adding stream manually is not implemented");
 
 	MFMediaType mediaType;
 	GUID videoFormat;
@@ -228,8 +220,7 @@ void StreamManager::_initEncoder() {
 		//TODO: Is there any way to find out if encoder does support low latency mode?
 		//TODO: Test if using main + low latency gives nicer output
 		hr = encoder->SetOutputType(encoderOutputStreamId[0], mediaType.ptr(), 0);
-		if (FAILED(hr))
-			abort();
+		check_quit(FAILED(hr), log, "Failed to set output type");
 	}
 
 	GUID acceptableCodecList[] = {
@@ -244,8 +235,7 @@ void StreamManager::_initEncoder() {
 			break;
 		if (SUCCEEDED(hr)) {
 			hr = mediaType->GetGUID(MF_MT_SUBTYPE, &videoFormat);
-			if (FAILED(hr))
-				continue;
+			check_quit(FAILED(hr), log, "Failed to query input type");
 
 			for (int j = 0; j < sizeof(acceptableCodecList) / sizeof(GUID); j++) {
 				if (memcmp(&videoFormat, &acceptableCodecList[j], sizeof(GUID)) == 0) {
@@ -256,16 +246,12 @@ void StreamManager::_initEncoder() {
 
 			if (chosenType != 0) {
 				hr = encoder->SetInputType(encoderInputStreamId[0], mediaType.ptr(), 0);
-				if (FAILED(hr)) {
-					MessageBox(nullptr, L"Failed to set input type!", nullptr, 0);
-					abort();
-				}
+				check_quit(FAILED(hr), log, "Failed to set input type");
 			}
 		}
 	}
 
-	if (chosenType == -1)
-		abort(); // no supported input type
+	check_quit(chosenType == -1, log, "No supported input type found");
 }
 
 void StreamManager::start() {
@@ -321,8 +307,7 @@ void StreamManager::_runCapture() {
 		}
 		if (hr == MF_E_SHUTDOWN)
 			break;
-		if (FAILED(hr))
-			abort();
+		check_quit(FAILED(hr), log, "Failed to get next event ({})", hr);
 
 		MediaEventType evType;
 		ev->GetType(&evType);
@@ -333,8 +318,7 @@ void StreamManager::_runCapture() {
 			do {
 				if (frameAcquired) {
 					hr = outputDuplication->ReleaseFrame();
-					if (FAILED(hr))
-						abort();
+					check_quit(FAILED(hr), log, "Failed to release frame ({})", hr);
 					frameAcquired = false;
 				}
 
@@ -349,7 +333,7 @@ void StreamManager::_runCapture() {
 						colorSpaceConv->pushInput(rgbTex);
 						hasTexture = true;
 					}
-					
+
 					if (frameInfo.LastMouseUpdateTime.QuadPart != 0) {
 						currentCursorVisible = frameInfo.PointerPosition.Visible;
 						if (currentCursorVisible) {
@@ -362,16 +346,17 @@ void StreamManager::_runCapture() {
 
 								hr = outputDuplication->GetFramePointerShape(pointerBufferSize, currentCursorShape.data(),
 									&pointerBufferSize, &currentCursorShapeInfo);
-								if (FAILED(hr))
-									abort();
+								check_quit(FAILED(hr), log, "Failed to get pointer shape: {}", hr);
 
 								currentCursorShape.resize(pointerBufferSize);
 							}
 						}
 					}
 				}
+				else if (hr == DXGI_ERROR_ACCESS_LOST)
+					error_quit(log, "Needs to recreate output duplication");
 				else if (hr != DXGI_ERROR_WAIT_TIMEOUT && FAILED(hr))
-					abort(); //TODO: Handle DXGI_ERROR_ACCESS_LOST separately
+					error_quit(log, "Failed to acquire next frame ({})", hr);
 
 				if (hr == DXGI_ERROR_WAIT_TIMEOUT && !hasTexture)
 					Sleep(1);  //TODO: Maybe move cursor a bit to force new frame?
@@ -398,13 +383,11 @@ void StreamManager::_pushEncoderTexture(const D3D11Texture2D& tex, long long sam
 
 	MFMediaBuffer mediaBuffer;
 	hr = MFCreateDXGISurfaceBuffer(tex.guid(), tex.ptr(), 0, false, mediaBuffer.data());
-	if (FAILED(hr))
-		abort();
+	check_quit(FAILED(hr), log, "Failed to create media buffer containing D3D11 texture");
 
 	MFSample sample;
 	hr = MFCreateSample(sample.data());
-	if (FAILED(hr))
-		abort();
+	check_quit(FAILED(hr), log, "Failed to create a sample");
 
 	sample->AddBuffer(mediaBuffer.ptr());
 	sample->SetSampleDuration(sampleDur);
@@ -413,8 +396,7 @@ void StreamManager::_pushEncoderTexture(const D3D11Texture2D& tex, long long sam
 	hr = encoder->ProcessInput(0, sample.ptr(), 0);
 	if (hr == MF_E_NOTACCEPTING)
 		return;
-	if (FAILED(hr))
-		abort();
+	check_quit(FAILED(hr), log, "Failed to put input into encoder");
 }
 
 std::vector<uint8_t> StreamManager::_popEncoderData() {
@@ -422,47 +404,43 @@ std::vector<uint8_t> StreamManager::_popEncoderData() {
 
 	MFT_OUTPUT_STREAM_INFO outputStreamInfo;
 	hr = encoder->GetOutputStreamInfo(0, &outputStreamInfo);
-	if (FAILED(hr))
-		abort();
+	check_quit(FAILED(hr), log, "Failed to get output stream info");
 
 	bool shouldAllocateOutput = !(outputStreamInfo.dwFlags & (MFT_OUTPUT_STREAM_PROVIDES_SAMPLES | MFT_OUTPUT_STREAM_CAN_PROVIDE_SAMPLES));
 	int allocSize = outputStreamInfo.cbSize + outputStreamInfo.cbAlignment * 2;
-	if (shouldAllocateOutput)
-		abort();  // allocating not implemented
+	check_quit(shouldAllocateOutput, log, "Allocating output is not implemented yet");
 
 	DWORD status;
 	MFT_OUTPUT_DATA_BUFFER outputBuffer = {};
 	outputBuffer.dwStreamID = encoderOutputStreamId[0];
 	hr = encoder->ProcessOutput(0, 1, &outputBuffer, &status);
-	if (FAILED(hr))
-		abort();
+	check_quit(FAILED(hr), log, "Failed to retrieve output from encoder");
 
 	DWORD bufferCount = 0;
 	hr = outputBuffer.pSample->GetBufferCount(&bufferCount);
-	if (FAILED(hr))
-		abort();
+	check_quit(FAILED(hr), log, "Failed to get buffer count");
 
 	DWORD totalLen = 0;
-	outputBuffer.pSample->GetTotalLength(&totalLen);
+	hr = outputBuffer.pSample->GetTotalLength(&totalLen);
+	check_quit(FAILED(hr), log, "Failed to query total length of sample");
+
 	std::vector<uint8_t> dataVec(0, 0);
 	dataVec.reserve(totalLen);
 
 	for (int j = 0; j < bufferCount; j++) {
 		MFMediaBuffer mediaBuffer;
 		hr = outputBuffer.pSample->GetBufferByIndex(j, mediaBuffer.data());
-		if (FAILED(hr))
-			abort();
+		check_quit(FAILED(hr), log, "Failed to get buffer");
+
 		BYTE* data;
 		DWORD len;
 		hr = mediaBuffer->Lock(&data, nullptr, &len);
-		if (FAILED(hr))
-			abort();
+		check_quit(FAILED(hr), log, "Failed to lock buffer");
 
 		dataVec.insert(dataVec.end(), data, data + len);
 
 		hr = mediaBuffer->Unlock();
-		if (FAILED(hr))
-			abort();
+		check_quit(FAILED(hr), log, "Failed to unlock buffer");
 	}
 
 	outputBuffer.pSample->Release();

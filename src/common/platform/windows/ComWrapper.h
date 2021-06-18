@@ -2,7 +2,7 @@
 #define DXGI_WRAPPER_H_
 
 
-#include "stdafx.h"
+#include "winheaders.h"
 
 #include <memory>
 #include <cassert>
@@ -38,7 +38,7 @@ class ComWrapper {
 		~DoublePtrProxy() {
 #ifndef NDEBUG
 			if (prev != nullptr && prev != parent->obj)
-				abort();
+				abort();  // Using abort() since this only triggers in debug builds.
 #endif
 		}
 	};

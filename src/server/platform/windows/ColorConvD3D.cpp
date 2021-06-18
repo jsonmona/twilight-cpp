@@ -1,6 +1,5 @@
 #include "ColorConvD3D.h"
 
-#include "stdafx.h"
 #include "common/platform/windows/ComWrapper.h"
 
 #include <cassert>
@@ -22,29 +21,32 @@ static const UINT quadVertexCount = 4;
 
 // load entire file
 static std::vector<uint8_t> loadFile(const wchar_t* path) {
+    std::vector<uint8_t> result(0);
+
     HANDLE f = CreateFile(path, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (f == INVALID_HANDLE_VALUE)
-        abort();
+        return result;
 
     static_assert(sizeof(LARGE_INTEGER) == sizeof(long long), "LARGE_INTEGER must be long long!");
     long long fileSize;
-    if(!GetFileSizeEx(f, (LARGE_INTEGER*) &fileSize))
-        abort();
+    if (!GetFileSizeEx(f, (LARGE_INTEGER*)&fileSize))
+        return result;
 
     // unlikely.
     if (std::numeric_limits<size_t>::max() < fileSize)
-        abort();
+        return result;
 
-    std::vector<uint8_t> result(fileSize);
+    result.resize(fileSize);
 
     DWORD readPtr = 0;
     while (readPtr < fileSize) {
-        if (!ReadFile(f, result.data() + readPtr, fileSize - readPtr, &readPtr, nullptr))
-            abort();
+        if (!ReadFile(f, result.data() + readPtr, fileSize - readPtr, &readPtr, nullptr)) {
+            result.resize(0);
+            return result;
+        }
     }
 
     CloseHandle(f);
-
     return result;
 }
 
@@ -58,6 +60,7 @@ protected:
     void _convert() override;
 
 public:
+    ColorConvD3D_AYUV(LoggerPtr logger) : ColorConvD3D(logger) {}
     void init(const D3D11Device& device, const D3D11DeviceContext& context) override;
 };
 
@@ -72,22 +75,24 @@ protected:
     void _convert() override;
 
 public:
+    ColorConvD3D_NV12(LoggerPtr logger) : ColorConvD3D(logger) {}
     void init(const D3D11Device& device, const D3D11DeviceContext& context) override;
 };
 
 
 std::unique_ptr<ColorConvD3D> ColorConvD3D::createInstance(Type in, Type out, Color color) {
-    if (in != Type::RGB || out == Type::RGB)
-        abort();  // This configuration is not supported (yet)
-
+    LoggerPtr log = createNamedLogger("ColorConvD3D");
     std::unique_ptr<ColorConvD3D> ret;
 
-    if(out == Type::AYUV)
-        ret = std::make_unique<ColorConvD3D_AYUV>();
-    else if(out == Type::NV12)
-        ret = std::make_unique<ColorConvD3D_NV12>();
+    if (in != Type::RGB || out == Type::RGB)
+        error_quit(log, "Unimplemented configuration");
+
+    if (out == Type::AYUV)
+        ret = std::make_unique<ColorConvD3D_AYUV>(log);
+    else if (out == Type::NV12)
+        ret = std::make_unique<ColorConvD3D_NV12>(log);
     else
-        abort();  // Invalid type
+        error_quit(log, "Invalid surface type requested");
 
     ret->inType = in;
     ret->outType = out;
@@ -96,7 +101,8 @@ std::unique_ptr<ColorConvD3D> ColorConvD3D::createInstance(Type in, Type out, Co
 }
 
 
-ColorConvD3D::ColorConvD3D() : width(-1), height(-1), inputFormat(DXGI_FORMAT_UNKNOWN), outputFormat(DXGI_FORMAT_UNKNOWN) {}
+ColorConvD3D::ColorConvD3D(LoggerPtr logger) : log(logger), width(-1), height(-1),
+    inputFormat(DXGI_FORMAT_UNKNOWN), outputFormat(DXGI_FORMAT_UNKNOWN) {}
 
 ColorConvD3D::~ColorConvD3D() {}
 
@@ -131,14 +137,13 @@ void ColorConvD3D::init(const D3D11Device& device, const D3D11DeviceContext& con
         Kr = 0.2126f;
     }
     else if (color == Color::BT2020) {
-        abort();  // Not sure if this is correct (8 bits vs 10 bits?)
+        error_quit(log, "BT.2020 is not tested yet (not sure if this is correct)");
         Kb = 0.0593f;
         Kr = 0.2627f;
     }
-    else {
-        // invalid format
-        abort();
-    }
+    else
+        error_quit(log, "Invalid colorspace requested");
+
     Kg = 1 - Kr - Kb;
 
     // RGB -> YPbPr matrix transposed
@@ -171,8 +176,7 @@ void ColorConvD3D::init(const D3D11Device& device, const D3D11DeviceContext& con
 
     std::vector<uint8_t> vertexBlob = loadFile(L"rgb2yuv-vs_main.fxc");
     hr = device->CreateVertexShader(vertexBlob.data(), vertexBlob.size(), nullptr, vertexShader.data());
-    if (FAILED(hr))
-        abort();
+    check_quit(FAILED(hr), log, "Failed to create vertex shader");
 
     D3D11_INPUT_ELEMENT_DESC inputLayoutDesc[] = {
         {"POS", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0}
@@ -323,10 +327,8 @@ void ColorConvD3D_NV12::init(const D3D11Device& device, const D3D11DeviceContext
 void ColorConvD3D_NV12::_reconfigure() {
     ColorConvD3D::_reconfigure();
 
-    if (width % 2 != 0 || height % 2 != 0) {
-        // Invalid dimension
-        abort();  // FIXME: abort
-    }
+    if (width % 2 != 0 || height % 2 != 0)
+        error_quit(log, "Dimension not multiple of 2 when using NV12 format");
 
     D3D11_TEXTURE2D_DESC chromaLargeDesc = {};
     chromaLargeDesc.Width = width;

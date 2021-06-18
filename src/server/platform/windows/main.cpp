@@ -1,7 +1,12 @@
-#include "stdafx.h"
-
 #include "common/platform/windows/ComWrapper.h"
 #include "StreamManager.h"
+
+#include "common/log.h"
+
+#include <packets.pb.h>
+
+#include <spdlog/spdlog.h>
+#include <spdlog/sinks/msvc_sink.h>
 
 #include <memory>
 #include <vector>
@@ -11,47 +16,42 @@
 
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+	GOOGLE_PROTOBUF_VERIFY_VERSION;
+	HRESULT hr;
+
+	auto msvc_sink = std::make_shared<spdlog::sinks::msvc_sink_mt>();
+	auto default_log = std::make_shared<spdlog::logger>("default", msvc_sink);
+	spdlog::set_default_logger(default_log);
+
+	auto log = createNamedLogger("main");
+
 	//TODO: Use manifest
-	SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-	if (FAILED(CoInitializeEx(NULL, COINIT_APARTMENTTHREADED))) {
-		MessageBox(nullptr, L"Failed to initialize COM!", nullptr, 0);
-		abort();
-	}
-	if (FAILED(MFStartup(MF_VERSION, MFSTARTUP_LITE))) {
-		MessageBox(nullptr, L"Failed to start Media Foundation!", nullptr, 0);
-		abort();
-	}
+	if (!SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2))
+		log->warn("Unable to set dpi awareness");
 
-	WSADATA wsaData;
-	SOCKET ConnectSocket = INVALID_SOCKET;
-	WSAStartup(MAKEWORD(2, 2), &wsaData);
+	hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+	check_quit(FAILED(hr), log, "Failed to initialize COM");
 
-	SOCKADDR_IN target;
-	target.sin_family = AF_INET;
-	target.sin_port = htons(5678);
-	target.sin_addr.s_addr = inet_addr("127.0.0.1");
+	hr = MFStartup(MF_VERSION, MFSTARTUP_LITE);
+	check_quit(FAILED(hr), log, "Failed to start MediaFoundation");
 
-	SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-
-	// Use ffplay -analyzeduration 1 -fflags -nobuffer -probesize 32 -sync ext -f h264 -vf scale=-1:ih/2 tcp://127.0.0.1:5678?listen=1
-	auto startTime = std::chrono::steady_clock::now();
-	int ret = WSAECONNREFUSED;
-	while (ret != 0) {
-		if (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - startTime).count() > 5)
-			break;
-		Sleep(1);
-		ret = connect(s, (SOCKADDR*)&target, sizeof(target));
-	}
-	
-	if (ret != 0)
-		abort();  // Did not connect
+	FILE* f = fopen("../server-stream.dump", "wb");
+	check_quit(f == nullptr, log, "Failed to open file to write");
 
 	StreamManager streamManager([&](void* _data, const VideoFrame& frame) {
-		send(s, (const char*)frame.desktopImage.data(), frame.desktopImage.size(), 0);
+		int_fast32_t len = frame.desktopImage.size();
+		fwrite(&len, 4, 1, f);
+		int offset = 0;
+		while (offset < frame.desktopImage.size()) {
+			int w = fwrite(frame.desktopImage.data() + offset, 1, frame.desktopImage.size() - offset, f);
+			check_quit(w <= 0, log, "Failed to write data to file");
+			offset += w;
+		}
+		fflush(f);
 	}, nullptr);
 
 	streamManager.start();
-	Sleep(60 * 1000);
+	Sleep(10 * 1000);
 	streamManager.stop();
 
 	MFShutdown();
