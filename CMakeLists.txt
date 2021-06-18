@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.15)
 project(daylight CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -19,7 +19,7 @@ if(NOT QT6_PATH STREQUAL "")
 endif()
 
 if(BUILD_GUI)
-    find_package(Qt6 COMPONENTS Widgets REQUIRED)
+    find_package(Qt6 COMPONENTS Widgets OpenGLWidgets REQUIRED)
 endif()
 
 if(Qt6_FOUND)
