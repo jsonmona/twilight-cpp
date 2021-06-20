@@ -20,8 +20,8 @@ set(SERVER_WINDOWS_SRC
     ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/main.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/ColorConvD3D.h
     ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/ColorConvD3D.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/StreamManager.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/StreamManager.cpp
+    "server/platform/windows/CaptureManagerD3D.h"
+    "server/platform/windows/CaptureManagerD3D.cpp"
 )
 
 add_library(common STATIC ${COMMON_SRC} ${COMMON_WINDOWS_SRC})
@@ -75,11 +75,10 @@ macro(FN_GEN_PB FILE)
 endmacro()
 
 fn_gen_pb(packets)
-add_custom_target(gen_pb ALL DEPENDS ${PB_GENERATED_FILES})
-
-target_include_directories(common SYSTEM PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/pb")
-add_dependencies(common gen_pb)
-target_link_libraries(common PUBLIC libprotobuf-lite)
+add_library(protobuf_gen STATIC ${PB_GENERATED_FILES})
+target_include_directories(protobuf_gen SYSTEM PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/pb")
+target_link_libraries(protobuf_gen PUBLIC libprotobuf-lite)
+target_link_libraries(common PUBLIC protobuf_gen)
 
 add_custom_command(TARGET server POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:libprotobuf-lite>" "${CMAKE_BINARY_DIR}/bin/server"

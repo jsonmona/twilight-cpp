@@ -1,13 +1,12 @@
 #include "common/platform/windows/ComWrapper.h"
-#include "StreamManager.h"
+#include "CaptureManagerD3D.h"
 
 #include "common/log.h"
-
-#include <packets.pb.h>
 
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/msvc_sink.h>
 
+#include <string>
 #include <memory>
 #include <vector>
 #include <algorithm>
@@ -38,14 +37,48 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	FILE* f = fopen("../server-stream.dump", "wb");
 	check_quit(f == nullptr, log, "Failed to open file to write");
 
-	StreamManager streamManager([&](void* _data, const VideoFrame& frame) {
-		int_fast32_t len = frame.desktopImage.size();
-		fwrite(&len, 4, 1, f);
-		int offset = 0;
-		while (offset < frame.desktopImage.size()) {
-			int w = fwrite(frame.desktopImage.data() + offset, 1, frame.desktopImage.size() - offset, f);
-			check_quit(w <= 0, log, "Failed to write data to file");
-			offset += w;
+	auto writeToFile = [](const void* data, int length, FILE *f) {
+		const uint8_t* ptr = reinterpret_cast<const uint8_t*>(data);
+		int pos = 0;
+		while (pos < length) {
+			int ret = fwrite(ptr + pos, 1, length - pos, f);
+			if(ret <= 0)
+				abort();
+			pos += ret;
+		}
+	};
+
+	CaptureManagerD3D streamManager([&](void* _data, VideoInfo* video, CursorInfo* cursor) {
+		std::string buf;
+		packets::Packet packet;
+		if (cursor) {
+			auto m = packet.mutable_cursor_shape();
+			m->set_cursor_image_len(cursor->cursorImage.size());
+			m->set_width(cursor->width);
+			m->set_height(cursor->height);
+			m->set_cursor_hotspot_x(cursor->hotspotX);
+			m->set_cursor_hotspot_y(cursor->hotspotY);
+
+			packet.SerializeToString(&buf);
+			int32_t packetLen = buf.size();
+			writeToFile(&packetLen, 4, f);
+			writeToFile(buf.data(), buf.size(), f);
+			writeToFile(cursor->cursorImage.data(), cursor->cursorImage.size(), f);
+		}
+		if (video) {
+			auto m = packet.mutable_video_frame();
+			m->set_desktop_image_len(video->desktopImage.size());
+			m->set_cursor_visible(video->cursorVisible);
+			if (video->cursorVisible) {
+				m->set_cursor_x(video->cursorPosX);
+				m->set_cursor_y(video->cursorPosY);
+			}
+
+			packet.SerializeToString(&buf);
+			int32_t packetLen = buf.size();
+			writeToFile(&packetLen, 4, f);
+			writeToFile(buf.data(), buf.size(), f);
+			writeToFile(video->desktopImage.data(), video->desktopImage.size(), f);
 		}
 		fflush(f);
 	}, nullptr);

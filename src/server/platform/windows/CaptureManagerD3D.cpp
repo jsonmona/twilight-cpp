@@ -1,9 +1,8 @@
-#include "StreamManager.h"
+#include "CaptureManagerD3D.h"
 
 #include <cassert>
-#include <vector>
+#include <deque>
 #include <utility>
-#include <optional>
 
 
 static void getMainAdapterWithOutput(const DxgiFactory5& factory, DxgiAdapter1* outAdapter, DxgiOutput5* outOutput) {
@@ -31,7 +30,7 @@ static void getMainAdapterWithOutput(const DxgiFactory5& factory, DxgiAdapter1* 
 	outOutput->release();
 }
 
-MFTransform getVideoEncoder(const MFDxgiDeviceManager& deviceManager) {
+static MFTransform getVideoEncoder(const MFDxgiDeviceManager& deviceManager) {
 	HRESULT hr;
 	MFTransform transform;
 	IMFActivate** mftActivate;
@@ -98,8 +97,8 @@ MFTransform getVideoEncoder(const MFDxgiDeviceManager& deviceManager) {
 	return transform;
 }
 
-StreamManager::StreamManager(decltype(videoCallback) callback, void* callbackData) :
-	log(createNamedLogger("StreamManager")),
+CaptureManagerD3D::CaptureManagerD3D(decltype(videoCallback) callback, void* callbackData) :
+	log(createNamedLogger("CaptureManagerD3D")),
 	videoCallback(callback), videoCallbackData(callbackData)
 {
 	HRESULT hr;
@@ -111,13 +110,17 @@ StreamManager::StreamManager(decltype(videoCallback) callback, void* callbackDat
 	hr = CreateDXGIFactory2(flags, dxgiFactory.guid(), (void**) dxgiFactory.data());
 	check_quit(FAILED(hr), log, "Failed to create DXGI factory 5");
 
+	//TODO: Make this a proper parameter (set by client)
+	width = 1920;
+	height = 1080;
+
 	_initDevice();
-	_initDuplication();
 	_initEncoder();
+	_initDuplication();
 }
 
-void StreamManager::_initDevice() {
-	HRESULT hr = S_OK;
+void CaptureManagerD3D::_initDevice() {
+	HRESULT hr;
 
 	getMainAdapterWithOutput(dxgiFactory, &adapter, &output);
 	check_quit(adapter.isInvalid(), log, "Failed to find main adapter and output");
@@ -143,42 +146,7 @@ void StreamManager::_initDevice() {
 	device.castTo<ID3D10Multithread>()->SetMultithreadProtected(true);
 }
 
-void StreamManager::_initDuplication() {
-	HRESULT hr;
-
-	DXGI_FORMAT supportedFormats[] = { DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM };
-	hr = output->DuplicateOutput1(device.ptr(), 0, 2, supportedFormats, outputDuplication.data());
-	check_quit(FAILED(hr), log, "Failed to duplicate output");
-
-	//TODO: Add a timer here
-	while (true) {
-		DxgiResource resource;
-		DXGI_OUTDUPL_FRAME_INFO frameInfo;
-		hr = outputDuplication->AcquireNextFrame(1000, &frameInfo, resource.data());
-		if (hr == DXGI_ERROR_WAIT_TIMEOUT)
-			continue;
-		check_quit(FAILED(hr), log, "Failed to acquire next frame");
-		frameAcquired = true;
-
-		D3D11_TEXTURE2D_DESC desc;
-		resource.castTo<ID3D11Texture2D>()->GetDesc(&desc);
-		screenWidth = desc.Width;
-		screenHeight = desc.Height;
-		screenFormat = desc.Format;
-		break;
-	}
-
-	ColorConvD3D::Color color;
-	if (screenWidth <= 720)
-		color = ColorConvD3D::Color::BT601;
-	else
-		color = ColorConvD3D::Color::BT709;
-
-	colorSpaceConv = ColorConvD3D::createInstance(ColorConvD3D::Type::RGB, ColorConvD3D::Type::NV12, color);
-	colorSpaceConv->init(device, context);
-}
-
-void StreamManager::_initEncoder() {
+void CaptureManagerD3D::_initEncoder() {
 	HRESULT hr;
 
 	encoder = getVideoEncoder(deviceManager);
@@ -187,15 +155,13 @@ void StreamManager::_initEncoder() {
 	DWORD inputStreamCnt, outputStreamCnt;
 	hr = encoder->GetStreamCount(&inputStreamCnt, &outputStreamCnt);
 	check_quit(FAILED(hr), log, "Failed to get stream count");
+	if(inputStreamCnt != 1 || outputStreamCnt != 1)
+		error_quit(log, "Invalid number of stream: input={} output={}", inputStreamCnt, outputStreamCnt);
 
-	encoderInputStreamId.resize(inputStreamCnt);
-	encoderOutputStreamId.resize(outputStreamCnt);
-	hr = encoder->GetStreamIDs(inputStreamCnt, encoderInputStreamId.data(), outputStreamCnt, encoderOutputStreamId.data());
+	hr = encoder->GetStreamIDs(1, &inputStreamId, 1, &outputStreamId);
 	if (hr == E_NOTIMPL) {
-		for (int i = 0; i < inputStreamCnt; i++)
-			encoderInputStreamId[i] = i;
-		for (int i = 0; i < outputStreamCnt; i++)
-			encoderOutputStreamId[i] = i;
+		inputStreamId = 0;
+		outputStreamId = 0;
 	}
 	check_quit(FAILED(hr), log, "Failed to duplicate output");
 
@@ -208,18 +174,18 @@ void StreamManager::_initEncoder() {
 	//FIXME: Below will set stream types, but only in output->input order.
 	//       While it works with NVIDIA, This might fail in other devices.
 
-	hr = encoder->GetOutputAvailableType(encoderOutputStreamId[0], 0, mediaType.data());
+	hr = encoder->GetOutputAvailableType(outputStreamId, 0, mediaType.data());
 	if (SUCCEEDED(hr)) {
 		mediaType->SetUINT32(MF_MT_AVG_BITRATE, 15 * 1000 * 1000);  // 15Mbps
 		mediaType->SetUINT32(CODECAPI_AVEncCommonRateControlMode, eAVEncCommonRateControlMode_CBR);
 		MFSetAttributeRatio(mediaType.ptr(), MF_MT_FRAME_RATE, 60000, 1001);  // TODO: Assuming 60fps
-		MFSetAttributeSize(mediaType.ptr(), MF_MT_FRAME_SIZE, screenWidth, screenHeight);
+		MFSetAttributeSize(mediaType.ptr(), MF_MT_FRAME_SIZE, width, height);
 		mediaType->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlaceMode::MFVideoInterlace_Progressive);
 		mediaType->SetUINT32(MF_MT_MPEG2_PROFILE, eAVEncH264VProfile::eAVEncH264VProfile_Base);
 		mediaType->SetUINT32(MF_LOW_LATENCY, 1);
-		//TODO: Is there any way to find out if encoder does support low latency mode?
+		//TODO: Is there any way to find out if encoder DOES support low latency mode?
 		//TODO: Test if using main + low latency gives nicer output
-		hr = encoder->SetOutputType(encoderOutputStreamId[0], mediaType.ptr(), 0);
+		hr = encoder->SetOutputType(outputStreamId, mediaType.ptr(), 0);
 		check_quit(FAILED(hr), log, "Failed to set output type");
 	}
 
@@ -230,7 +196,7 @@ void StreamManager::_initEncoder() {
 	int chosenType = -1;
 	for (DWORD i = 0; i < MAXDWORD; i++) {
 		mediaType.release();
-		hr = encoder->GetInputAvailableType(encoderInputStreamId[0], i, mediaType.data());
+		hr = encoder->GetInputAvailableType(inputStreamId, i, mediaType.data());
 		if (hr == MF_E_NO_MORE_TYPES)
 			break;
 		if (SUCCEEDED(hr)) {
@@ -245,45 +211,170 @@ void StreamManager::_initEncoder() {
 			}
 
 			if (chosenType != 0) {
-				hr = encoder->SetInputType(encoderInputStreamId[0], mediaType.ptr(), 0);
+				hr = encoder->SetInputType(inputStreamId, mediaType.ptr(), 0);
 				check_quit(FAILED(hr), log, "Failed to set input type");
 			}
 		}
 	}
 
 	check_quit(chosenType == -1, log, "No supported input type found");
+
+	ColorConvD3D::Color color;
+	if (width <= 720)
+		color = ColorConvD3D::Color::BT601;
+	else
+		color = ColorConvD3D::Color::BT709;
+
+	colorSpaceConv = ColorConvD3D::createInstance(ColorConvD3D::Type::RGB, ColorConvD3D::Type::NV12, color);
+	colorSpaceConv->init(device, context);
 }
 
-void StreamManager::start() {
+void CaptureManagerD3D::_initDuplication() {
+	HRESULT hr;
+
+	frameAcquired = false;
+
+	DXGI_FORMAT supportedFormats[] = { DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM };
+	hr = output->DuplicateOutput1(device.ptr(), 0, 2, supportedFormats, outputDuplication.data());
+	check_quit(FAILED(hr), log, "Failed to duplicate output");
+}
+
+void CaptureManagerD3D::start() {
 	flagRun.store(true, std::memory_order_release);
 	captureThread = std::thread([&]() { _runCapture(); });
 
-	encoder->ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, encoderInputStreamId[0]);
+	encoder->ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, inputStreamId);
 }
 
-void StreamManager::stop() {
+void CaptureManagerD3D::stop() {
 	flagRun.store(false, std::memory_order_release);
-	encoder->ProcessMessage(MFT_MESSAGE_NOTIFY_END_OF_STREAM, encoderInputStreamId[0]);
+	encoder->ProcessMessage(MFT_MESSAGE_NOTIFY_END_OF_STREAM, inputStreamId);
 	encoder->ProcessMessage(MFT_MESSAGE_COMMAND_DRAIN, 0);
 
 	captureThread.join();
 }
 
-struct EncoderExtraInfo {
-	long long pts;
-	long long streamClock;
+
+struct ExtraData {
+	long long sampleTime = -1;
+	int cursorX = 0, cursorY = 0;
+	bool cursorVisible = false;
+	bool cursorShapeUpdated = false;
+	int cursorWidth = 0, cursorHeight = 0;
+	int cursorHotspotX = 0, cursorHotspotY = 0;
+	std::vector<uint8_t> cursorShape;
 };
 
-void StreamManager::_runCapture() {
+
+bool CaptureManagerD3D::_fetchTexture(ExtraData* now, const ExtraData* prev, bool forcePush) {
 	HRESULT hr;
 
-	bool hasTexture = false;
+	if (frameAcquired) {
+		hr = outputDuplication->ReleaseFrame();
+		check_quit(FAILED(hr), log, "Failed to release frame ({})", hr);
+		frameAcquired = false;
+	}
 
-	bool currentCursorVisible = false;
-	int currentCursorX;
-	int currentCursorY;
-	std::vector<uint8_t> currentCursorShape(0, 0);
-	DXGI_OUTDUPL_POINTER_SHAPE_INFO currentCursorShapeInfo;
+	DxgiResource desktopResource;
+	DXGI_OUTDUPL_FRAME_INFO frameInfo;
+	hr = outputDuplication->AcquireNextFrame(0, &frameInfo, desktopResource.data());
+	if (SUCCEEDED(hr)) {
+		frameAcquired = true;
+
+		if (frameInfo.LastPresentTime.QuadPart != 0 || forcePush) {
+			D3D11Texture2D rgbTex = desktopResource.castTo<ID3D11Texture2D>();
+			colorSpaceConv->pushInput(rgbTex);
+		}
+
+		if (frameInfo.LastMouseUpdateTime.QuadPart != 0) {
+			now->cursorVisible = frameInfo.PointerPosition.Visible;
+			if (now->cursorVisible) {
+				now->cursorX = frameInfo.PointerPosition.Position.x;
+				now->cursorY = frameInfo.PointerPosition.Position.y;
+
+				if (frameInfo.PointerShapeBufferSize != 0) {
+					now->cursorShapeUpdated = true;
+
+					UINT bufferSize = frameInfo.PointerShapeBufferSize;
+					std::vector<uint8_t> buffer(bufferSize);
+
+					DXGI_OUTDUPL_POINTER_SHAPE_INFO cursorInfo;
+					hr = outputDuplication->GetFramePointerShape(bufferSize, buffer.data(),
+						&bufferSize, &cursorInfo);
+					check_quit(FAILED(hr), log, "Failed to fetch frame pointer shape");
+
+					now->cursorHotspotX = cursorInfo.HotSpot.x;
+					now->cursorHotspotY = cursorInfo.HotSpot.y;
+					now->cursorShape.resize(cursorInfo.Height * cursorInfo.Width * 4);
+					if (cursorInfo.Type == DXGI_OUTDUPL_POINTER_SHAPE_TYPE_COLOR) {
+						now->cursorWidth = cursorInfo.Width;
+						now->cursorHeight = cursorInfo.Height;
+
+						for (int i = 0; i < cursorInfo.Height; i++) {
+							for (int j = 0; j < cursorInfo.Width; j++) {
+								// bgra -> rgba
+								uint32_t val = *reinterpret_cast<uint32_t*>(buffer.data() + (i * cursorInfo.Pitch + j * 4));
+								val = ((val & 0x00FF00FF) << 16) | ((val & 0x00FF00FF) >> 16) | (val & 0xFF00FF00);
+								*reinterpret_cast<uint32_t*>(now->cursorShape.data() + (i * cursorInfo.Width * 4 + j * 4)) = val;
+							}
+						}
+					}
+					else if (cursorInfo.Type == DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MONOCHROME) {
+						now->cursorWidth = cursorInfo.Width;
+						now->cursorHeight = cursorInfo.Height / 2;
+
+						for (int i = 0; i < cursorInfo.Height / 2; i++) {
+							for (int j = 0; j < cursorInfo.Width / 8; j++) {
+								uint8_t value = buffer[i * cursorInfo.Pitch + j];
+								uint8_t alpha = buffer[(i + cursorInfo.Height / 2) * cursorInfo.Pitch + j];
+								for (int k = 0; k < 8; k++) {
+									uint8_t rgbValue = (value & 1) ? 0xFF : 0x00;
+									uint8_t alphaValue = (alpha & 1) ? 0xFF : 0x00;
+									value >>= 1;
+									alpha >>= 1;
+
+									now->cursorShape[i * cursorInfo.Width * 4 + j * 8 * 4 + k * 4] = rgbValue;
+									now->cursorShape[i * cursorInfo.Width * 4 + j * 8 * 4 + k * 4 + 1] = rgbValue;
+									now->cursorShape[i * cursorInfo.Width * 4 + j * 8 * 4 + k * 4 + 2] = rgbValue;
+									now->cursorShape[i * cursorInfo.Width * 4 + j * 8 * 4 + k * 4 + 3] = alphaValue;
+								}
+							}
+						}
+					}
+					else {
+						log->warn("Unknown cursor type: {}", cursorInfo.Type);
+					}
+				}
+			}
+		}
+		else if (prev) {
+			now->cursorVisible = prev->cursorVisible;
+			now->cursorX = prev->cursorX;
+			now->cursorY = prev->cursorY;
+		}
+	}
+	else if (hr == DXGI_ERROR_WAIT_TIMEOUT) {
+		now->cursorVisible = prev->cursorVisible;
+		now->cursorX = prev->cursorX;
+		now->cursorY = prev->cursorY;
+		return false;
+	}
+	else if (hr == DXGI_ERROR_ACCESS_LOST)
+		error_quit(log, "Needs to recreate output duplication");
+	else
+		error_quit(log, "Failed to acquire next frame ({})", hr);
+
+	return true;
+}
+
+void CaptureManagerD3D::_runCapture() {
+	HRESULT hr;
+
+	std::deque<std::shared_ptr<ExtraData>> extraData;
+
+	std::shared_ptr<ExtraData> prevExtraData;
+	bool frameAcquired = false;
+	bool hasTexture = false;
 
 	MFMediaEventGenerator gen = encoder.castTo<IMFMediaEventGenerator>();
 
@@ -315,70 +406,83 @@ void StreamManager::_runCapture() {
 			while (calcNowFrame() < frameCnt)
 				Sleep(1);
 
-			do {
-				if (frameAcquired) {
-					hr = outputDuplication->ReleaseFrame();
-					check_quit(FAILED(hr), log, "Failed to release frame ({})", hr);
-					frameAcquired = false;
+			std::shared_ptr<ExtraData> now = std::make_shared<ExtraData>();
+
+			if (hasTexture)
+				_fetchTexture(now.get(), prevExtraData.get(), false);
+			else {
+				while (true) {
+					hasTexture = _fetchTexture(now.get(), prevExtraData.get(), true);
+					if (hasTexture)
+						break;
+					Sleep(1);
 				}
-
-				DxgiResource desktopResource;
-				DXGI_OUTDUPL_FRAME_INFO frameInfo;
-				hr = outputDuplication->AcquireNextFrame(0, &frameInfo, desktopResource.data());
-				if (SUCCEEDED(hr)) {
-					frameAcquired = true;
-
-					if (frameInfo.LastPresentTime.QuadPart != 0 || !hasTexture) {
-						D3D11Texture2D rgbTex = desktopResource.castTo<ID3D11Texture2D>();
-						colorSpaceConv->pushInput(rgbTex);
-						hasTexture = true;
-					}
-
-					if (frameInfo.LastMouseUpdateTime.QuadPart != 0) {
-						currentCursorVisible = frameInfo.PointerPosition.Visible;
-						if (currentCursorVisible) {
-							currentCursorX = frameInfo.PointerPosition.Position.x;
-							currentCursorY = frameInfo.PointerPosition.Position.y;
-
-							if (frameInfo.PointerShapeBufferSize != 0) {
-								UINT pointerBufferSize = frameInfo.PointerShapeBufferSize;
-								currentCursorShape.resize(pointerBufferSize);
-
-								hr = outputDuplication->GetFramePointerShape(pointerBufferSize, currentCursorShape.data(),
-									&pointerBufferSize, &currentCursorShapeInfo);
-								check_quit(FAILED(hr), log, "Failed to get pointer shape: {}", hr);
-
-								currentCursorShape.resize(pointerBufferSize);
-							}
-						}
-					}
-				}
-				else if (hr == DXGI_ERROR_ACCESS_LOST)
-					error_quit(log, "Needs to recreate output duplication");
-				else if (hr != DXGI_ERROR_WAIT_TIMEOUT && FAILED(hr))
-					error_quit(log, "Failed to acquire next frame ({})", hr);
-
-				if (hr == DXGI_ERROR_WAIT_TIMEOUT && !hasTexture)
-					Sleep(1);  //TODO: Maybe move cursor a bit to force new frame?
-			} while (!hasTexture);
-			// Keep try to acquire frame as long as we don't have a frame.
+			}
 
 			frameCnt = calcNowFrame();
 			const long long sampleDur = MFTime * frameDen / frameNum;
 			const long long sampleTime = frameCnt * MFTime * frameDen / frameNum;
+			now->sampleTime = sampleTime;
+
+			extraData.push_back(now);
+			prevExtraData = std::move(now);
 
 			_pushEncoderTexture(colorSpaceConv->popOutput(), sampleDur, sampleTime);
 			frameCnt++;
 		}
 		else if (evType == METransformHaveOutput) {
-			videoCallback(videoCallbackData, VideoFrame { _popEncoderData() });
+			int idx = -1;
+			std::shared_ptr<ExtraData> now;
+			long long sampleTime;
+
+			VideoInfo video = {};
+			video.desktopImage = _popEncoderData(&sampleTime);
+			for (int i = 0; i < extraData.size(); i++) {
+				if (extraData[i]->sampleTime == sampleTime) {
+					now = std::move(extraData[i]);
+					idx = i;
+					break;
+				}
+			}
+
+			check_quit(idx == -1, log, "Failed to find matching ExtraData (size={}, sampleTime={})", extraData.size(), sampleTime);
+
+			// TODO: Measure if this *optimization* is worth it
+			if (idx == 0)
+				extraData.pop_front();
+			else
+				extraData.erase(extraData.begin() + idx);
+
+			video.cursorVisible = now->cursorVisible;
+			video.cursorPosX = now->cursorX;
+			video.cursorPosY = now->cursorY;
+
+			CursorInfo cursor = {};
+			if (now->cursorShapeUpdated) {
+				cursor.cursorImage = now->cursorShape;
+				cursor.width = now->cursorWidth;
+				cursor.height = now->cursorHeight;
+				cursor.hotspotX = now->cursorHotspotX;
+				cursor.hotspotY = now->cursorHotspotY;
+			}
+
+			if(now->cursorShapeUpdated)
+				videoCallback(videoCallbackData, &video, &cursor);
+			else
+				videoCallback(videoCallbackData, &video, nullptr);
 		}
 		else if (evType == METransformDrainComplete)
 			break;
 	}
+
+	if (frameAcquired) {
+		hr = outputDuplication->ReleaseFrame();
+		check_quit(FAILED(hr), log, "Failed to release frame ({})", hr);
+		frameAcquired = false;
+	}
 }
 
-void StreamManager::_pushEncoderTexture(const D3D11Texture2D& tex, long long sampleDur, long long sampleTime) {
+void CaptureManagerD3D::_pushEncoderTexture(const D3D11Texture2D& tex, long long sampleDur, long long sampleTime) {
 	HRESULT hr;
 
 	MFMediaBuffer mediaBuffer;
@@ -399,7 +503,7 @@ void StreamManager::_pushEncoderTexture(const D3D11Texture2D& tex, long long sam
 	check_quit(FAILED(hr), log, "Failed to put input into encoder");
 }
 
-std::vector<uint8_t> StreamManager::_popEncoderData() {
+std::vector<uint8_t> CaptureManagerD3D::_popEncoderData(long long* sampleTime) {
 	HRESULT hr;
 
 	MFT_OUTPUT_STREAM_INFO outputStreamInfo;
@@ -412,9 +516,12 @@ std::vector<uint8_t> StreamManager::_popEncoderData() {
 
 	DWORD status;
 	MFT_OUTPUT_DATA_BUFFER outputBuffer = {};
-	outputBuffer.dwStreamID = encoderOutputStreamId[0];
+	outputBuffer.dwStreamID = outputStreamId;
 	hr = encoder->ProcessOutput(0, 1, &outputBuffer, &status);
 	check_quit(FAILED(hr), log, "Failed to retrieve output from encoder");
+
+	if(sampleTime != nullptr)
+		outputBuffer.pSample->GetSampleTime(sampleTime);
 
 	DWORD bufferCount = 0;
 	hr = outputBuffer.pSample->GetBufferCount(&bufferCount);

@@ -9,7 +9,6 @@
 #include <QtCore/qtimer.h>
 
 #include <chrono>
-#include <cstdio>
 
 
 struct AVCodec;
@@ -17,16 +16,19 @@ struct AVCodecContext;
 
 class StreamViewer : public QOpenGLWidget, protected QOpenGLFunctions {
 	Q_OBJECT;
-	GLuint tex, quadBuffer, quadArray;
+	GLuint quadBuffer, quadArray;
+	GLuint tex, cursorTex;
 	GLuint vertexShader, fragShader, program;
-	GLuint posAttrib;
+	GLuint posAttrib, rectUniform;
 
 	std::chrono::steady_clock::time_point lastUpdate;
 	bool hasTexture = false;
+	bool cursorVisible = false;
+	int cursorX, cursorY, cursorWidth, cursorHeight;
+	int width, height;
 
 	LoggerPtr log;
 
-	FILE* f;
 	AVCodec* decoder;
 	AVCodecContext* decoderContext;
 
@@ -36,6 +38,9 @@ public slots:
 	void executeUpdate();
 
 public:
+	std::vector<uint8_t> data;
+	int dataPos;
+
 	StreamViewer();
 	~StreamViewer() override;
 

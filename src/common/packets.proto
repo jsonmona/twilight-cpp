@@ -1,5 +1,6 @@
 syntax = "proto3";
 
+option optimize_for = LITE_RUNTIME;
 package packets;
 
 message Packet {
@@ -10,16 +11,10 @@ message Packet {
 	}
 }
 
-enum OsType {
-	OS_UNKNOWN = 0;
-	OS_WINDOWS = 1;
-}
-
 enum CodecType {
-	CODEC_UNCHANGED = 0;
+	CODEC_UNKNOWN = 0;
 	CODEC_H264 = 1;
 	CODEC_HEVC = 2;
-	CODEC_RGB = 3;
 }
 
 message Handshake {
@@ -28,40 +23,24 @@ message Handshake {
 	// Minor version difference is acceptable.
 	int32 ver_major = 1;
 	int32 ver_minor = 2;
-
-	OsType os_type = 3;
 }
 
 message VideoFrame {
 	// A desktop image comes right after this message
 	int32 desktop_image_len = 1;
 
-	bool cursor_shown = 2;
+	bool cursor_visible = 2;
 	int32 cursor_x = 3;
 	int32 cursor_y = 4;
-
-	// If this is anything other than CODEC_UNCHANGED, codec is reset and
-	// parameters below are used from now on, including this packet itself.
-	CodecType codec_type = 16;
-	int32 new_width = 17;
-	int32 new_height = 18;
-
-	// Which decoded RGB type should be used
-	// 8 = R8G8B8A8, 10 = R10G10B10A2, etc.
-	int32 new_decoded_bpp = 19;
 }
 
 message CursorShape {
 	// A cursor image comes right after this message
 	int32 cursor_image_len = 1;
 
-	// CODEC_UNACHANGED is invalid here.
-	// Probably is CODEC_RGB
-	CodecType codec_type = 2;
-
 	int32 width = 3;
 	int32 height = 4;
-	// decoded_bpp is assumed to be rgba8
+	// always uses RGBA format
 
 	float cursor_hotspot_x = 5;
 	float cursor_hotspot_y = 6;
