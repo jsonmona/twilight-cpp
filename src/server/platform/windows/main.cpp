@@ -50,14 +50,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 	CaptureManagerD3D streamManager([&](void* _data, VideoInfo* video, CursorInfo* cursor) {
 		std::string buf;
-		packets::Packet packet;
+		msg::Packet packet;
 		if (cursor) {
 			auto m = packet.mutable_cursor_shape();
-			m->set_cursor_image_len(cursor->cursorImage.size());
+			m->set_image_len(cursor->cursorImage.size());
 			m->set_width(cursor->width);
 			m->set_height(cursor->height);
-			m->set_cursor_hotspot_x(cursor->hotspotX);
-			m->set_cursor_hotspot_y(cursor->hotspotY);
+			m->set_hotspot_x(cursor->hotspotX);
+			m->set_hotspot_y(cursor->hotspotY);
 
 			packet.SerializeToString(&buf);
 			int32_t packetLen = buf.size();
@@ -66,8 +66,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 			writeToFile(cursor->cursorImage.data(), cursor->cursorImage.size(), f);
 		}
 		if (video) {
-			auto m = packet.mutable_video_frame();
-			m->set_desktop_image_len(video->desktopImage.size());
+			auto m = packet.mutable_desktop_frame();
+			m->set_image_len(video->desktopImage.size());
 			m->set_cursor_visible(video->cursorVisible);
 			if (video->cursorVisible) {
 				m->set_cursor_x(video->cursorPosX);
@@ -81,10 +81,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 			writeToFile(video->desktopImage.data(), video->desktopImage.size(), f);
 		}
 		fflush(f);
+		static int cnt = 0;
+		log->debug("Written frame {}", cnt++);
 	}, nullptr);
 
 	streamManager.start();
-	Sleep(10 * 1000);
+	Sleep(1200 * 1000);
 	streamManager.stop();
 
 	MFShutdown();

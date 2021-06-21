@@ -5,7 +5,7 @@
 #include "common/platform/windows/ComWrapper.h"
 #include "ColorConvD3D.h"
 
-#include <packets.pb.h>
+#include <packet.pb.h>
 
 #include <atomic>
 #include <vector>

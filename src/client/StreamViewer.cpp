@@ -1,7 +1,7 @@
 #include "StreamViewer.h"
 
 
-#include <packets.pb.h>
+#include <packet.pb.h>
 #include <algorithm>
 
 
@@ -147,14 +147,14 @@ void StreamViewer::paintGL() {
 				uint8_t* frameData = nullptr;
 
 				while (frameData == nullptr && dataPos < data.size()) {
-					packets::Packet pck;
+					msg::Packet pck;
 					int32_t* sizePtr = reinterpret_cast<int32_t*>(data.data() + dataPos);
 					dataPos += 4;
 					pck.ParseFromArray(data.data() + dataPos, *sizePtr);
 					dataPos += *sizePtr;
 
 					switch (pck.msg_case()) {
-					case packets::Packet::kCursorShape:
+					case msg::Packet::kCursorShape:
 						cursorWidth = pck.cursor_shape().width();
 						cursorHeight = pck.cursor_shape().height();
 
@@ -162,14 +162,14 @@ void StreamViewer::paintGL() {
 						glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, cursorWidth, cursorHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE,
 							data.data() + dataPos);
 
-						dataPos += pck.cursor_shape().cursor_image_len();
+						dataPos += pck.cursor_shape().image_len();
 						break;
-					case packets::Packet::kVideoFrame:
-						cursorVisible = pck.video_frame().cursor_visible();
-						cursorX = pck.video_frame().cursor_x();
-						cursorY = pck.video_frame().cursor_y();
+					case msg::Packet::kDesktopFrame:
+						cursorVisible = pck.desktop_frame().cursor_visible();
+						cursorX = pck.desktop_frame().cursor_x();
+						cursorY = pck.desktop_frame().cursor_y();
 
-						readSize = pck.video_frame().desktop_image_len();
+						readSize = pck.desktop_frame().image_len();
 						frameData = (uint8_t*) av_malloc(readSize + 64);
 						check_quit(frameData == nullptr, log, "Failed to allocate data size");
 						memcpy(frameData, data.data() + dataPos, readSize);

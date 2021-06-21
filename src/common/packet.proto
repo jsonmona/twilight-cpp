@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+option optimize_for = LITE_RUNTIME;
+package msg;
+
+import "stream.proto";
+
+message Packet {
+	oneof msg {
+		DesktopFrame desktop_frame = 1;
+		CursorShape cursor_shape = 2;
+	}
+}

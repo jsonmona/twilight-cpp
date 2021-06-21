@@ -2,7 +2,7 @@
 #include "common/platform/windows/winheaders.h"
 #include "client/StreamViewer.h"
 
-#include <packets.pb.h>
+#include <packet.pb.h>
 
 #include <QtWidgets/qapplication.h>
 #include <QtGui/qscreen.h>

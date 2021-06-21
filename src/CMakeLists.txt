@@ -71,10 +71,11 @@ macro(FN_GEN_PB FILE)
         COMMENT "Compiling protobuf: ${FILE}.proto"
         VERBATIM
     )
-    list(APPEND PB_GENERATED_FILES "pb/${FILE}.pb.h" "pb/${FILE}.pb.cc")
+    list(APPEND PB_GENERATED_FILES "${CMAKE_CURRENT_BINARY_DIR}/pb/${FILE}.pb.h" "${CMAKE_CURRENT_BINARY_DIR}/pb/${FILE}.pb.cc")
 endmacro()
 
-fn_gen_pb(packets)
+fn_gen_pb(packet)
+fn_gen_pb(stream)
 add_library(protobuf_gen STATIC ${PB_GENERATED_FILES})
 target_include_directories(protobuf_gen SYSTEM PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/pb")
 target_link_libraries(protobuf_gen PUBLIC libprotobuf-lite)
