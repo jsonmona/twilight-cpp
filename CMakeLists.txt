@@ -9,7 +9,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(BUILD_GUI "Build GUI targets" ON)
 
-set(QT6_PATH "" CACHE STRING "Path to Qt6 (example: C:/Qt/6.1.1/msvc2019_64)")
+set(QT6_PATH "" CACHE PATH "Path to Qt6 (example: C:/Qt/6.1.1/msvc2019_64)")
 
 # End options
 
