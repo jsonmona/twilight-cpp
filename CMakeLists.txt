@@ -7,7 +7,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Begin Options
 
-option(BUILD_GUI "Build GUI targets" ON)
+option(DAYLIGHT_BUILD_GUI "Build GUI targets" ON)
+option(DAYLIGHT_D3D_DEBUG "Create dxgi objects in debug mode (Only applied to debug build)" ON)
 
 set(QT6_PATH "" CACHE PATH "Path to Qt6 (example: C:/Qt/6.1.1/msvc2019_64)")
 

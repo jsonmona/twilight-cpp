@@ -1,5 +1,7 @@
 #include "common/platform/windows/ComWrapper.h"
-#include "CaptureManagerD3D.h"
+
+#include "CaptureD3D.h"
+#include "EncoderD3D.h"
 
 #include "common/log.h"
 
@@ -48,46 +50,57 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		}
 	};
 
-	CaptureManagerD3D streamManager([&](void* _data, VideoInfo* video, CursorInfo* cursor) {
+	std::shared_ptr<DeviceManagerD3D> devs = std::make_shared<DeviceManagerD3D>();
+	
+	CaptureD3D capture(devs);
+	EncoderD3D encoder(devs, 1920, 1080);
+
+	encoder.setFrameRequestCallback([&]() -> CaptureDataD3D {
+		return capture.fetch();
+	});
+
+	encoder.setDataAvailableCallback([&](EncoderDataD3D* data) {
 		std::string buf;
 		msg::Packet packet;
-		if (cursor) {
+		if (data->cursorShapeUpdated) {
 			auto m = packet.mutable_cursor_shape();
-			m->set_image_len(cursor->cursorImage.size());
-			m->set_width(cursor->width);
-			m->set_height(cursor->height);
-			m->set_hotspot_x(cursor->hotspotX);
-			m->set_hotspot_y(cursor->hotspotY);
+			m->set_image_len(data->cursorImage.size());
+			m->set_width(data->cursorW);
+			m->set_height(data->cursorH);
+			m->set_hotspot_x(data->hotspotX);
+			m->set_hotspot_y(data->hotspotY);
 
 			packet.SerializeToString(&buf);
 			int32_t packetLen = buf.size();
 			writeToFile(&packetLen, 4, f);
 			writeToFile(buf.data(), buf.size(), f);
-			writeToFile(cursor->cursorImage.data(), cursor->cursorImage.size(), f);
+			writeToFile(data->cursorImage.data(), data->cursorImage.size(), f);
 		}
-		if (video) {
-			auto m = packet.mutable_desktop_frame();
-			m->set_image_len(video->desktopImage.size());
-			m->set_cursor_visible(video->cursorVisible);
-			if (video->cursorVisible) {
-				m->set_cursor_x(video->cursorPosX);
-				m->set_cursor_y(video->cursorPosY);
-			}
 
-			packet.SerializeToString(&buf);
-			int32_t packetLen = buf.size();
-			writeToFile(&packetLen, 4, f);
-			writeToFile(buf.data(), buf.size(), f);
-			writeToFile(video->desktopImage.data(), video->desktopImage.size(), f);
+		auto d = packet.mutable_desktop_frame();
+		d->set_image_len(data->desktopImage.size());
+		d->set_cursor_visible(data->cursorVisible);
+		if (data->cursorVisible) {
+			d->set_cursor_x(data->cursorX);
+			d->set_cursor_y(data->cursorY);
 		}
+
+		packet.SerializeToString(&buf);
+		int32_t packetLen = buf.size();
+		writeToFile(&packetLen, 4, f);
+		writeToFile(buf.data(), buf.size(), f);
+		writeToFile(data->desktopImage.data(), data->desktopImage.size(), f);
+
 		fflush(f);
 		static int cnt = 0;
 		log->debug("Written frame {}", cnt++);
-	}, nullptr);
+	});
 
-	streamManager.start();
+	capture.begin();
+	encoder.start();
 	Sleep(1200 * 1000);
-	streamManager.stop();
+	encoder.stop();
+	capture.end();
 
 	MFShutdown();
 }

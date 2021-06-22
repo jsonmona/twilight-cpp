@@ -1,3 +1,7 @@
+if(DAYLIGHT_D3D_DEBUG)
+    add_definitions("-DDAYLIGHT_D3D_DEBUG")
+endif()
+
 set(COMMON_SRC
     ${CMAKE_CURRENT_SOURCE_DIR}/common/log.h
 )
@@ -18,10 +22,16 @@ set(CLIENT_WINDOWS_SRC
 
 set(SERVER_WINDOWS_SRC
     ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/main.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/CaptureD3D.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/CaptureD3D.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/ColorConvD3D.h
     ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/ColorConvD3D.cpp
-    "server/platform/windows/CaptureManagerD3D.h"
-    "server/platform/windows/CaptureManagerD3D.cpp"
+    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/DeviceManagerD3D.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/DeviceManagerD3D.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/EncoderD3D.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/EncoderD3D.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/StreamManager.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/StreamManager.cpp
 )
 
 add_library(common STATIC ${COMMON_SRC} ${COMMON_WINDOWS_SRC})

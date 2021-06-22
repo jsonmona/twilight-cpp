@@ -1,0 +1,9 @@
+#ifndef SERVER_PLATFORM_WINDOWS_STREAM_MANAGER_H_
+#define SERVER_PLATFORM_WINDOWS_STREAM_MANAGER_H_
+
+
+class StreamManager {
+};
+
+
+#endif
