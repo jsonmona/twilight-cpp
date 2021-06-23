@@ -256,7 +256,7 @@ void EncoderD3D::_run() {
 			std::shared_ptr<ExtraData> now;
 			long long sampleTime;
 
-			EncoderDataD3D output;
+			EncoderData output;
 
 			output.desktopImage = _popEncoderData(&sampleTime);
 			for (int i = 0; i < extraData.size(); i++) {

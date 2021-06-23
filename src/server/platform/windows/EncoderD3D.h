@@ -14,7 +14,7 @@
 
 struct CaptureDataD3D;
 
-struct EncoderDataD3D {
+struct EncoderData {
 	std::vector<uint8_t> desktopImage;
 
 	bool cursorVisible;
@@ -34,7 +34,7 @@ class EncoderD3D {
 	int width, height;
 	std::shared_ptr<DeviceManagerD3D> devs;
 	std::function<CaptureDataD3D()> onFrameRequest;
-	std::function<void(EncoderDataD3D*)> onDataAvailable;
+	std::function<void(EncoderData*)> onDataAvailable;
 
 	std::thread runThread;
 

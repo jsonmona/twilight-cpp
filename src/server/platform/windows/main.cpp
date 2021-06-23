@@ -2,6 +2,7 @@
 
 #include "CaptureD3D.h"
 #include "EncoderD3D.h"
+#include "EncoderSoftware.h"
 
 #include "common/log.h"
 
@@ -53,13 +54,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	std::shared_ptr<DeviceManagerD3D> devs = std::make_shared<DeviceManagerD3D>();
 	
 	CaptureD3D capture(devs);
-	EncoderD3D encoder(devs, 1920, 1080);
+	EncoderSoftware encoder(devs, 1920, 1080);
 
 	encoder.setFrameRequestCallback([&]() -> CaptureDataD3D {
 		return capture.fetch();
 	});
 
-	encoder.setDataAvailableCallback([&](EncoderDataD3D* data) {
+	encoder.setDataAvailableCallback([&](EncoderData* data) {
 		std::string buf;
 		msg::Packet packet;
 		if (data->cursorShapeUpdated) {
@@ -98,7 +99,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 	capture.begin();
 	encoder.start();
-	Sleep(1200 * 1000);
+	Sleep(10 * 1000);
 	encoder.stop();
 	capture.end();
 

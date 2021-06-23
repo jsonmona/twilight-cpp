@@ -30,6 +30,8 @@ set(SERVER_WINDOWS_SRC
     ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/DeviceManagerD3D.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/EncoderD3D.h
     ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/EncoderD3D.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/EncoderSoftware.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/EncoderSoftware.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/StreamManager.h
     ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/StreamManager.cpp
 )
