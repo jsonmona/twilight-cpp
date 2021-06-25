@@ -2,7 +2,10 @@
 #define SERVER_PLATFORM_WINDOWS_ENCODER_SOFTWARE_H_
 
 
-#include "DeviceManagerD3D.h"
+#include "TextureSoftware.h"
+
+#include "common/log.h"
+#include "server/CaptureData.h"
 
 extern "C" {
 #include <libavutil/opt.h>
@@ -11,37 +14,24 @@ extern "C" {
 #include <libswscale/swscale.h>
 }
 
-#include <array>
-
-
-struct CaptureDataD3D;
-struct EncoderData;
-struct ExtraData;
 
 class EncoderSoftware {
 	LoggerPtr log;
 
 	int width, height;
-	int inputWidth, inputHeight;
-	DXGI_FORMAT inputFormat;
-	std::shared_ptr<DeviceManagerD3D> devs;
-	std::function<CaptureDataD3D()> onFrameRequest;
-	std::function<void(EncoderData*)> onDataAvailable;
+	std::function<CaptureData<TextureSoftware>()> onFrameRequest;
+	std::function<void(CaptureData<std::vector<uint8_t>>&&)> onDataAvailable;
 
 	AVCodec* encoder = nullptr;
 	AVCodecContext* encoderCtx = nullptr;
-	SwsContext* swsCtx = nullptr;
-	std::array<uint8_t*, 4> frameData = {};  // free first pointer only
-	std::array<int, 4> frameLinesize;
 
 	std::atomic_bool runFlag;
 	std::thread runThread;
 
 	void _run();
-	ExtraData _fetchFrame(AVFrame* frame);
 
 public:
-	EncoderSoftware(const std::shared_ptr<DeviceManagerD3D>& _devs, int _width, int _height);
+	EncoderSoftware(int _width, int _height);
 	~EncoderSoftware();
 
 	inline void setFrameRequestCallback(const decltype(onFrameRequest)& x) { onFrameRequest = x; }

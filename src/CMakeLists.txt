@@ -20,20 +20,29 @@ set(CLIENT_WINDOWS_SRC
     ${CMAKE_CURRENT_SOURCE_DIR}/client/platform/windows/main.cpp
 )
 
+set(SERVER_SRC
+    ${CMAKE_CURRENT_SOURCE_DIR}/server/StreamServer.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/server/StreamServer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/server/CaptureData.h
+
+    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/software/EncoderSoftware.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/software/EncoderSoftware.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/software/ScaleSoftware.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/software/ScaleSoftware.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/software/TextureSoftware.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/software/TextureSoftware.cpp
+)
+
 set(SERVER_WINDOWS_SRC
     ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/main.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/CaptureD3D.h
     ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/CaptureD3D.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/ColorConvD3D.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/ColorConvD3D.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/DeviceManagerD3D.h
     ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/DeviceManagerD3D.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/EncoderD3D.h
     ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/EncoderD3D.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/EncoderSoftware.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/EncoderSoftware.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/StreamManager.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/StreamManager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/ScaleD3D.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/ScaleD3D.cpp
 )
 
 add_library(common STATIC ${COMMON_SRC} ${COMMON_WINDOWS_SRC})
@@ -48,7 +57,7 @@ target_link_libraries(client PUBLIC
 )
 target_compile_definitions(client PUBLIC "-DUNICODE" "-D_UNICODE")
 
-add_executable(server WIN32 ${SERVER_WINDOWS_SRC})
+add_executable(server WIN32 ${SERVER_SRC} ${SERVER_WINDOWS_SRC})
 target_link_libraries(server PUBLIC
 	common
 	"dxgi.lib" "d3d11.lib"

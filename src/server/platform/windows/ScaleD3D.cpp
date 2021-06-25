@@ -1,4 +1,4 @@
-#include "ColorConvD3D.h"
+#include "ScaleD3D.h"
 
 #include "common/platform/windows/ComWrapper.h"
 
@@ -51,73 +51,80 @@ static std::vector<uint8_t> loadFile(const wchar_t* path) {
 }
 
 
-class ColorConvD3D_AYUV : public ColorConvD3D {
+class ScaleD3D_AYUV : public ScaleD3D {
     D3D11RenderTargetView rtOutput;
     D3D11PixelShader pixelShader;
 
 protected:
-    void _reconfigure() override;
     void _convert() override;
 
 public:
-    ColorConvD3D_AYUV(LoggerPtr logger) : ColorConvD3D(logger) {}
+    ScaleD3D_AYUV(int w, int h) : ScaleD3D(createNamedLogger("ScaleD3D_AYUV"), ScaleType::AYUV, w, h) {}
     void init(const D3D11Device& device, const D3D11DeviceContext& context) override;
 };
 
-class ColorConvD3D_NV12 : public ColorConvD3D {
+class ScaleD3D_NV12 : public ScaleD3D {
     D3D11Texture2D chromaLargeTex;
     D3D11ShaderResourceView srChromaLarge;
     D3D11RenderTargetView rtLuma, rtChroma, rtChromaLarge;
     D3D11PixelShader pixelShaderY, pixelShaderUV, pixelShaderCopy;
 
 protected:
-    void _reconfigure() override;
     void _convert() override;
 
 public:
-    ColorConvD3D_NV12(LoggerPtr logger) : ColorConvD3D(logger) {}
+    ScaleD3D_NV12(int w, int h) : ScaleD3D(createNamedLogger("ScaleD3D_NV12"), ScaleType::NV12, w, h) {}
     void init(const D3D11Device& device, const D3D11DeviceContext& context) override;
 };
 
 
-std::unique_ptr<ColorConvD3D> ColorConvD3D::createInstance(Type in, Type out, Color color) {
-    LoggerPtr log = createNamedLogger("ColorConvD3D");
-    std::unique_ptr<ColorConvD3D> ret;
+std::unique_ptr<ScaleD3D> ScaleD3D::createInstance(ScaleType type, int w, int h) {
+    std::unique_ptr<ScaleD3D> ret;
 
-    if (in != Type::RGB || out == Type::RGB)
-        error_quit(log, "Unimplemented configuration");
-
-    if (out == Type::AYUV)
-        ret = std::make_unique<ColorConvD3D_AYUV>(log);
-    else if (out == Type::NV12)
-        ret = std::make_unique<ColorConvD3D_NV12>(log);
+    if (type == ScaleType::AYUV)
+        ret = std::make_unique<ScaleD3D_AYUV>(w, h);
+    else if (type == ScaleType::NV12)
+        ret = std::make_unique<ScaleD3D_NV12>(w, h);
     else
-        error_quit(log, "Invalid surface type requested");
+        error_quit(createNamedLogger("ScaleD3D"), "Invalid surface type requested");
 
-    ret->inType = in;
-    ret->outType = out;
-    ret->color = color;
     return ret;
 }
 
 
-ColorConvD3D::ColorConvD3D(LoggerPtr logger) : log(logger), width(-1), height(-1),
-    inputFormat(DXGI_FORMAT_UNKNOWN), outputFormat(DXGI_FORMAT_UNKNOWN) {}
+ScaleD3D::ScaleD3D(LoggerPtr logger, ScaleType type, int w, int h) :
+    log(logger), outType(type), outWidth(w), outHeight(h),
+    inFormat(DXGI_FORMAT_UNKNOWN), outFormat(DXGI_FORMAT_UNKNOWN)
+{
+}
 
-ColorConvD3D::~ColorConvD3D() {}
+ScaleD3D::~ScaleD3D() {
+}
 
-void ColorConvD3D::init(const D3D11Device& device, const D3D11DeviceContext& context) {
+void ScaleD3D::init(const D3D11Device& device, const D3D11DeviceContext& context) {
     HRESULT hr;
 
-    this->device = device;
-    this->context = context;
-
     dirty = true;
+    outputTex.release();
     vertexBuffer.release();
     cbuffer.release();
     clampSampler.release();
     vertexShader.release();
     inputLayout.release();
+
+    this->device = device;
+    this->context = context;
+
+    D3D11_TEXTURE2D_DESC outDesc = {};
+    outDesc.Width = outWidth;
+    outDesc.Height = outHeight;
+    outDesc.Format = outFormat;
+    outDesc.Usage = D3D11_USAGE_DEFAULT;
+    outDesc.BindFlags = D3D11_BIND_RENDER_TARGET;
+    outDesc.MipLevels = 1;
+    outDesc.ArraySize = 1;
+    outDesc.SampleDesc.Count = 1;
+    device->CreateTexture2D(&outDesc, nullptr, outputTex.data());
 
     D3D11_BUFFER_DESC vertexBufferDesc = {};
     vertexBufferDesc.ByteWidth = sizeof(quadVertex);
@@ -128,21 +135,18 @@ void ColorConvD3D::init(const D3D11Device& device, const D3D11DeviceContext& con
     device->CreateBuffer(&vertexBufferDesc, &vertexBufferData, vertexBuffer.data());
 
     float Kr, Kg, Kb;
-    if (color == Color::BT601) {
+    if (outWidth <= 720) {
         Kb = 0.114f;
         Kr = 0.229f;
     }
-    else if (color == Color::BT709) {
+    else {
         Kb = 0.0722f;
         Kr = 0.2126f;
     }
-    else if (color == Color::BT2020) {
-        error_quit(log, "BT.2020 is not tested yet (not sure if this is correct)");
-        Kb = 0.0593f;
-        Kr = 0.2627f;
-    }
-    else
-        error_quit(log, "Invalid colorspace requested");
+    /* Bt.2020
+    Kb = 0.0593f;
+    Kr = 0.2627f;
+    */
 
     Kg = 1 - Kr - Kb;
 
@@ -184,12 +188,14 @@ void ColorConvD3D::init(const D3D11Device& device, const D3D11DeviceContext& con
     device->CreateInputLayout(inputLayoutDesc, 1, vertexBlob.data(), vertexBlob.size(), inputLayout.data());
 }
 
-void ColorConvD3D::_reconfigure() {
-    D3D11_TEXTURE2D_DESC inDesc = {}, outDesc = {};
+void ScaleD3D::_reconfigure() {
+    inputTex.release();
+    srInput.release();
 
-    inDesc.Width = width;
-    inDesc.Height = height;
-    inDesc.Format = inputFormat;
+    D3D11_TEXTURE2D_DESC inDesc = {};
+    inDesc.Width = inWidth;
+    inDesc.Height = inHeight;
+    inDesc.Format = inFormat;
     inDesc.Usage = D3D11_USAGE_DEFAULT;
     inDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
     inDesc.MipLevels = 1;
@@ -197,44 +203,34 @@ void ColorConvD3D::_reconfigure() {
     inDesc.SampleDesc.Count = 1;
     device->CreateTexture2D(&inDesc, nullptr, inputTex.data());
 
-    outDesc.Width = width;
-    outDesc.Height = height;
-    outDesc.Format = outputFormat;
-    outDesc.Usage = D3D11_USAGE_DEFAULT;
-    outDesc.BindFlags = D3D11_BIND_RENDER_TARGET;
-    outDesc.MipLevels = 1;
-    outDesc.ArraySize = 1;
-    outDesc.SampleDesc.Count = 1;
-    device->CreateTexture2D(&outDesc, nullptr, outputTex.data());
-
     D3D11_SHADER_RESOURCE_VIEW_DESC srDesc = {};
-    srDesc.Format = inputFormat;
+    srDesc.Format = inFormat;
     srDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
     srDesc.Texture2D.MostDetailedMip = 0;
     srDesc.Texture2D.MipLevels = -1;
     device->CreateShaderResourceView(inputTex.ptr(), &srDesc, srInput.data());
 }
 
-bool ColorConvD3D::_checkNeedsReconfigure(const D3D11Texture2D& tex) {
+bool ScaleD3D::_checkNeedsReconfigure(const D3D11Texture2D& tex) {
     D3D11_TEXTURE2D_DESC desc;
     tex->GetDesc(&desc);
 
     bool cond = false;
-    cond = cond || desc.Width != width;
-    cond = cond || desc.Height != height;
-    cond = cond || desc.Format != inputFormat;
+    cond = cond || desc.Width != inWidth;
+    cond = cond || desc.Height != inHeight;
+    cond = cond || desc.Format != inFormat;
 
     if (cond) {
-        width = desc.Width;
-        height = desc.Height;
-        inputFormat = desc.Format;
+        inWidth = desc.Width;
+        inHeight = desc.Height;
+        inFormat = desc.Format;
         return true;
     }
 
     return false;
 }
 
-void ColorConvD3D::pushInput(const D3D11Texture2D& tex) {
+void ScaleD3D::pushInput(const D3D11Texture2D& tex) {
     if (_checkNeedsReconfigure(tex))
         _reconfigure();
 
@@ -242,15 +238,15 @@ void ColorConvD3D::pushInput(const D3D11Texture2D& tex) {
     dirty = true;
 }
 
-D3D11Texture2D ColorConvD3D::popOutput() {
+D3D11Texture2D ScaleD3D::popOutput() {
     if (dirty)
         _convert();
 
     D3D11Texture2D tex;
     D3D11_TEXTURE2D_DESC desc = {};
-    desc.Format = outputFormat;
-    desc.Width = width;
-    desc.Height = height;
+    desc.Format = outFormat;
+    desc.Width = outWidth;
+    desc.Height = outHeight;
     desc.MipLevels = 1;
     desc.ArraySize = 1;
     desc.SampleDesc.Count = 1;
@@ -263,18 +259,15 @@ D3D11Texture2D ColorConvD3D::popOutput() {
 }
 
 
-void ColorConvD3D_AYUV::init(const D3D11Device& device, const D3D11DeviceContext& context) {
-    ColorConvD3D::init(device, context);
-    outputFormat = DXGI_FORMAT_AYUV;
+void ScaleD3D_AYUV::init(const D3D11Device& device, const D3D11DeviceContext& context) {
+    outFormat = DXGI_FORMAT_AYUV;
+    ScaleD3D::init(device, context);
 
     pixelShader.release();
+    rtOutput.release();
 
     std::vector<uint8_t> blob = loadFile(L"rgb2yuv-ps_yuv.fxc");
     device->CreatePixelShader(blob.data(), blob.size(), nullptr, pixelShader.data());
-}
-
-void ColorConvD3D_AYUV::_reconfigure() {
-    ColorConvD3D::_reconfigure();
 
     D3D11_RENDER_TARGET_VIEW_DESC rtDesc = {};
     rtDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -283,10 +276,10 @@ void ColorConvD3D_AYUV::_reconfigure() {
     device->CreateRenderTargetView(outputTex.ptr(), &rtDesc, rtOutput.data());
 }
 
-void ColorConvD3D_AYUV::_convert() {
+void ScaleD3D_AYUV::_convert() {
     D3D11_VIEWPORT viewport = {
         0, 0,
-        (float)(width), (float)(height),
+        (float)(outWidth), (float)(outHeight),
         0, 1
     };
     context->RSSetViewports(1, &viewport);
@@ -306,13 +299,21 @@ void ColorConvD3D_AYUV::_convert() {
 }
 
 
-void ColorConvD3D_NV12::init(const D3D11Device& device, const D3D11DeviceContext& context) {
-    ColorConvD3D::init(device, context);
-    outputFormat = DXGI_FORMAT_NV12;
+void ScaleD3D_NV12::init(const D3D11Device& device, const D3D11DeviceContext& context) {
+    outFormat = DXGI_FORMAT_NV12;
+    if (outWidth % 2 != 0 || outHeight % 2 != 0)
+        error_quit(log, "Dimension not multiple of 2 when using NV12 format");
+
+    ScaleD3D::init(device, context);
 
     pixelShaderY.release();
     pixelShaderUV.release();
     pixelShaderCopy.release();
+    chromaLargeTex.release();
+    srChromaLarge.release();
+    rtChromaLarge.release();
+    rtLuma.release();
+    rtChroma.release();
 
     std::vector<uint8_t> blob = loadFile(L"rgb2yuv-ps_y.fxc");
     device->CreatePixelShader(blob.data(), blob.size(), nullptr, pixelShaderY.data());
@@ -322,17 +323,10 @@ void ColorConvD3D_NV12::init(const D3D11Device& device, const D3D11DeviceContext
 
     blob = loadFile(L"rgb2yuv-ps_copy.fxc");
     device->CreatePixelShader(blob.data(), blob.size(), nullptr, pixelShaderCopy.data());
-}
-
-void ColorConvD3D_NV12::_reconfigure() {
-    ColorConvD3D::_reconfigure();
-
-    if (width % 2 != 0 || height % 2 != 0)
-        error_quit(log, "Dimension not multiple of 2 when using NV12 format");
 
     D3D11_TEXTURE2D_DESC chromaLargeDesc = {};
-    chromaLargeDesc.Width = width;
-    chromaLargeDesc.Height = height;
+    chromaLargeDesc.Width = outWidth;
+    chromaLargeDesc.Height = outHeight;
     chromaLargeDesc.Format = DXGI_FORMAT_R8G8_UNORM;
     chromaLargeDesc.Usage = D3D11_USAGE_DEFAULT;
     chromaLargeDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
@@ -367,10 +361,10 @@ void ColorConvD3D_NV12::_reconfigure() {
     device->CreateRenderTargetView(outputTex.ptr(), &rtChromaDesc, rtChroma.data());
 }
 
-void ColorConvD3D_NV12::_convert() {
+void ScaleD3D_NV12::_convert() {
     D3D11_VIEWPORT viewport = {
         0, 0,
-        (float)(width), (float)(height),
+        (float)(outWidth), (float)(outHeight),
         0, 1
     };
     context->RSSetViewports(1, &viewport);
@@ -397,7 +391,7 @@ void ColorConvD3D_NV12::_convert() {
     // render UV component (small)
     D3D11_VIEWPORT smallViewport = {
         0, 0,
-        (float)(width / 2), (float)(height / 2),
+        (float)(outWidth / 2), (float)(outHeight / 2),
         0, 1
     };
     context->RSSetViewports(1, &smallViewport);

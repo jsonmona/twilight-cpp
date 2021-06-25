@@ -173,37 +173,13 @@ void EncoderD3D::_init() {
 	}
 
 	check_quit(chosenType == -1, log, "No supported input type found");
-
-	ColorConvD3D::Color color;
-	if (width <= 720)
-		color = ColorConvD3D::Color::BT601;
-	else
-		color = ColorConvD3D::Color::BT709;
-
-	colorConv = ColorConvD3D::createInstance(ColorConvD3D::Type::RGB, ColorConvD3D::Type::NV12, color);
-	colorConv->init(devs->device, devs->context);
 }
-
-
-struct ExtraData {
-	long long sampleTime;
-
-	bool cursorVisible;
-	int cursorX, cursorY;
-
-	bool cursorShapeUpdated = false;
-	std::vector<uint8_t> cursorImage;
-	int cursorW, cursorH;
-	float hotspotX, hotspotY;
-};
 
 void EncoderD3D::_run() {
 	HRESULT hr;
 
-	std::deque<std::shared_ptr<ExtraData>> extraData;
-
-	std::shared_ptr<ExtraData> prevExtraData;
-	bool hasTexture = false;
+	std::deque<CaptureData<long long>> extraData;
+	CaptureData<long long> prev;
 
 	MFMediaEventGenerator gen = encoder.castTo<IMFMediaEventGenerator>();
 
@@ -235,32 +211,33 @@ void EncoderD3D::_run() {
 			while (calcNowFrame() < frameCnt)
 				Sleep(0);
 
-			std::shared_ptr<ExtraData> now = std::make_shared<ExtraData>();
-
-			_fetchTexture(now.get(), prevExtraData.get(), !hasTexture);
-			hasTexture = true;
+			CaptureData<D3D11Texture2D> cap = onFrameRequest();
 
 			frameCnt = calcNowFrame();
 			const long long sampleDur = MFTime * frameDen / frameNum;
 			const long long sampleTime = frameCnt * MFTime * frameDen / frameNum;
-			now->sampleTime = sampleTime;
+
+			CaptureData<long long> now;
+			now.cursor = std::move(cap.cursor);
+			now.cursorShape = std::move(cap.cursorShape);
+			now.desktop = std::make_shared<long long>(sampleTime);
 
 			extraData.push_back(now);
-			prevExtraData = std::move(now);
+			prev = std::move(now);
 
-			_pushEncoderTexture(colorConv->popOutput(), sampleDur, sampleTime);
+			_pushEncoderTexture(*cap.desktop, sampleDur, sampleTime);
 			frameCnt++;
 		}
 		else if (evType == METransformHaveOutput) {
 			int idx = -1;
-			std::shared_ptr<ExtraData> now;
+
 			long long sampleTime;
+			CaptureData<long long> now;
+			CaptureData<std::vector<uint8_t>> enc;
 
-			EncoderData output;
-
-			output.desktopImage = _popEncoderData(&sampleTime);
+			enc.desktop = std::make_shared<std::vector<uint8_t>>(_popEncoderData(&sampleTime));
 			for (int i = 0; i < extraData.size(); i++) {
-				if (extraData[i]->sampleTime == sampleTime) {
+				if (*extraData[i].desktop == sampleTime) {
 					now = std::move(extraData[i]);
 					idx = i;
 					break;
@@ -276,53 +253,13 @@ void EncoderD3D::_run() {
 			else
 				extraData.erase(extraData.begin() + idx);
 
-			output.cursorVisible = now->cursorVisible;
-			output.cursorX = now->cursorX;
-			output.cursorY = now->cursorY;
-
-			output.cursorShapeUpdated = now->cursorShapeUpdated;
-			if (now->cursorShapeUpdated) {
-				output.cursorImage = now->cursorImage;
-				output.cursorW = now->cursorW;
-				output.cursorH = now->cursorH;
-				output.hotspotX = now->hotspotX;
-				output.hotspotY = now->hotspotY;
-			}
-
-			onDataAvailable(&output);
+			enc.cursor = std::move(now.cursor);
+			enc.cursorShape = std::move(now.cursorShape);
+			onDataAvailable(std::move(enc));
 		}
 		else if (evType == METransformDrainComplete)
 			break;
 	}
-}
-
-void EncoderD3D::_fetchTexture(ExtraData* now, const ExtraData* prev, bool forcePush) {
-	CaptureDataD3D capture = onFrameRequest();
-
-	if (capture.desktopUpdated || forcePush)
-		colorConv->pushInput(capture.desktopImage);
-
-	if (capture.cursorUpdated) {
-		now->cursorVisible = capture.cursorVisible;
-		now->cursorX = capture.cursorX;
-		now->cursorY = capture.cursorY;
-	}
-	else {
-		now->cursorVisible = prev->cursorVisible;
-		now->cursorX = prev->cursorX;
-		now->cursorY = prev->cursorY;
-	}
-
-	if (capture.cursorShapeUpdated) {
-		now->cursorShapeUpdated = true;
-		now->cursorImage = std::move(capture.cursorImage);
-		now->cursorW = capture.cursorW;
-		now->cursorH = capture.cursorH;
-		now->hotspotX = capture.hotspotX;
-		now->hotspotY = capture.hotspotY;
-	}
-	else
-		now->cursorShapeUpdated = false;
 }
 
 void EncoderD3D::_pushEncoderTexture(const D3D11Texture2D& tex, long long sampleDur, long long sampleTime) {

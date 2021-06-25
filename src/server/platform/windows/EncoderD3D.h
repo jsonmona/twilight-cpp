@@ -4,7 +4,7 @@
 
 #include "common/log.h"
 
-#include "ColorConvD3D.h"
+#include "server/CaptureData.h"
 #include "DeviceManagerD3D.h"
 
 #include <atomic>
@@ -12,40 +12,23 @@
 #include <vector>
 #include <functional>
 
-struct CaptureDataD3D;
-
-struct EncoderData {
-	std::vector<uint8_t> desktopImage;
-
-	bool cursorVisible;
-	int cursorX, cursorY;
-
-	bool cursorShapeUpdated = false;
-	std::vector<uint8_t> cursorImage;
-	int cursorW, cursorH;
-	float hotspotX, hotspotY;
-};
-
-struct ExtraData;
 
 class EncoderD3D {
 	LoggerPtr log;
 
 	int width, height;
 	std::shared_ptr<DeviceManagerD3D> devs;
-	std::function<CaptureDataD3D()> onFrameRequest;
-	std::function<void(EncoderData*)> onDataAvailable;
+	std::function<CaptureData<D3D11Texture2D>()> onFrameRequest;
+	std::function<void(CaptureData<std::vector<uint8_t>>&&)> onDataAvailable;
 
 	std::thread runThread;
 
-	std::unique_ptr<ColorConvD3D> colorConv;
 	MFTransform encoder;
 	DWORD inputStreamId, outputStreamId;
 
 	void _init();
 	void _run();
 
-	void _fetchTexture(ExtraData* now, const ExtraData* prev, bool forcePush);
 	void _pushEncoderTexture(const D3D11Texture2D& tex, long long sampleDur, long long sampleTime);
 	std::vector<uint8_t> _popEncoderData(long long* sampleTime);
 

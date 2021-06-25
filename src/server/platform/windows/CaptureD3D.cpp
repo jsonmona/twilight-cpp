@@ -80,6 +80,8 @@ CaptureD3D::CaptureD3D(const decltype(devs)& _deviceManager) :
 void CaptureD3D::begin() {
 	HRESULT hr;
 
+	initialized = false;
+
 	frameAcquired = false;
 	outputDuplication.release();
 
@@ -101,9 +103,9 @@ void CaptureD3D::end() {
 	outputDuplication.release();
 }
 
-CaptureDataD3D CaptureD3D::fetch() {
+CaptureData<D3D11Texture2D> CaptureD3D::fetch() {
 	HRESULT hr;
-	CaptureDataD3D info;
+	CaptureData<D3D11Texture2D> info;
 
 	if (frameAcquired) {
 		hr = outputDuplication->ReleaseFrame();
@@ -117,23 +119,24 @@ CaptureDataD3D CaptureD3D::fetch() {
 	if (SUCCEEDED(hr)) {
 		frameAcquired = true;
 
-		// always update desktop image
-		info.desktopImage = desktopResource.castTo<ID3D11Texture2D>();
-		if (frameInfo.LastPresentTime.QuadPart != 0) {
-			info.desktopUpdated = true;
+		if (frameInfo.LastPresentTime.QuadPart != 0 || !initialized) {
+			initialized = true;  // Always insert frame to first fetch
+
+			D3D11Texture2D rgbTex = desktopResource.castTo<ID3D11Texture2D>();
+			info.desktop = std::make_shared<D3D11Texture2D>(std::move(rgbTex));
 		}
 
 		if (frameInfo.LastMouseUpdateTime.QuadPart != 0) {
-			info.cursorUpdated = true;
-			info.cursorVisible = frameInfo.PointerPosition.Visible;
-			if (info.cursorVisible) {
-				info.cursorX = frameInfo.PointerPosition.Position.x;
-				info.cursorY = frameInfo.PointerPosition.Position.y;
+			info.cursor = std::make_shared<CursorData>();
+			info.cursor->visible = frameInfo.PointerPosition.Visible;
+			if (frameInfo.PointerPosition.Visible) {
+				info.cursor->posX = frameInfo.PointerPosition.Position.x;
+				info.cursor->posY = frameInfo.PointerPosition.Position.y;
 			}
 		}
 
 		if (frameInfo.PointerShapeBufferSize != 0) {
-			info.cursorShapeUpdated = true;
+			info.cursorShape = std::make_shared<CursorShapeData>();
 
 			UINT bufferSize = frameInfo.PointerShapeBufferSize;
 			std::vector<uint8_t> buffer(bufferSize);
@@ -143,26 +146,28 @@ CaptureDataD3D CaptureD3D::fetch() {
 				&bufferSize, &cursorInfo);
 			check_quit(FAILED(hr), log, "Failed to fetch frame pointer shape");
 
-			info.hotspotX = cursorInfo.HotSpot.x;
-			info.hotspotY = cursorInfo.HotSpot.y;
-			info.cursorImage.resize(cursorInfo.Height * cursorInfo.Width * 4);
+			info.cursorShape->hotspotX = cursorInfo.HotSpot.x;
+			info.cursorShape->hotspotY = cursorInfo.HotSpot.y;
+			info.cursorShape->image.resize(cursorInfo.Height * cursorInfo.Width * 4);
 			if (cursorInfo.Type == DXGI_OUTDUPL_POINTER_SHAPE_TYPE_COLOR) {
-				info.cursorW = cursorInfo.Width;
-				info.cursorH = cursorInfo.Height;
+				info.cursorShape->width = cursorInfo.Width;
+				info.cursorShape->height = cursorInfo.Height;
 
+				uint8_t* const basePtr = info.cursorShape->image.data();
 				for (int i = 0; i < cursorInfo.Height; i++) {
 					for (int j = 0; j < cursorInfo.Width; j++) {
 						// bgra -> rgba
 						uint32_t val = *reinterpret_cast<uint32_t*>(buffer.data() + (i * cursorInfo.Pitch + j * 4));
 						val = ((val & 0x00FF00FF) << 16) | ((val & 0x00FF00FF) >> 16) | (val & 0xFF00FF00);
-						*reinterpret_cast<uint32_t*>(info.cursorImage.data() + (i * cursorInfo.Width * 4 + j * 4)) = val;
+						*reinterpret_cast<uint32_t*>(basePtr + (i * cursorInfo.Width * 4 + j * 4)) = val;
 					}
 				}
 			}
 			else if (cursorInfo.Type == DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MONOCHROME) {
-				info.cursorW = cursorInfo.Width;
-				info.cursorH = cursorInfo.Height / 2;
+				info.cursorShape->width = cursorInfo.Width;
+				info.cursorShape->height = cursorInfo.Height / 2;
 
+				uint8_t* const basePtr = info.cursorShape->image.data();
 				for (int i = 0; i < cursorInfo.Height / 2; i++) {
 					for (int j = 0; j < cursorInfo.Width / 8; j++) {
 						uint8_t value = buffer[i * cursorInfo.Pitch + j];
@@ -173,19 +178,19 @@ CaptureDataD3D CaptureD3D::fetch() {
 							value >>= 1;
 							alpha >>= 1;
 
-							info.cursorImage[i * cursorInfo.Width * 4 + j * 8 * 4 + k * 4] = rgbValue;
-							info.cursorImage[i * cursorInfo.Width * 4 + j * 8 * 4 + k * 4 + 1] = rgbValue;
-							info.cursorImage[i * cursorInfo.Width * 4 + j * 8 * 4 + k * 4 + 2] = rgbValue;
-							info.cursorImage[i * cursorInfo.Width * 4 + j * 8 * 4 + k * 4 + 3] = alphaValue;
+							basePtr[i * cursorInfo.Width * 4 + j * 8 * 4 + k * 4] = rgbValue;
+							basePtr[i * cursorInfo.Width * 4 + j * 8 * 4 + k * 4 + 1] = rgbValue;
+							basePtr[i * cursorInfo.Width * 4 + j * 8 * 4 + k * 4 + 2] = rgbValue;
+							basePtr[i * cursorInfo.Width * 4 + j * 8 * 4 + k * 4 + 3] = alphaValue;
 						}
 					}
 				}
 			}
 			else {
 				log->warn("Unknown cursor type: {}", cursorInfo.Type);
-				info.cursorW = 0;
-				info.cursorH = 0;
-				info.cursorImage.resize(0);
+				info.cursorShape->image.resize(0);
+				info.cursorShape->height = 0;
+				info.cursorShape->width = 0;
 			}
 		}
 	}
