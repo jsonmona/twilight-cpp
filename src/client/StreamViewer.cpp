@@ -65,17 +65,21 @@ void main() {
 	real_pos = real_pos * 2.0f - 1.0f;
 	gl_Position = vec4(real_pos, 0.0f, 1.0f);
 	vec2 texcoord = a_pos * 0.5f + 0.5f;
-	texcoord.y = 1 - texcoord.y;
+	texcoord.y = 1.0f - texcoord.y;
 	v_texcoord = texcoord;
 })STR";
 	static const char fragShaderCode[] = R"STR(
 varying vec2 v_texcoord;
 uniform sampler2D sampler;
 void main() {
-	gl_FragColor = texture(sampler, v_texcoord);
+	gl_FragColor = texture2D(sampler, v_texcoord);
 })STR";
 
 	initializeOpenGLFunctions();
+
+	log->info("GL vendor: {}", glGetString(GL_VENDOR));
+	log->info("GL renderer: {}", glGetString(GL_RENDERER));
+	log->info("GL version: {}", glGetString(GL_VERSION));
 
 	glGenBuffers(1, &quadBuffer);
 	glBindBuffer(GL_ARRAY_BUFFER, quadBuffer);
@@ -107,7 +111,15 @@ void main() {
 
 	int flagCompiled = 0;
 	glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &flagCompiled);
-	check_quit(!flagCompiled, log, "Failed to compile vertex shader");
+	if(!flagCompiled) {
+		GLint logSize = 0;
+		glGetShaderiv(vertexShader, GL_INFO_LOG_LENGTH, &logSize);
+		std::vector<GLchar> errorLog(logSize);
+		glGetShaderInfoLog(vertexShader, logSize, &logSize, errorLog.data());
+		
+		log->error("Failed to compile shader.\nCompiler log:\n{}", errorLog.data());
+		error_quit(log, "Failed to compile vertex shader");
+	}
 
 	code = fragShaderCode;
 	len = sizeof(fragShaderCode);
@@ -117,7 +129,15 @@ void main() {
 
 	flagCompiled = 0;
 	glGetShaderiv(fragShader, GL_COMPILE_STATUS, &flagCompiled);
-	check_quit(!flagCompiled, log, "Failed to compile fragment shader");
+	if (!flagCompiled) {
+		GLint logSize = 0;
+		glGetShaderiv(fragShader, GL_INFO_LOG_LENGTH, &logSize);
+		std::vector<GLchar> errorLog(logSize);
+		glGetShaderInfoLog(fragShader, logSize, &logSize, errorLog.data());
+
+		log->error("Failed to compile fragment shader.\nCompiler log:\n{}", errorLog.data());
+		error_quit(log, "Failed to compile fragment shader");
+	}
 
 	program = glCreateProgram();
 	glAttachShader(program, vertexShader);
