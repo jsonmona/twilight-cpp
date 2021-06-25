@@ -1,5 +1,5 @@
-#ifndef COLOR_SPACE_CONV_H_
-#define COLOR_SPACE_CONV_H_
+#ifndef SERVER_PLATFORM_WINDOWS_SCALE_D3D_H_
+#define SERVER_PLATFORM_WINDOWS_SCALE_D3D_H_
 
 
 #include "common/log.h"

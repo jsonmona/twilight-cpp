@@ -1,5 +1,5 @@
-#ifndef DXGI_WRAPPER_H_
-#define DXGI_WRAPPER_H_
+#ifndef COMMON_PLATFORM_WINDOWS_COM_WRAPPER_H_
+#define COMMON_PLATFORM_WINDOWS_COM_WRAPPER_H_
 
 
 #include "winheaders.h"

@@ -1,5 +1,5 @@
-#ifndef COMMON_ERROR_PROXY_SINK_H_
-#define COMMON_ERROR_PROXY_SINK_H_
+#ifndef COMMON_LOG_H_
+#define COMMON_LOG_H_
 
 
 #ifdef _MSC_VER
