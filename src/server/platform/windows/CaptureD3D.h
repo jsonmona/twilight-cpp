@@ -7,8 +7,6 @@
 
 #include "DeviceManagerD3D.h"
 
-#include <packet.pb.h>
-
 #include <atomic>
 #include <vector>
 #include <thread>
@@ -22,7 +20,7 @@ class CaptureD3D {
 	LoggerPtr log;
 
 	bool initialized = false;
-	std::shared_ptr<DeviceManagerD3D> devs;
+	DeviceManagerD3D devs;
 
 	bool frameAcquired = false;
 	DxgiOutputDuplication outputDuplication;
@@ -32,7 +30,7 @@ public:
 		std::vector<uint8_t> data;
 	};
 
-	CaptureD3D(const decltype(devs)& _deviceManager);
+	CaptureD3D(DeviceManagerD3D _devs);
 	void begin();
 	CaptureData<D3D11Texture2D> fetch();
 	void end();

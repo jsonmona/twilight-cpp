@@ -6,8 +6,10 @@ package msg;
 import "stream.proto";
 
 message Packet {
+	int32 extra_data_len = 1;
+
 	oneof msg {
-		DesktopFrame desktop_frame = 1;
-		CursorShape cursor_shape = 2;
+		DesktopFrame desktop_frame = 2;
+		CursorShape cursor_shape = 3;
 	}
 }

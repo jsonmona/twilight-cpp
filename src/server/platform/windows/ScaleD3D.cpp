@@ -59,7 +59,7 @@ protected:
     void _convert() override;
 
 public:
-    ScaleD3D_AYUV(int w, int h) : ScaleD3D(createNamedLogger("ScaleD3D_AYUV"), ScaleType::AYUV, w, h) {}
+    ScaleD3D_AYUV(int w, int h) : ScaleD3D(createNamedLogger("ScaleD3D_AYUV"), w, h, ScaleType::AYUV) {}
     void init(const D3D11Device& device, const D3D11DeviceContext& context) override;
 };
 
@@ -73,12 +73,12 @@ protected:
     void _convert() override;
 
 public:
-    ScaleD3D_NV12(int w, int h) : ScaleD3D(createNamedLogger("ScaleD3D_NV12"), ScaleType::NV12, w, h) {}
+    ScaleD3D_NV12(int w, int h) : ScaleD3D(createNamedLogger("ScaleD3D_NV12"), w, h, ScaleType::NV12) {}
     void init(const D3D11Device& device, const D3D11DeviceContext& context) override;
 };
 
 
-std::unique_ptr<ScaleD3D> ScaleD3D::createInstance(ScaleType type, int w, int h) {
+std::unique_ptr<ScaleD3D> ScaleD3D::createInstance(int w, int h, ScaleType type) {
     std::unique_ptr<ScaleD3D> ret;
 
     if (type == ScaleType::AYUV)
@@ -92,7 +92,7 @@ std::unique_ptr<ScaleD3D> ScaleD3D::createInstance(ScaleType type, int w, int h)
 }
 
 
-ScaleD3D::ScaleD3D(LoggerPtr logger, ScaleType type, int w, int h) :
+ScaleD3D::ScaleD3D(LoggerPtr logger, int w, int h, ScaleType type) :
     log(logger), outType(type), outWidth(w), outHeight(h),
     inFormat(DXGI_FORMAT_UNKNOWN), outFormat(DXGI_FORMAT_UNKNOWN)
 {

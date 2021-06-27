@@ -4,8 +4,7 @@ option optimize_for = LITE_RUNTIME;
 package msg;
 
 enum CodecType {
-	CODEC_UNKNOWN = 0;
-	CODEC_H264 = 1;
+	CODEC_H264 = 0;
 }
 
 // https://docs.microsoft.com/en-us/windows/win32/medfound/10-bit-and-16-bit-yuv-video-formats#preferred-yuv-formats
@@ -33,22 +32,17 @@ message RequestStreamAnswer {
 	int32 height = 5;
 }
 
+// Extra data contains desktom image (encoded)
 message DesktopFrame {
-	// A stream of data will follow this message
-	int32 image_len = 1;
-
 	bool cursor_visible = 2;
 	int32 cursor_x = 3;
 	int32 cursor_y = 4;
 }
 
+// Extra data contains cursor image (raw RGBA)
 message CursorShape {
-	// A stream of data will follow this message
-	int32 image_len = 1;
-
 	int32 width = 2;
 	int32 height = 3;
-	// always uses RGBA format
 
 	float hotspot_x = 4;
 	float hotspot_y = 5;

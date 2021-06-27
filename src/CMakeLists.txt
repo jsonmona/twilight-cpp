@@ -21,9 +21,11 @@ set(CLIENT_WINDOWS_SRC
 )
 
 set(SERVER_SRC
+    ${CMAKE_CURRENT_SOURCE_DIR}/server/CaptureData.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/server/CapturePipeline.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/server/CapturePipeline.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/server/StreamServer.h
     ${CMAKE_CURRENT_SOURCE_DIR}/server/StreamServer.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/server/CaptureData.h
 
     ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/software/EncoderSoftware.h
     ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/software/EncoderSoftware.cpp
@@ -37,6 +39,10 @@ set(SERVER_WINDOWS_SRC
     ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/main.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/CaptureD3D.h
     ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/CaptureD3D.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/CapturePipelineD3D.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/CapturePipelineD3D.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/CapturePipelineD3DSoft.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/CapturePipelineD3DSoft.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/DeviceManagerD3D.h
     ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/DeviceManagerD3D.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/EncoderD3D.h

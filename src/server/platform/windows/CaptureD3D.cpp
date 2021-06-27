@@ -72,8 +72,8 @@ static MFTransform getVideoEncoder(const MFDxgiDeviceManager& deviceManager) {
 	return transform;
 }
 
-CaptureD3D::CaptureD3D(const decltype(devs)& _deviceManager) :
-	log(createNamedLogger("CaptureD3D")), devs(_deviceManager)
+CaptureD3D::CaptureD3D(DeviceManagerD3D _devs) :
+	log(createNamedLogger("CaptureD3D")), devs(_devs)
 {
 }
 
@@ -86,7 +86,7 @@ void CaptureD3D::begin() {
 	outputDuplication.release();
 
 	DXGI_FORMAT supportedFormats[] = { DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM };
-	hr = devs->output->DuplicateOutput1(devs->device.ptr(), 0, 2, supportedFormats, outputDuplication.data());
+	hr = devs.output->DuplicateOutput1(devs.device.ptr(), 0, 2, supportedFormats, outputDuplication.data());
 	check_quit(FAILED(hr), log, "Failed to duplicate output");
 }
 
@@ -148,8 +148,8 @@ CaptureData<D3D11Texture2D> CaptureD3D::fetch() {
 
 			info.cursorShape->hotspotX = cursorInfo.HotSpot.x;
 			info.cursorShape->hotspotY = cursorInfo.HotSpot.y;
-			info.cursorShape->image.resize(cursorInfo.Height * cursorInfo.Width * 4);
 			if (cursorInfo.Type == DXGI_OUTDUPL_POINTER_SHAPE_TYPE_COLOR) {
+				info.cursorShape->image.resize(cursorInfo.Height * cursorInfo.Width * 4);
 				info.cursorShape->width = cursorInfo.Width;
 				info.cursorShape->height = cursorInfo.Height;
 
@@ -164,6 +164,7 @@ CaptureData<D3D11Texture2D> CaptureD3D::fetch() {
 				}
 			}
 			else if (cursorInfo.Type == DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MONOCHROME) {
+				info.cursorShape->image.resize(cursorInfo.Height * cursorInfo.Width * 4 / 2);
 				info.cursorShape->width = cursorInfo.Width;
 				info.cursorShape->height = cursorInfo.Height / 2;
 

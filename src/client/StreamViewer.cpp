@@ -178,18 +178,21 @@ void StreamViewer::paintGL() {
 						cursorWidth = pck.cursor_shape().width();
 						cursorHeight = pck.cursor_shape().height();
 
+						if (cursorWidth * cursorHeight * 4 != pck.extra_data_len())
+							error_quit(log, "Invalid length of extra data (wire format mismatch)");
+
 						glBindTexture(GL_TEXTURE_2D, cursorTex);
 						glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, cursorWidth, cursorHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE,
 							data.data() + dataPos);
 
-						dataPos += pck.cursor_shape().image_len();
+						dataPos += cursorWidth * cursorHeight * 4;
 						break;
 					case msg::Packet::kDesktopFrame:
 						cursorVisible = pck.desktop_frame().cursor_visible();
 						cursorX = pck.desktop_frame().cursor_x();
 						cursorY = pck.desktop_frame().cursor_y();
 
-						readSize = pck.desktop_frame().image_len();
+						readSize = pck.extra_data_len();
 						frameData = (uint8_t*) av_malloc(readSize + 64);
 						check_quit(frameData == nullptr, log, "Failed to allocate data size");
 						memcpy(frameData, data.data() + dataPos, readSize);

@@ -35,6 +35,8 @@ public:
 
 	void reset();
 
+	void hintNextFrame(int w, int h, AVPixelFormat fmt);
+
 	void pushInput(TextureSoftware&& tex);
 	TextureSoftware popOutput();
 };

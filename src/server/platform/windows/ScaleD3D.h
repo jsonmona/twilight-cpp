@@ -33,14 +33,14 @@ protected:
 	D3D11Texture2D outputTex;
 	D3D11ShaderResourceView srInput;
 
-	explicit ScaleD3D(LoggerPtr logger, ScaleType _outType, int w, int h);
+	explicit ScaleD3D(LoggerPtr logger, int w, int h, ScaleType _outType);
 
 	bool _checkNeedsReconfigure(const D3D11Texture2D& tex);
 	virtual void _reconfigure();
 	virtual void _convert() = 0;
 
 public:
-	static std::unique_ptr<ScaleD3D> createInstance(ScaleType type, int w, int h);
+	static std::unique_ptr<ScaleD3D> createInstance(int w, int h, ScaleType type);
 
 	virtual ~ScaleD3D();
 	virtual void init(const D3D11Device& device, const D3D11DeviceContext& context);

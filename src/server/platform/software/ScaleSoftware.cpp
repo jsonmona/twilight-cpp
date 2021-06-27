@@ -29,6 +29,16 @@ void ScaleSoftware::reset() {
 	initialized = false;
 }
 
+void ScaleSoftware::hintNextFrame(int w, int h, AVPixelFormat fmt) {
+	if (fmt != inputFormat || w != inputWidth || h != inputHeight) {
+		inputWidth = w;
+		inputHeight = h;
+		inputFormat = fmt;
+
+		_init();
+	}
+}
+
 void ScaleSoftware::pushInput(TextureSoftware&& tex) {
 	inputTex = std::move(tex);
 
@@ -48,20 +58,13 @@ TextureSoftware ScaleSoftware::popOutput() {
 void ScaleSoftware::_init() {
 	sws_freeContext(ctx);
 
-	inputWidth = inputTex.width;
-	inputHeight = inputTex.height;
-	inputFormat = inputTex.format;
-
 	ctx = sws_getContext(inputWidth, inputHeight, inputFormat,
 		outputWidth, outputHeight, outputFormat,
 		SWS_BICUBIC, nullptr, nullptr, nullptr);
 }
 
 void ScaleSoftware::_convert() {
-	if (inputTex.format != inputFormat ||
-		inputTex.width != inputWidth ||
-		inputTex.height != inputHeight)
-		_init();
+	hintNextFrame(inputTex.width, inputTex.height, inputTex.format);
 
 	sws_scale(ctx, inputTex.data, inputTex.linesize, 0, inputHeight, outputTex.data, outputTex.linesize);
 }

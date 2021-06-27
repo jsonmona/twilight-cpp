@@ -17,7 +17,7 @@ class EncoderD3D {
 	LoggerPtr log;
 
 	int width, height;
-	std::shared_ptr<DeviceManagerD3D> devs;
+	DeviceManagerD3D devs;
 	std::function<CaptureData<D3D11Texture2D>()> onFrameRequest;
 	std::function<void(CaptureData<std::vector<uint8_t>>&&)> onDataAvailable;
 
@@ -33,7 +33,7 @@ class EncoderD3D {
 	std::vector<uint8_t> _popEncoderData(long long* sampleTime);
 
 public:
-	EncoderD3D(const std::shared_ptr<DeviceManagerD3D>& _devs, int _width, int _height);
+	EncoderD3D(DeviceManagerD3D _devs, int _width, int _height);
 	~EncoderD3D();
 
 	inline void setFrameRequestCallback(const decltype(onFrameRequest)& x) { onFrameRequest = x; }
