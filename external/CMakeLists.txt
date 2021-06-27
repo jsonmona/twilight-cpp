@@ -26,6 +26,15 @@ else()
 endif()
 
 
+# mbed TLS
+
+set(MBEDTLS_ZLIB_SUPPORT OFF CACHE BOOL "mbedtls zlib support" FORCE)
+set(ENABLE_PROGRAMS OFF CACHE BOOL "mbedtls enable programs" FORCE)
+set(MBEDTLS_FATAL_WARNINGS OFF CACHE BOOL "mbedtls treat warning as error" FORCE)
+set(ENABLE_TESTING OFF CACHE BOOL "mbedtls build tests" FORCE)
+add_subdirectory(mbedtls)
+
+
 # spdlog
 
 set(SPDLOG_TIDY OFF CACHE BOOL "spdlog clang-tidy" FORCE)

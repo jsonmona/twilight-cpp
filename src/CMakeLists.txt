@@ -57,7 +57,7 @@ target_link_libraries(common PUBLIC spdlog::spdlog ${FFMPEG_LIBS})
 
 add_executable(client WIN32 ${CLIENT_SRC} ${CLIENT_WINDOWS_SRC})
 target_link_libraries(client PUBLIC
-	common
+	common mbedtls
     Qt6::Widgets Qt6::OpenGLWidgets
 	"dxgi.lib" "d3d11.lib"
 )
@@ -65,7 +65,7 @@ target_compile_definitions(client PUBLIC "-DUNICODE" "-D_UNICODE")
 
 add_executable(server WIN32 ${SERVER_SRC} ${SERVER_WINDOWS_SRC})
 target_link_libraries(server PUBLIC
-	common
+	common mbedtls
 	"dxgi.lib" "d3d11.lib"
 	"mfuuid.lib" "mfplat.lib"
 	"ws2_32.lib"
