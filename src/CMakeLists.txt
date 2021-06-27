@@ -130,13 +130,14 @@ if(WIN32)
     macro(FN_ADD_SHADER OUTDIR ENTRY PROFILE FILE)
         get_filename_component(HLSL_PATH ${FILE} ABSOLUTE)
         get_filename_component(FILE_WE ${FILE} NAME_WE)
-        add_custom_command(OUTPUT ${FILE_WE}-${ENTRY}.fxc
-                           COMMAND ${FXC} /nologo /E "${ENTRY}" /T "${PROFILE}" /Fo "${CMAKE_BINARY_DIR}/bin/${OUTDIR}/${FILE_WE}-${ENTRY}.fxc" ${HLSL_PATH}
-                           MAIN_DEPENDENCY ${FILE}
+        set(FXC_OUTPUT "${CMAKE_BINARY_DIR}/bin/${OUTDIR}/${FILE_WE}-${ENTRY}.fxc")
+        add_custom_command(OUTPUT "${FXC_OUTPUT}"
+                           COMMAND ${FXC} /nologo /E "${ENTRY}" /T "${PROFILE}" /Fo "${FXC_OUTPUT}" "${HLSL_PATH}"
+                           MAIN_DEPENDENCY "${HLSL_PATH}"
                            COMMENT "Compiling HLSL shader: ${FILE} for ${ENTRY}"
                            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
                            VERBATIM)
-        list(APPEND FXC_FILES "${FILE_WE}-${ENTRY}.fxc")
+        list(APPEND FXC_FILES "${FXC_OUTPUT}")
     endmacro()
     
     fn_add_shader("server" "vs_main" "vs_5_0" "./server/platform/windows/rgb2yuv.hlsl")
@@ -145,10 +146,10 @@ if(WIN32)
     fn_add_shader("server" "ps_uv" "ps_5_0" "./server/platform/windows/rgb2yuv.hlsl")
     fn_add_shader("server" "ps_copy" "ps_5_0" "./server/platform/windows/rgb2yuv.hlsl")
     
-    add_custom_target(fx ALL DEPENDS ${FXC_FILES})
+    add_custom_target(fxc DEPENDS ${FXC_FILES})
 
-    add_dependencies(client fx)
-    add_dependencies(server fx)
+    add_dependencies(client fxc)
+    add_dependencies(server fxc)
 endif()
 
 
