@@ -1,0 +1,13 @@
+#include <common/version.h>
+
+#ifdef DAYLIGHT_HAS_GIT_INFO
+
+const char GIT_COMMIT[] = "@DAYLIGHT_GIT_COMMIT@";
+const long long GIT_DATE = @DAYLIGHT_GIT_DATE@ll;
+
+#else
+
+const char[] GIT_COMMIT = "unknown";
+const long long GIT_DATE = 0ll;
+
+#endif

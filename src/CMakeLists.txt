@@ -51,13 +51,37 @@ set(SERVER_WINDOWS_SRC
     ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/ScaleD3D.cpp
 )
 
+find_package(Git)
+if(Git_FOUND)
+    execute_process(COMMAND "${GIT_EXECUTABLE}" describe --match=NeVeRmAtCh --always --abbrev=40 --dirty
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            OUTPUT_VARIABLE DAYLIGHT_GIT_COMMIT
+            ENCODING AUTO
+            TIMEOUT 10
+            ERROR_QUIET OUTPUT_STRIP_TRAILING_WHITESPACE)
+    execute_process(COMMAND
+            "${GIT_EXECUTABLE}" log -1 --format=%ad --date=unix
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            OUTPUT_VARIABLE DAYLIGHT_GIT_DATE
+            ENCODING AUTO
+            TIMEOUT 10
+            ERROR_QUIET OUTPUT_STRIP_TRAILING_WHITESPACE)
+    configure_file(./common/version.cpp.in ./version.cpp @ONLY)
+    add_library(git-info STATIC ${CMAKE_CURRENT_SOURCE_DIR}/common/version.h ${CMAKE_CURRENT_BINARY_DIR}/version.cpp)
+    target_include_directories(git-info PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_compile_definitions(git-info PRIVATE DAYLIGHT_HAS_GIT_INFO)
+else()
+    message(WARNING "Git executable not found. Version info will be missing.")
+    add_library(git-info STATIC ${CMAKE_CURRENT_SOURCE_DIR}/common/version.h ${CMAKE_CURRENT_SOURCE_DIR}/common/version.cpp.in)
+endif()
+
 add_library(common STATIC ${COMMON_SRC} ${COMMON_WINDOWS_SRC})
 target_include_directories(common PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(common PUBLIC spdlog::spdlog ${FFMPEG_LIBS})
+target_link_libraries(common PUBLIC git-info mbedtls spdlog::spdlog ${FFMPEG_LIBS})
 
 add_executable(client WIN32 ${CLIENT_SRC} ${CLIENT_WINDOWS_SRC})
 target_link_libraries(client PUBLIC
-	common mbedtls
+	common
     Qt6::Widgets Qt6::OpenGLWidgets
 	"dxgi.lib" "d3d11.lib"
 )
@@ -65,7 +89,7 @@ target_compile_definitions(client PUBLIC "-DUNICODE" "-D_UNICODE")
 
 add_executable(server WIN32 ${SERVER_SRC} ${SERVER_WINDOWS_SRC})
 target_link_libraries(server PUBLIC
-	common mbedtls
+	common
 	"dxgi.lib" "d3d11.lib"
 	"mfuuid.lib" "mfplat.lib"
 	"ws2_32.lib"
