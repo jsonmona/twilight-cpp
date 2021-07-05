@@ -36,9 +36,22 @@ static AVPixelFormat dxgi2avpixfmt(DXGI_FORMAT fmt) {
 	}
 }
 
+static AVPixelFormat scale2avpixfmt(ScaleType type) {
+	switch (type) {
+	case ScaleType::AYUV:
+		return AV_PIX_FMT_YUV444P;
+	case ScaleType::NV12:
+		return AV_PIX_FMT_YUV420P;
+	default:
+		error_quit(createNamedLogger("CapturePipelineD3DSoft"),
+			"No matching AVPixelFormat for ScaleType {}", type);
+	}
+}
+
 CapturePipelineD3DSoft::CapturePipelineD3DSoft(DeviceManagerD3D _devs, int w, int h, ScaleType type) :
-	devs(_devs), capture(_devs), scale(w, h, type), encoder(w, h)
+	devs(_devs), capture(_devs), scale(), encoder(w, h)
 {
+	scale.setOutputFormat(w, h, scale2avpixfmt(type));
 	encoder.setFrameRequestCallback([this]() -> CaptureData<TextureSoftware> { return _fetchTexture(); });
 }
 
@@ -67,9 +80,9 @@ CaptureData<TextureSoftware> CapturePipelineD3DSoft::_fetchTexture() {
 		tex->GetDesc(&desc);
 
 		AVPixelFormat fmt = dxgi2avpixfmt(desc.Format);
-		TextureSoftware softTex(desc.Width, desc.Height, fmt);
+		TextureSoftware softTex = TextureSoftware::allocate(desc.Width, desc.Height, fmt);
 
-		scale.hintNextFrame(desc.Width, desc.Height, fmt);
+		scale.setInputFormat(desc.Width, desc.Height, fmt);
 
 		D3D11_MAPPED_SUBRESOURCE mapInfo;
 		devs.context->Map(tex.ptr(), 0, D3D11_MAP_READ, 0, &mapInfo);

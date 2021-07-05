@@ -37,7 +37,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	StreamServer stream;
 
 	stream.start();
-	Sleep(10 * 1000);
+	Sleep(3600 * 1000);
 	stream.stop();
 
 	MFShutdown();

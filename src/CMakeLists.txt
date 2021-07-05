@@ -4,6 +4,16 @@ endif()
 
 set(COMMON_SRC
     ${CMAKE_CURRENT_SOURCE_DIR}/common/log.h
+
+    ${CMAKE_CURRENT_SOURCE_DIR}/common/NetworkInputStream.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/common/NetworkInputStream.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/common/NetworkOutputStream.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/common/NetworkOutputStream.cpp
+
+    ${CMAKE_CURRENT_SOURCE_DIR}/common/platform/software/ScaleSoftware.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/common/platform/software/ScaleSoftware.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/common/platform/software/TextureSoftware.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/common/platform/software/TextureSoftware.cpp
 )
 
 set(COMMON_WINDOWS_SRC
@@ -12,8 +22,13 @@ set(COMMON_WINDOWS_SRC
 )
 
 set(CLIENT_SRC
+    ${CMAKE_CURRENT_SOURCE_DIR}/client/StreamClient.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/client/StreamClient.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/client/StreamViewer.h
     ${CMAKE_CURRENT_SOURCE_DIR}/client/StreamViewer.cpp
+
+    ${CMAKE_CURRENT_SOURCE_DIR}/client/platform/software/DecoderSoftware.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/client/platform/software/DecoderSoftware.cpp
 )
 
 set(CLIENT_WINDOWS_SRC
@@ -29,10 +44,6 @@ set(SERVER_SRC
 
     ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/software/EncoderSoftware.h
     ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/software/EncoderSoftware.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/software/ScaleSoftware.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/software/ScaleSoftware.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/software/TextureSoftware.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/software/TextureSoftware.cpp
 )
 
 set(SERVER_WINDOWS_SRC

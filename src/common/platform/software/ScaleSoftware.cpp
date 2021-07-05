@@ -1,26 +1,6 @@
 #include "ScaleSoftware.h"
 
 
-ScaleSoftware::ScaleSoftware(int w, int h, ScaleType t) :
-	log(createNamedLogger("ScaleSoftware")),
-	outputWidth(w), outputHeight(h),
-	inputFormat(AV_PIX_FMT_NONE), inputWidth(-1), inputHeight(-1),
-	initialized(false), dirty(false), ctx(nullptr)
-{
-	switch (t) {
-	case ScaleType::AYUV:
-		outputFormat = AV_PIX_FMT_YUV444P;
-		break;
-	case ScaleType::NV12:
-		outputFormat = AV_PIX_FMT_YUV420P;
-		break;
-	default:
-		error_quit(log, "Unsupported ScaleType: {}", static_cast<int>(t));
-	}
-
-	outputTex = TextureSoftware(outputWidth, outputHeight, outputFormat);
-}
-
 ScaleSoftware::~ScaleSoftware() {
 	sws_freeContext(ctx);
 }
@@ -29,13 +9,21 @@ void ScaleSoftware::reset() {
 	initialized = false;
 }
 
-void ScaleSoftware::hintNextFrame(int w, int h, AVPixelFormat fmt) {
+void ScaleSoftware::setInputFormat(int w, int h, AVPixelFormat fmt) {
 	if (fmt != inputFormat || w != inputWidth || h != inputHeight) {
 		inputWidth = w;
 		inputHeight = h;
 		inputFormat = fmt;
+		formatChanged = true;
+	}
+}
 
-		_init();
+void ScaleSoftware::setOutputFormat(int w, int h, AVPixelFormat fmt) {
+	if (fmt != outputFormat || w != outputWidth || h != outputHeight) {
+		outputWidth = w;
+		outputHeight = h;
+		outputFormat = fmt;
+		formatChanged = true;
 	}
 }
 
@@ -52,11 +40,13 @@ TextureSoftware ScaleSoftware::popOutput() {
 	if (dirty)
 		_convert();
 
-	return outputTex;
+	return outputTex.clone();
 }
 
 void ScaleSoftware::_init() {
 	sws_freeContext(ctx);
+
+	outputTex = TextureSoftware::allocate(outputWidth, outputHeight, outputFormat);
 
 	ctx = sws_getContext(inputWidth, inputHeight, inputFormat,
 		outputWidth, outputHeight, outputFormat,
@@ -64,7 +54,10 @@ void ScaleSoftware::_init() {
 }
 
 void ScaleSoftware::_convert() {
-	hintNextFrame(inputTex.width, inputTex.height, inputTex.format);
+	setInputFormat(inputTex.width, inputTex.height, inputTex.format);
+
+	if (formatChanged)
+		_init();
 
 	sws_scale(ctx, inputTex.data, inputTex.linesize, 0, inputHeight, outputTex.data, outputTex.linesize);
 }

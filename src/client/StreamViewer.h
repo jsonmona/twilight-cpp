@@ -3,46 +3,45 @@
 
 
 #include "common/log.h"
+#include "client/platform/software/DecoderSoftware.h"
+
+#include <packet.pb.h>
 
 #include <QtOpenGLWidgets/qopenglwidget.h>
 #include <QtGui/qopenglfunctions.h>
-#include <QtCore/qtimer.h>
 
-#include <chrono>
-
-
-struct AVCodec;
-struct AVCodecContext;
 
 class StreamViewer : public QOpenGLWidget, protected QOpenGLFunctions {
 	Q_OBJECT;
+	LoggerPtr log;
+
 	GLuint quadBuffer, quadArray;
 	GLuint tex, cursorTex;
 	GLuint vertexShader, fragShader, program;
 	GLuint posAttrib, rectUniform;
 
-	std::chrono::steady_clock::time_point lastUpdate;
 	bool hasTexture = false;
 	bool cursorVisible = false;
+
+	std::unique_ptr<DecoderSoftware> decoder;
+	std::atomic<uint8_t*> desktopImage = nullptr;
+	std::atomic<uint8_t*> cursorImage = nullptr;
 	int cursorX, cursorY, cursorWidth, cursorHeight;
 	int width, height;
 
-	LoggerPtr log;
-
-	AVCodec* decoder;
-	AVCodecContext* decoderContext;
-
-	QTimer timer;
+	void _onNewFrame(const TextureSoftware& frame);
 
 public slots:
-	void executeUpdate();
+	void executeRepaint();
+
+signals:
+	void requestRepaint();
 
 public:
-	std::vector<uint8_t> data;
-	int dataPos;
-
 	StreamViewer();
 	~StreamViewer() override;
+
+	void onNewPacket(const msg::Packet& pkt, uint8_t* extraData);
 
 	void mouseMoveEvent(QMouseEvent* ev) override;
 

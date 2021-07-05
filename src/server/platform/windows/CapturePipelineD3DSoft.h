@@ -8,7 +8,7 @@
 #include "DeviceManagerD3D.h"
 #include "CaptureD3D.h"
 
-#include "server/platform/software/ScaleSoftware.h"
+#include "common/platform/software/ScaleSoftware.h"
 #include "server/platform/software/EncoderSoftware.h"
 
 class CapturePipelineD3DSoft : public CapturePipeline {

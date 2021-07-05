@@ -2,7 +2,7 @@
 #define SERVER_PLATFORM_SOFTWARE_ENCODER_SOFTWARE_H_
 
 
-#include "TextureSoftware.h"
+#include "common/platform/software/TextureSoftware.h"
 
 #include "common/log.h"
 #include "server/CaptureData.h"

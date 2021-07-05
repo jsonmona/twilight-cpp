@@ -4,56 +4,41 @@
 #include <packet.pb.h>
 #include <algorithm>
 
-
 extern "C" {
 	#include <libavutil/avutil.h>
-	#include <libswscale/swscale.h>
-	#include <libavcodec/avcodec.h>
-	#include <libavformat/avformat.h>
-};
+}
 
 
 StreamViewer::StreamViewer() : QOpenGLWidget() {
 	log = createNamedLogger("decoder");
 	tex = 0;
 
+	decoder = std::make_unique<DecoderSoftware>();
+	decoder->setOnFrameAvailable([this](const TextureSoftware& frame) { _onNewFrame(frame); });
+	decoder->start();
+
 	setMouseTracking(true);
-	timer.setInterval(16);
-	connect(&timer, &QTimer::timeout, this, &StreamViewer::executeUpdate);
-	timer.start();
-
-	decoder = avcodec_find_decoder(AV_CODEC_ID_H264);
-	check_quit(decoder == nullptr, log, "Failed to find H264 decoder");
-
-	decoderContext = avcodec_alloc_context3(decoder);
-	check_quit(decoderContext == nullptr, log, "Failed to create decoder context");
-
-	int ret = avcodec_open2(decoderContext, decoder, nullptr);
-	check_quit(ret < 0, log, "Failed to open decoder context");
+	connect(this, &StreamViewer::requestRepaint, this, &StreamViewer::executeRepaint);
 }
 
 StreamViewer::~StreamViewer() {
-	avcodec_free_context(&decoderContext);
+	makeCurrent();
 
 	glDeleteTextures(1, &tex);
 	glDeleteBuffers(1, &quadBuffer);
-}
 
-void StreamViewer::executeUpdate() {
-	update();
+	doneCurrent();
 }
 
 void StreamViewer::mouseMoveEvent(QMouseEvent* ev) {
 	QOpenGLWidget::mouseMoveEvent(ev);
 }
 
+void StreamViewer::executeRepaint() {
+	repaint();
+}
+
 void StreamViewer::initializeGL() {
-	static const float quad[] = {
-		1, 1,
-		-1, 1,
-		-1, -1,
-		1, -1,
-	};
 	static const char vertexShaderCode[] = R"STR(
 uniform vec4 u_rect;
 attribute vec2 a_pos;
@@ -74,6 +59,12 @@ uniform sampler2D sampler;
 void main() {
 	gl_FragColor = texture2D(sampler, v_texcoord);
 })STR";
+	static const float quad[] = {
+		1, 1,
+		-1, 1,
+		-1, -1,
+		1, -1,
+	};
 
 	initializeOpenGLFunctions();
 
@@ -153,99 +144,35 @@ void StreamViewer::resizeGL(int w, int h) {
 }
 
 void StreamViewer::paintGL() {
-	if (!hasTexture || (std::chrono::steady_clock::now() - lastUpdate).count() >= 16'666'666) {
-		hasTexture = true;
-		lastUpdate = std::chrono::steady_clock::now();
-
-		bool receivedFrame = false;
-		AVFrame* frame = av_frame_alloc();
-
-		while (dataPos < data.size()) {
-			int ret = avcodec_receive_frame(decoderContext, frame);
-			if (ret == AVERROR(EAGAIN)) {
-				int readSize;
-				uint8_t* frameData = nullptr;
-
-				while (frameData == nullptr && dataPos < data.size()) {
-					msg::Packet pck;
-					int32_t* sizePtr = reinterpret_cast<int32_t*>(data.data() + dataPos);
-					dataPos += 4;
-					pck.ParseFromArray(data.data() + dataPos, *sizePtr);
-					dataPos += *sizePtr;
-
-					switch (pck.msg_case()) {
-					case msg::Packet::kCursorShape:
-						cursorWidth = pck.cursor_shape().width();
-						cursorHeight = pck.cursor_shape().height();
-
-						if (cursorWidth * cursorHeight * 4 != pck.extra_data_len())
-							error_quit(log, "Invalid length of extra data (wire format mismatch)");
-
-						glBindTexture(GL_TEXTURE_2D, cursorTex);
-						glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, cursorWidth, cursorHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-							data.data() + dataPos);
-
-						dataPos += cursorWidth * cursorHeight * 4;
-						break;
-					case msg::Packet::kDesktopFrame:
-						cursorVisible = pck.desktop_frame().cursor_visible();
-						cursorX = pck.desktop_frame().cursor_x();
-						cursorY = pck.desktop_frame().cursor_y();
-
-						readSize = pck.extra_data_len();
-						frameData = (uint8_t*) av_malloc(readSize + 64);
-						check_quit(frameData == nullptr, log, "Failed to allocate data size");
-						memcpy(frameData, data.data() + dataPos, readSize);
-						dataPos += readSize;
-						break;
-					default:
-						log->warn("Unexpected message type {}", pck.msg_case());
-					}
-				}
-
-				if (frameData) {
-					AVPacket* packet = av_packet_alloc();
-					packet->data = frameData;
-					packet->size = readSize;
-					//packet->flags |= AV_PKT_FLAG_KEY;
-					packet->pts = packet->dts = 0;
-
-					ret = avcodec_send_packet(decoderContext, packet);
-					av_free(frameData);
-					av_packet_free(&packet);
-				}
-			}
-			else if (ret < 0)
-				error_quit(log, "Unknown error receiving next frame");
-			else {
-				receivedFrame = true;
-				break;
-			}
-		}
-
-		if (receivedFrame) {
-			static SwsContext* ctx = sws_getContext(frame->width, frame->height, static_cast<AVPixelFormat>(frame->format),
-				frame->width, frame->height, AV_PIX_FMT_RGBA, SWS_BILINEAR, nullptr, nullptr, nullptr);
-
-			width = frame->width;
-			height = frame->height;
-			int stride = frame->width * 4;
-			int bufSize = stride * frame->height;
-			uint8_t* plane = reinterpret_cast<uint8_t*>(av_malloc(bufSize));
-
-			int ret = sws_scale(ctx, frame->data, frame->linesize, 0, frame->height, &plane, &stride);
-
-			glBindTexture(GL_TEXTURE_2D, tex);
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, frame->width, frame->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, plane);
-
-			//sws_freeContext(ctx);
-			av_free(plane);
-		}
-		av_frame_free(&frame);
-	}
-
 	glClearColor(0, 0, 0, 0);
 	glClear(GL_COLOR_BUFFER_BIT);
+
+	/* update desktopImage */ {
+		uint8_t* nowImage = desktopImage.exchange(nullptr, std::memory_order_seq_cst);
+
+		if (nowImage != nullptr) {
+			hasTexture = true;
+
+			glBindTexture(GL_TEXTURE_2D, tex);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nowImage);
+
+			free(nowImage);
+		}
+	}
+
+	/* update cursorImage */ {
+		uint8_t* nowImage = cursorImage.exchange(nullptr, std::memory_order_seq_cst);
+
+		if (nowImage != nullptr) {
+			glBindTexture(GL_TEXTURE_2D, cursorTex);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, cursorWidth, cursorHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, nowImage);
+
+			free(nowImage);
+		}
+	}
+
+	if (!hasTexture)
+		return;
 
 	glUseProgram(program);
 	glActiveTexture(GL_TEXTURE0);
@@ -271,4 +198,46 @@ void StreamViewer::paintGL() {
 
 		glDisable(GL_BLEND);
 	}
+}
+
+void StreamViewer::onNewPacket(const msg::Packet& pkt, uint8_t* extraData) {
+	switch (pkt.msg_case()) {
+	case msg::Packet::kDesktopFrame: {
+		cursorVisible = pkt.desktop_frame().cursor_visible();
+		cursorX = pkt.desktop_frame().cursor_x();
+		cursorY = pkt.desktop_frame().cursor_y();
+
+		decoder->pushData(extraData, pkt.extra_data_len());
+		break;
+	}
+	case msg::Packet::kCursorShape: {
+		cursorWidth = pkt.cursor_shape().width();
+		cursorHeight = pkt.cursor_shape().height();
+
+		if (cursorWidth * cursorHeight * 4 != pkt.extra_data_len())
+			error_quit(log, "Invalid length of extra data (wire format mismatch)");
+
+		uint8_t* nowImage = reinterpret_cast<uint8_t*>(malloc(cursorWidth * cursorHeight * 4));
+		check_quit(nowImage == nullptr, log, "Failed to allocate cursor image");
+		memcpy(nowImage, extraData, pkt.extra_data_len());
+		free(cursorImage.exchange(nowImage, std::memory_order_seq_cst));
+		break;
+	}
+	default:
+		log->error("Unknown packet msg_case: {}", pkt.msg_case());
+	}
+
+	requestRepaint();
+}
+
+void StreamViewer::_onNewFrame(const TextureSoftware& frame) {
+	uint8_t* nowImage = reinterpret_cast<uint8_t*>(malloc(1920 * 1080 * 4));
+	check_quit(nowImage == nullptr, log, "Unable to allocate new desktop image");
+
+	this->width = frame.width;
+	this->height = frame.height;
+	for (int i = 0; i < 1080; i++)
+		memcpy(nowImage + (1920 * 4 * i), frame.data[0] + (frame.linesize[0] * i), 1920 * 4);
+
+	free(desktopImage.exchange(nowImage, std::memory_order_seq_cst));
 }
