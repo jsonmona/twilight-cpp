@@ -32,7 +32,7 @@ set(MBEDTLS_ZLIB_SUPPORT OFF CACHE BOOL "mbedtls zlib support" FORCE)
 set(ENABLE_PROGRAMS OFF CACHE BOOL "mbedtls enable programs" FORCE)
 set(MBEDTLS_FATAL_WARNINGS OFF CACHE BOOL "mbedtls treat warning as error" FORCE)
 set(ENABLE_TESTING OFF CACHE BOOL "mbedtls build tests" FORCE)
-add_subdirectory(mbedtls)
+add_subdirectory(mbedtls EXCLUDE_FROM_ALL)
 
 
 # spdlog
