@@ -19,15 +19,15 @@ if(NOT DAYLIGHT_QT6_PATH STREQUAL "")
     list(APPEND CMAKE_PREFIX_PATH "${DAYLIGHT_QT6_PATH}")
 endif()
 
-if(DAYLIGHT_BUILD_GUI)
-    find_package(Qt6 COMPONENTS Widgets OpenGLWidgets REQUIRED)
-endif()
+find_package(Qt6 COMPONENTS Widgets OpenGLWidgets REQUIRED)
 
 if(Qt6_FOUND)
     set(CMAKE_AUTOMOC ON)
     set(CMAKE_AUTORCC ON)
     set(CMAKE_AUTOUIC ON)
 endif()
+
+add_definitions(-DWINVER=0x0603 -D_WIN32_WINNT=0x0603)
 
 add_subdirectory(external)
 add_subdirectory(src)

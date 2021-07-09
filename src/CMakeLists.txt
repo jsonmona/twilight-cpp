@@ -4,11 +4,16 @@ endif()
 
 set(COMMON_SRC
     ${CMAKE_CURRENT_SOURCE_DIR}/common/log.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/common/ByteBuffer.h
 
     ${CMAKE_CURRENT_SOURCE_DIR}/common/NetworkInputStream.h
     ${CMAKE_CURRENT_SOURCE_DIR}/common/NetworkInputStream.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/common/NetworkOutputStream.h
     ${CMAKE_CURRENT_SOURCE_DIR}/common/NetworkOutputStream.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/common/NetworkServer.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/common/NetworkServer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/common/NetworkSocket.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/common/NetworkSocket.cpp
 
     ${CMAKE_CURRENT_SOURCE_DIR}/common/platform/software/ScaleSoftware.h
     ${CMAKE_CURRENT_SOURCE_DIR}/common/platform/software/ScaleSoftware.cpp
@@ -88,7 +93,11 @@ endif()
 
 add_library(common STATIC ${COMMON_SRC} ${COMMON_WINDOWS_SRC})
 target_include_directories(common PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(common PUBLIC git-info mbedtls spdlog::spdlog ${FFMPEG_LIBS})
+target_link_libraries(common PUBLIC
+    git-info
+    asio mbedtls spdlog::spdlog
+    ${FFMPEG_LIBS}
+)
 
 add_executable(client WIN32 ${CLIENT_SRC} ${CLIENT_WINDOWS_SRC})
 target_link_libraries(client PUBLIC
@@ -184,7 +193,6 @@ if(WIN32)
     add_custom_target(fxc DEPENDS ${FXC_FILES})
 
     add_dependencies(client fxc)
-    add_dependencies(server fxc)
 endif()
 
 

@@ -3,30 +3,27 @@
 
 
 #include "common/log.h"
-#include "common/NetworkInputStream.h"
+#include "common/NetworkSocket.h"
 
 #include <packet.pb.h>
 
-#include <mbedtls/net_sockets.h>
-
 #include <atomic>
 #include <mutex>
+#include <memory>
 #include <string>
 #include <thread>
 #include <functional>
 
+
 class StreamClient {
 	LoggerPtr log;
 
-	std::atomic_bool flagRun;
-	std::thread recvThread;
-
-    mbedtls_net_context net;
-    NetworkInputStream input;
+	NetworkSocket conn;
 
 	std::function<void(const msg::Packet&, uint8_t*)> onNextPacket;
 
-	void _recvRun();
+	std::thread recvThread;
+	void _runRecv();
 
 public:
 	StreamClient();
@@ -34,7 +31,7 @@ public:
 
 	void setOnNextPacket(const decltype(onNextPacket)& fn) { onNextPacket = fn; }
 
-	bool connect(const char* addr);
+	void connect(const char* addr);
 	void disconnect();
 };
 

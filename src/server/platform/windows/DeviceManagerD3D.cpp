@@ -39,6 +39,12 @@ DeviceManagerD3D::DeviceManagerD3D() : log(createNamedLogger("DeviceManagerD3D")
 	getMainAdapterWithOutput(dxgiFactory, &adapter, &output);
 	check_quit(adapter.isInvalid(), log, "Failed to find main adapter and output");
 
+	DXGI_ADAPTER_DESC1 adapterDesc;
+	adapter->GetDesc1(&adapterDesc);
+
+	DXGI_OUTPUT_DESC outputDesc;
+	output->GetDesc(&outputDesc);
+
 	UINT flag = D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_VIDEO_SUPPORT;
 #if !defined(NDEBUG) && defined(DAYLIGHT_D3D_DEBUG)
 	flag |= D3D11_CREATE_DEVICE_DEBUG;

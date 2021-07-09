@@ -1,60 +1,31 @@
 #include "StreamServer.h"
 
-#include <mbedtls/net.h>
-
-static const char PORT[] = "6495";
+constexpr uint16_t SERVICE_PORT = 6495;
 
 
 StreamServer::StreamServer() :
 	log(createNamedLogger("StreamServer"))
 {
-	mbedtls_net_init(&serverSock);
-	mbedtls_net_init(&sock);
+	capture = CapturePipeline::createInstance();
+	capture->setOutputCallback([this](CaptureData<std::vector<uint8_t>>&& cap) { _processOutput(std::move(cap)); });
+
+	server.setOnNewConnection([this](std::unique_ptr<NetworkSocket>&& _newSock) {
+		std::unique_ptr<NetworkSocket> newSock = std::move(_newSock);
+		//TODO: Check if already connected
+		conn = std::move(newSock);
+		capture->start();
+	});
 }
 
 StreamServer::~StreamServer() {
-	mbedtls_net_free(&serverSock);
-	mbedtls_net_free(&sock);
 }
 
 void StreamServer::start() {
-	//TODO: Allow IPv6 too, using separate server socket
-	int ret = mbedtls_net_bind(&serverSock, "0.0.0.0", PORT, MBEDTLS_NET_PROTO_TCP);
-	check_quit(ret < 0, log, "Failed to bind server socket");
-
-	flagRun.store(true, std::memory_order_release);
-	listenThread = std::thread([this]() { _runListen(); });
+	server.startListen(SERVICE_PORT);
 }
 
 void StreamServer::stop() {
-	flagRun.store(false, std::memory_order_release);
-	listenThread.join();
-
-	output.reset();
-	mbedtls_net_close(&sock);
-}
-
-void StreamServer::_runListen() {
-	int ret;
-
-	while (flagRun.load(std::memory_order_acquire)) {
-		ret = mbedtls_net_accept(&serverSock, &sock, nullptr, 0, nullptr);
-		check_quit(ret < 0, log, "Failed to accept socket: {}", ret);
-		log->info("Accepted connection");
-		output.init(&sock);
-
-		if (capture == nullptr) {
-			capture = CapturePipeline::createInstance();
-			capture->setOutputCallback([this](CaptureData<std::vector<uint8_t>>&& cap) { _processOutput(std::move(cap)); });
-		}
-		capture->start();
-
-		//FIXME: Wait for connection to close (or drop)
-		while (flagRun.load(std::memory_order_acquire))
-			mbedtls_net_usleep(10000);
-	}
-
-	capture->stop();
+	server.stopListen();
 }
 
 void StreamServer::_processOutput(CaptureData<std::vector<uint8_t>>&& cap) {
@@ -89,7 +60,7 @@ void StreamServer::_processOutput(CaptureData<std::vector<uint8_t>>&& cap) {
 void StreamServer::_writeOutput(const msg::Packet& pck, const uint8_t* extraData) {
 	uint32_t extraDataLen = pck.extra_data_len();
 
-	auto coded = output.coded();
+	auto coded = conn->output().coded();
 
 	check_quit(pck.ByteSizeLong() > UINT32_MAX, log, "Packet too large");
 

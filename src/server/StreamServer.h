@@ -5,23 +5,19 @@
 #include "CapturePipeline.h"
 
 #include "common/log.h"
-#include "common/NetworkOutputStream.h"
-
-#include <mbedtls/net.h>
+#include "common/NetworkServer.h"
 
 #include <cstdio>
 #include <memory>
 #include <thread>
 #include <atomic>
 
+
 class StreamServer {
 	LoggerPtr log;
 
-	mbedtls_net_context serverSock, sock;
-	NetworkOutputStream output;
-
-	std::atomic_bool flagRun;
-	std::thread listenThread;
+	NetworkServer server;
+	std::unique_ptr<NetworkSocket> conn;
 	
 	std::unique_ptr<CapturePipeline> capture;
 	std::shared_ptr<CursorData> cursorData;

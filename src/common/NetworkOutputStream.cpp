@@ -1,58 +1,42 @@
 #include "NetworkOutputStream.h"
 
-#include <mbedtls/net.h>
+#include "common/NetworkSocket.h"
+
 
 using google::protobuf::io::ZeroCopyOutputStream;
 using google::protobuf::io::CodedOutputStream;
 
 
-NetworkOutputStream::NetworkOutputStream() :
+NetworkOutputStream::NetworkOutputStream(NetworkSocket* _socket) :
 	log(createNamedLogger("NetworkOutputStream")),
-	net(nullptr),
-	buf(nullptr), totalBytes(0), dirtyBytes(0)
+	socket(_socket), buf(BUF_SIZE), totalBytes(0), dirtyBytes(0)
 {
-	buf = reinterpret_cast<uint8_t*>(malloc(BUF_SIZE));
 }
 
-NetworkOutputStream::NetworkOutputStream(NetworkOutputStream&& move) {
-	log = move.log;
-	net = move.net;
-
-	buf = move.buf;
-	totalBytes = move.totalBytes;
-	dirtyBytes = move.dirtyBytes;
-
-	move.net = nullptr;
-	move.buf = nullptr;
+NetworkOutputStream::NetworkOutputStream(NetworkOutputStream&& move) :
+	log(move.log),
+	socket(nullptr), buf(BUF_SIZE), totalBytes(0), dirtyBytes(0)
+{
+	std::swap(socket, move.socket);
+	std::swap(buf, move.buf);
+	std::swap(totalBytes, move.totalBytes);
+	std::swap(dirtyBytes, move.dirtyBytes);
 }
 
 NetworkOutputStream::~NetworkOutputStream() {
-	free(buf);
-}
-
-void NetworkOutputStream::init(mbedtls_net_context* _net) {
-	check_quit(net != nullptr, log, "Reinitialization without reset");
-
-	net = _net;
-}
-
-void NetworkOutputStream::reset() {
-	net = nullptr;
 }
 
 bool NetworkOutputStream::flush() {
-	if (dirtyBytes <= 0)
+	if (dirtyBytes == 0)
 		return true;
 
+	asio::error_code err;
 	int offset = 0;
 	while (offset < dirtyBytes) {
-		int ret = mbedtls_net_send(net, buf + offset, dirtyBytes - offset);
-		if (ret < 0) {
-			log->warn("Unable to write to socket");
+		auto buffer = asio::buffer(buf.data_char() + offset, dirtyBytes - offset);
+		int64_t ret = socket->sock.write_some(buffer, err);
+		if (err || ret < 0)
 			return false;
-		}
-		if (ret == 0)
-			mbedtls_net_usleep(1);
 		offset += ret;
 	}
 
@@ -65,13 +49,15 @@ std::unique_ptr<CodedOutputStream> NetworkOutputStream::coded() {
 }
 
 bool NetworkOutputStream::Next(void** data, int* size) {
+	//TODO: Test if invalid
+
 	//TODO: Somehow improve this (maybe using thread?)
 	if (BUF_SIZE - dirtyBytes <= 64) {
 		if (!flush())
 			return false;
 	}
 
-	*data = buf + dirtyBytes;
+	*data = buf.data() + dirtyBytes;
 	*size = BUF_SIZE - dirtyBytes;
 
 	dirtyBytes = BUF_SIZE;
@@ -90,9 +76,20 @@ int64_t NetworkOutputStream::ByteCount() const {
 }
 
 bool NetworkOutputStream::WriteAliasedRaw(const void* data, int size) {
-	return false;
+	//TODO: Test if invalid
+
+	const char* ptr = reinterpret_cast<const char*>(data);
+	int offset = 0;
+	while (offset < size) {
+		auto buffer = asio::buffer(ptr + offset, size - offset);
+		int64_t ret = socket->sock.send(buffer);
+		if (ret < 0)
+			return false;
+		offset += ret;
+	}
+	return true;
 }
 
 bool NetworkOutputStream::AllowsAliasing() const {
-	return false;
+	return true;
 }

@@ -1,63 +1,73 @@
 #include "NetworkInputStream.h"
 
-#include <mbedtls/net.h>
+#include "common/NetworkSocket.h"
 
 using google::protobuf::io::ZeroCopyInputStream;
 using google::protobuf::io::CodedInputStream;
 
 
-NetworkInputStream::NetworkInputStream() :
-    log(createNamedLogger("NetworkInputStream")), net(nullptr), buf(nullptr),
-    totalBytes(0), readSize(0), offset(0)
+NetworkInputStream::NetworkInputStream(NetworkSocket* _socket) :
+    log(createNamedLogger("NetworkInputStream")), socket(_socket),
+    totalBytes(0), acquiredSize(0)
 {
-    buf = reinterpret_cast<uint8_t*>(malloc(BUF_SIZE));
-    check_quit(buf == nullptr, log, "Failed to allocate buffer");
 }
 
 NetworkInputStream::~NetworkInputStream() {
-    free(buf);
 }
 
 bool NetworkInputStream::Next(const void** data, int* size) {
-    while (readSize <= offset) {
-        offset -= readSize;
-        readSize = mbedtls_net_recv(net, buf, BUF_SIZE);
-        if (readSize < 0) {
-            log->warn("Error while recv: {}", readSize);
-            return false;
+    //TODO: Test if invalid
+
+    ByteBuffer* now = nullptr;
+
+    /* lock_guard */ {
+        std::lock_guard<std::mutex> lock(bufferLock);
+        if (!buf.empty()) {
+            now = &buf.front();
+            if (now->size() <= acquiredSize) {
+                acquiredSize = 0;
+                buf.pop_front();
+
+                if (buf.empty())
+                    now = nullptr;
+                else
+                    now = &buf.front();
+            }
         }
-        if (readSize == 0)
-            mbedtls_net_usleep(1);
     }
-    *data = buf + offset;
-    *size = readSize - offset;
-    offset = readSize;
-    totalBytes += readSize;
+
+    if (now != nullptr) {
+        *data = now->data() + acquiredSize;
+        *size = now->size() - acquiredSize;
+        acquiredSize = now->size();
+    }
+    else {
+        *data = nullptr;
+        *size = 0;
+    }
     return true;
 }
 
 void NetworkInputStream::BackUp(int count) {
-    offset -= count;
+    acquiredSize -= count;
     totalBytes -= count;
 }
 
 bool NetworkInputStream::Skip(int count) {
-    offset += count;
-    totalBytes += count;
-    return true;
+    log->error("Skip is not implemented!");
+    return false;
 }
 
 int64_t NetworkInputStream::ByteCount() const {
     return totalBytes;
 }
 
-void NetworkInputStream::init(mbedtls_net_context* _net) {
-    check_quit(net != nullptr && net != _net, log, "Initialized again without being reset");
-    net = _net;
-}
-
-void NetworkInputStream::reset() {
-    net = nullptr;
+void NetworkInputStream::pushData(const uint8_t* data, size_t len) {
+    ByteBuffer now(len);
+    memcpy(now.data(), data, len);
+    
+    std::lock_guard lock(bufferLock);
+    buf.emplace_back(std::move(now));
 }
 
 std::unique_ptr<CodedInputStream> NetworkInputStream::coded() {

@@ -87,7 +87,7 @@ void CaptureD3D::begin() {
 
 	DXGI_FORMAT supportedFormats[] = { DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM };
 	hr = devs.output->DuplicateOutput1(devs.device.ptr(), 0, 2, supportedFormats, outputDuplication.data());
-	check_quit(FAILED(hr), log, "Failed to duplicate output");
+	check_quit(FAILED(hr), log, "Failed to duplicate output ({:#x})", hr);
 }
 
 void CaptureD3D::end() {
