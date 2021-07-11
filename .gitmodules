@@ -7,3 +7,6 @@
 [submodule "external/mbedtls"]
 	path = external/mbedtls
 	url = https://github.com/ARMmbed/mbedtls
+[submodule "external/asio"]
+	path = external/asio
+	url = https://github.com/chriskohlhoff/asio
