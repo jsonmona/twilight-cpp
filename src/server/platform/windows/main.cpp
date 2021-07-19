@@ -13,6 +13,28 @@
 #include <cstdio>
 #include <chrono>
 
+typedef BOOL (WINAPI *FnSetProcessDpiAwarenessContext)(HANDLE);
+static const HANDLE dpiAwarenessContextPerMonitorAwareV2 = reinterpret_cast<HANDLE>(0xfffffffffffffffc);
+
+
+static bool setDpiAwareness() {
+	bool success = false;
+
+	HMODULE user32 = LoadLibrary(L"user32.dll");
+	if (user32 != nullptr) {
+		auto fn = (FnSetProcessDpiAwarenessContext)GetProcAddress(user32, "SetProcessDpiAwarenessContext");
+		if (fn != nullptr)
+			success = fn(dpiAwarenessContextPerMonitorAwareV2);
+		FreeLibrary(user32);
+		user32 = nullptr;
+	}
+
+	if (!success)
+		success = SetProcessDPIAware();
+
+	return success;
+}
+
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
 	GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -24,8 +46,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 	auto log = createNamedLogger("main");
 
-	//TODO: Use manifest
-	if (!SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2))
+	if (!setDpiAwareness())
 		log->warn("Unable to set dpi awareness");
 
 	hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
