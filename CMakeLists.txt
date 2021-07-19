@@ -27,7 +27,7 @@ if(Qt6_FOUND)
     set(CMAKE_AUTOUIC ON)
 endif()
 
-add_definitions(-DWINVER=0x0603 -D_WIN32_WINNT=0x0603)
+add_definitions(-DWINVER=0x0603 -D_WIN32_WINNT=0x0603 /Zc:__cplusplus)
 
 add_subdirectory(external)
 add_subdirectory(src)
