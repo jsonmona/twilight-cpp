@@ -22,6 +22,7 @@ DecoderSoftware::DecoderSoftware() :
 }
 
 DecoderSoftware::~DecoderSoftware() {
+	check_quit(flagRun, log, "Being destructed without stopping");
 	avcodec_free_context(&codecCtx);
 }
 
