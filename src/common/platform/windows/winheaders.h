@@ -1,5 +1,5 @@
-#ifndef STDAFX_H_
-#define STDAFX_H_
+#ifndef COMMON_PLATFORM_WINDOWS_WINHEADERS_H_
+#define COMMON_PLATFORM_WINDOWS_WINHEADERS_H_
 
 
 #define WIN32_LEAN_AND_MEAN
@@ -20,6 +20,7 @@
 #include <mferror.h>
 #include <icodecapi.h>
 #include <codecapi.h>
+#include <propvarutil.h>
 
 
 #endif

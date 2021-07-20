@@ -107,6 +107,40 @@ void EncoderD3D::_init() {
 	encoder = getVideoEncoder(devs.mfDeviceManager);
 	check_quit(encoder.isInvalid(), log, "Failed to create encoder");
 
+	VARIANT value;
+	ComWrapper<ICodecAPI> codec = encoder.castTo<ICodecAPI>();
+
+	//TODO: Lines with check_quit commented out means my test machine did not accept those properties.
+	//      Check what E_INVALIDARG means, and if we could remove those lines
+
+	InitVariantFromUInt32((1920u << 16) | 1080u, &value);
+	hr = codec->SetValue(&CODECAPI_AVEncVideoDisplayDimension, &value);
+	//check_quit(FAILED(hr), log, "Failed to set video dimension");
+
+	InitVariantFromUInt32(eAVEncVideoSourceScan_Progressive, &value);
+	hr = codec->SetValue(&CODECAPI_AVEncVideoForceSourceScanType, &value);
+	//check_quit(FAILED(hr), log, "Failed to set video to progressive scan");
+
+	InitVariantFromUInt32(eAVEncCommonRateControlMode_LowDelayVBR, &value);
+	hr = codec->SetValue(&CODECAPI_AVEncCommonRateControlMode, &value);
+	check_quit(FAILED(hr), log, "Failed to set low delay vbr mode");
+
+	InitVariantFromUInt32(8 * 1000 * 1000, &value);
+	hr = codec->SetValue(&CODECAPI_AVEncCommonMeanBitRate, &value);
+	check_quit(FAILED(hr), log, "Failed to set bitrate to 8Mbps");
+
+	InitVariantFromBoolean(true, &value);
+	hr = codec->SetValue(&CODECAPI_AVEncCommonRealTime, &value);
+	//check_quit(FAILED(hr), log, "Failed to enable real time mode");
+
+	InitVariantFromBoolean(true, &value);
+	hr = codec->SetValue(&CODECAPI_AVEncCommonLowLatency, &value);
+	//check_quit(FAILED(hr), log, "Failed to enable low latency mode");
+
+	InitVariantFromUInt32(eAVEncVideoOutputFrameRateConversion_Disable, &value);
+	hr = codec->SetValue(&CODECAPI_AVEncVideoOutputFrameRateConversion, &value);
+	//check_quit(FAILED(hr), log, "Failed to disable frame rate conversion");
+
 	DWORD inputStreamCnt, outputStreamCnt;
 	hr = encoder->GetStreamCount(&inputStreamCnt, &outputStreamCnt);
 	check_quit(FAILED(hr), log, "Failed to get stream count");
@@ -131,13 +165,13 @@ void EncoderD3D::_init() {
 
 	hr = encoder->GetOutputAvailableType(outputStreamId, 0, mediaType.data());
 	if (SUCCEEDED(hr)) {
-		mediaType->SetUINT32(MF_MT_AVG_BITRATE, 15 * 1000 * 1000);  // 15Mbps
-		mediaType->SetUINT32(CODECAPI_AVEncCommonRateControlMode, eAVEncCommonRateControlMode_CBR);
-		MFSetAttributeRatio(mediaType.ptr(), MF_MT_FRAME_RATE, 60000, 1001);  // TODO: Assuming 60fps
-		MFSetAttributeSize(mediaType.ptr(), MF_MT_FRAME_SIZE, width, height);
-		mediaType->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlaceMode::MFVideoInterlace_Progressive);
-		mediaType->SetUINT32(MF_MT_MPEG2_PROFILE, eAVEncH264VProfile::eAVEncH264VProfile_Base);
-		mediaType->SetUINT32(MF_LOW_LATENCY, 1);
+		//hr = mediaType->SetUINT32(MF_MT_AVG_BITRATE, 15 * 1000 * 1000);  // 15Mbps
+		//hr = mediaType->SetUINT32(CODECAPI_AVEncCommonRateControlMode, eAVEncCommonRateControlMode_CBR);
+		hr = MFSetAttributeRatio(mediaType.ptr(), MF_MT_FRAME_RATE, 60000, 1001);  // FIXME: Assuming 60fps
+		hr = MFSetAttributeSize(mediaType.ptr(), MF_MT_FRAME_SIZE, width, height);
+		hr = mediaType->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlaceMode::MFVideoInterlace_Progressive);
+		hr = mediaType->SetUINT32(MF_MT_MPEG2_PROFILE, eAVEncH264VProfile::eAVEncH264VProfile_Base);
+		hr = mediaType->SetUINT32(MF_LOW_LATENCY, 1);
 		//TODO: Is there any way to find out if encoder DOES support low latency mode?
 		//TODO: Test if using main + low latency gives nicer output
 		hr = encoder->SetOutputType(outputStreamId, mediaType.ptr(), 0);
