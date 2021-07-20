@@ -99,14 +99,6 @@ target_link_libraries(common PUBLIC
     ${FFMPEG_LIBS}
 )
 
-add_executable(client WIN32 ${CLIENT_SRC} ${CLIENT_WINDOWS_SRC})
-target_link_libraries(client PUBLIC
-	common
-    Qt6::Widgets Qt6::OpenGLWidgets
-	"dxgi.lib" "d3d11.lib"
-)
-target_compile_definitions(client PUBLIC "-DUNICODE" "-D_UNICODE")
-
 add_executable(server WIN32 ${SERVER_SRC} ${SERVER_WINDOWS_SRC})
 target_link_libraries(server PUBLIC
 	common
@@ -114,20 +106,25 @@ target_link_libraries(server PUBLIC
 	"mfuuid.lib" "mfplat.lib"
 	"ws2_32.lib"
 )
-target_compile_definitions(server PUBLIC "-DUNICODE" "-D_UNICODE")
-
-
-# Separate binaries for better packaging 
 set_target_properties(server
     PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/server"
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/server"
 )
-set_target_properties(client
-    PROPERTIES
-    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/client"
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/client"
-)
+
+if(DAYLIGHT_BUILD_GUI)
+    add_executable(client WIN32 ${CLIENT_SRC} ${CLIENT_WINDOWS_SRC})
+    target_link_libraries(client PUBLIC
+	    common
+        Qt6::Widgets Qt6::OpenGLWidgets
+	    "dxgi.lib" "d3d11.lib"
+    )
+    set_target_properties(client
+        PROPERTIES
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/client"
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/client"
+    )
+endif()
 
 
 # Compile protobuf definitions
@@ -156,10 +153,12 @@ add_custom_command(TARGET server POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:libprotobuf-lite>" "${CMAKE_BINARY_DIR}/bin/server"
 	VERBATIM
 )
-add_custom_command(TARGET client POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:libprotobuf-lite>" "${CMAKE_BINARY_DIR}/bin/client"
-	VERBATIM
-)
+if(DAYLIGHT_BUILD_GUI)
+    add_custom_command(TARGET client POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:libprotobuf-lite>" "${CMAKE_BINARY_DIR}/bin/client"
+	    VERBATIM
+    )
+endif()
 
 
 # Compile HLSL shader
@@ -192,19 +191,25 @@ if(WIN32)
     
     add_custom_target(fxc DEPENDS ${FXC_FILES})
 
-    add_dependencies(client fxc)
+    add_dependencies(server fxc)
+
+    if(DAYLIGHT_BUILD_GUI)
+        add_dependencies(client fxc)
+    endif()
 endif()
 
 
 # Copy Qt libraries
-if(WIN32)
+if(WIN32 AND DAYLIGHT_BUILD_GUI)
     find_program(WINDEPLOYQT windeployqt DOC "Qt windows deployment tool")
 
-    macro(FN_DEPLOY_QT EXE)
-        add_custom_command(TARGET ${EXE} POST_BUILD
-                       COMMAND ${WINDEPLOYQT} --verbose 0 ${EXE}.exe
-                       WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin/${EXE})
-    endmacro()
+    if(WINDEPLOYQT)
+        macro(FN_DEPLOY_QT EXE)
+            add_custom_command(TARGET ${EXE} POST_BUILD
+                           COMMAND ${WINDEPLOYQT} --verbose 0 ${EXE}.exe
+                           WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin/${EXE})
+        endmacro()
 
-    fn_deploy_qt(client)
+        fn_deploy_qt(client)
+    endif()
 endif()
