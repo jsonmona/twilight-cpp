@@ -3,68 +3,68 @@ if(DAYLIGHT_D3D_DEBUG)
 endif()
 
 set(COMMON_SRC
-    ${CMAKE_CURRENT_SOURCE_DIR}/common/log.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/common/ByteBuffer.h
+    ./common/log.h
+    ./common/ByteBuffer.h
 
-    ${CMAKE_CURRENT_SOURCE_DIR}/common/NetworkInputStream.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/common/NetworkInputStream.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/common/NetworkOutputStream.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/common/NetworkOutputStream.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/common/NetworkServer.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/common/NetworkServer.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/common/NetworkSocket.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/common/NetworkSocket.cpp
+    ./common/NetworkInputStream.h
+    ./common/NetworkInputStream.cpp
+    ./common/NetworkOutputStream.h
+    ./common/NetworkOutputStream.cpp
+    ./common/NetworkServer.h
+    ./common/NetworkServer.cpp
+    ./common/NetworkSocket.h
+    ./common/NetworkSocket.cpp
 
-    ${CMAKE_CURRENT_SOURCE_DIR}/common/platform/software/ScaleSoftware.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/common/platform/software/ScaleSoftware.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/common/platform/software/TextureSoftware.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/common/platform/software/TextureSoftware.cpp
+    ./common/platform/software/ScaleSoftware.h
+    ./common/platform/software/ScaleSoftware.cpp
+    ./common/platform/software/TextureSoftware.h
+    ./common/platform/software/TextureSoftware.cpp
 )
 
 set(COMMON_WINDOWS_SRC
-    ${CMAKE_CURRENT_SOURCE_DIR}/common/platform/windows/winheaders.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/common/platform/windows/ComWrapper.h
+    ./common/platform/windows/winheaders.h
+    ./common/platform/windows/ComWrapper.h
 )
 
 set(CLIENT_SRC
-    ${CMAKE_CURRENT_SOURCE_DIR}/client/StreamClient.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/client/StreamClient.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/client/StreamViewer.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/client/StreamViewer.cpp
+    ./client/StreamClient.h
+    ./client/StreamClient.cpp
+    ./client/StreamViewer.h
+    ./client/StreamViewer.cpp
 
-    ${CMAKE_CURRENT_SOURCE_DIR}/client/platform/software/DecoderSoftware.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/client/platform/software/DecoderSoftware.cpp
+    ./client/platform/software/DecoderSoftware.h
+    ./client/platform/software/DecoderSoftware.cpp
 )
 
 set(CLIENT_WINDOWS_SRC
-    ${CMAKE_CURRENT_SOURCE_DIR}/client/platform/windows/main.cpp
+    ./client/platform/windows/main.cpp
 )
 
 set(SERVER_SRC
-    ${CMAKE_CURRENT_SOURCE_DIR}/server/CaptureData.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/server/CapturePipeline.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/server/CapturePipeline.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/server/StreamServer.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/server/StreamServer.cpp
+    ./server/CaptureData.h
+    ./server/CapturePipeline.h
+    ./server/CapturePipeline.cpp
+    ./server/StreamServer.h
+    ./server/StreamServer.cpp
 
-    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/software/EncoderSoftware.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/software/EncoderSoftware.cpp
+    ./server/platform/software/EncoderSoftware.h
+    ./server/platform/software/EncoderSoftware.cpp
 )
 
 set(SERVER_WINDOWS_SRC
-    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/main.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/CaptureD3D.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/CaptureD3D.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/CapturePipelineD3D.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/CapturePipelineD3D.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/CapturePipelineD3DSoft.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/CapturePipelineD3DSoft.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/DeviceManagerD3D.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/DeviceManagerD3D.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/EncoderD3D.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/EncoderD3D.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/ScaleD3D.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/server/platform/windows/ScaleD3D.cpp
+    ./server/platform/windows/main.cpp
+    ./server/platform/windows/CaptureD3D.h
+    ./server/platform/windows/CaptureD3D.cpp
+    ./server/platform/windows/CapturePipelineD3D.h
+    ./server/platform/windows/CapturePipelineD3D.cpp
+    ./server/platform/windows/CapturePipelineD3DSoft.h
+    ./server/platform/windows/CapturePipelineD3DSoft.cpp
+    ./server/platform/windows/DeviceManagerD3D.h
+    ./server/platform/windows/DeviceManagerD3D.cpp
+    ./server/platform/windows/EncoderD3D.h
+    ./server/platform/windows/EncoderD3D.cpp
+    ./server/platform/windows/ScaleD3D.h
+    ./server/platform/windows/ScaleD3D.cpp
 )
 
 find_package(Git)
@@ -83,16 +83,17 @@ if(Git_FOUND)
             TIMEOUT 10
             ERROR_QUIET OUTPUT_STRIP_TRAILING_WHITESPACE)
     configure_file(./common/version.cpp.in ./version.cpp @ONLY)
-    add_library(git-info STATIC ${CMAKE_CURRENT_SOURCE_DIR}/common/version.h ${CMAKE_CURRENT_BINARY_DIR}/version.cpp)
-    target_include_directories(git-info PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    add_library(git-info STATIC ./common/version.h "${CMAKE_CURRENT_BINARY_DIR}/version.cpp")
+    target_include_directories(git-info PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
     target_compile_definitions(git-info PRIVATE DAYLIGHT_HAS_GIT_INFO)
 else()
     message(WARNING "Git executable not found. Version info will be missing.")
-    add_library(git-info STATIC ${CMAKE_CURRENT_SOURCE_DIR}/common/version.h ${CMAKE_CURRENT_SOURCE_DIR}/common/version.cpp.in)
+    configure_file(./common/version.cpp.in ./version.cpp COPYONLY)
+    add_library(git-info STATIC ./common/version.h "${CMAKE_CURRENT_BINARY_DIR}/version.cpp")
 endif()
 
 add_library(common STATIC ${COMMON_SRC} ${COMMON_WINDOWS_SRC})
-target_include_directories(common PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(common PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(common PUBLIC
     git-info
     asio mbedtls spdlog::spdlog
@@ -128,7 +129,7 @@ endif()
 
 
 # Compile protobuf definitions
-file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/pb)
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/pb")
 set(PB_GENERATED_FILES)
 macro(FN_GEN_PB FILE)
     add_custom_command(
@@ -206,8 +207,8 @@ if(WIN32 AND DAYLIGHT_BUILD_GUI)
     if(WINDEPLOYQT)
         macro(FN_DEPLOY_QT EXE)
             add_custom_command(TARGET ${EXE} POST_BUILD
-                           COMMAND ${WINDEPLOYQT} --verbose 0 ${EXE}.exe
-                           WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin/${EXE})
+                           COMMAND "${WINDEPLOYQT}" --verbose 0 ${EXE}.exe
+                           WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/bin/${EXE}")
         endmacro()
 
         fn_deploy_qt(client)
