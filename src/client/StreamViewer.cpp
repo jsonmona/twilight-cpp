@@ -10,7 +10,7 @@ extern "C" {
 
 
 StreamViewer::StreamViewer() : QOpenGLWidget() {
-	log = createNamedLogger("decoder");
+	log = createNamedLogger("StreamViewer");
 	tex = 0;
 
 	decoder = std::make_unique<DecoderSoftware>();
