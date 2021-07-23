@@ -116,7 +116,7 @@ set_target_properties(server
 if(DAYLIGHT_BUILD_GUI)
     add_executable(client WIN32 ${CLIENT_SRC} ${CLIENT_WINDOWS_SRC})
     target_link_libraries(client PUBLIC
-	    common
+	    common imgui
         Qt6::Widgets Qt6::OpenGLWidgets
 	    "dxgi.lib" "d3d11.lib"
     )

@@ -40,6 +40,14 @@ else()
 endif()
 
 
+# ImGui
+
+file(GLOB IMGUI_SOURCES "./imgui/*.h" "./imgui/*.cpp")
+set(IMGUI_BACKENDS "./imgui/backends/imgui_impl_dx11.h" "./imgui/backends/imgui_impl_dx11.cpp")
+add_library(imgui STATIC ${IMGUI_SOURCES} ${IMGUI_BACKENDS})
+target_include_directories(imgui PUBLIC ./imgui)
+
+
 # mbed TLS
 
 set(MBEDTLS_ZLIB_SUPPORT OFF CACHE BOOL "mbedtls zlib support" FORCE)
