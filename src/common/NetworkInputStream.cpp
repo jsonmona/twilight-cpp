@@ -16,7 +16,8 @@ NetworkInputStream::~NetworkInputStream() {
 }
 
 bool NetworkInputStream::Next(const void** data, int* size) {
-    //TODO: Test if invalid
+    if (!socket->isConnected())
+        return false;
 
     ByteBuffer* now = nullptr;
 

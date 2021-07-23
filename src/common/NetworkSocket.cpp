@@ -5,17 +5,21 @@
 
 NetworkSocket::NetworkSocket() :
 	log(createNamedLogger("NetworkSocket")),
-	nin(this), nout(this),
+	nin(this), nout(this), connected(false),
 	sock(ioCtx)
 {}
 
 NetworkSocket::NetworkSocket(asio::ip::tcp::socket&& _sock) :
 	log(createNamedLogger("NetworkSocket")),
-	nin(this), nout(this),
+	nin(this), nout(this), connected(true),
 	sock(std::move(_sock))
-{}
+{
+	reportConnected();
+}
 
 NetworkSocket::~NetworkSocket() {
+	check_quit(isConnected(), log, "Being destroyed while connected");
+	recvThread.join();
 }
 
 bool NetworkSocket::connect(const char* addr, uint16_t port) {
@@ -36,22 +40,42 @@ bool NetworkSocket::connect(const char* addr, uint16_t port) {
 	if (err)
 		return false;
 
-	log->info("Socket connected to {} ({})", addr, endpoint.address().to_string());
+	reportConnected();
+
+	return true;
+}
+
+void NetworkSocket::reportConnected() {
+	asio::error_code err;
+
+	asio::ip::tcp::endpoint endpoint = sock.remote_endpoint(err);
+	check_quit(!!err, log, "Failed to query remote endpoint");
+
+	log->info("Socket connected to {}:{}", endpoint.address().to_string(), endpoint.port());
+	connected.store(true, std::memory_order_release);
+
 	recvThread = std::thread([this]() {
 		ByteBuffer buffer(4096);
 		asio::error_code err;
 		auto buf = asio::buffer(buffer.data(), buffer.size());
 
-		while (sock.is_open()) {
+		while (isConnected()) {
 			size_t len = sock.read_some(buf, err);
-			if (err)
+			if (err) {
+				reportDisconnected(err);
 				break;
-			if(len > 0)
+			}
+			if (len > 0)
 				nin.pushData(buffer.data(), len);
 		}
-
-		log->info("Socket disconnected due to error");
+		onDisconnected();
 	});
+}
 
-	return true;
+void NetworkSocket::reportDisconnected(const asio::error_code& err) {
+	bool prev = connected.exchange(false, std::memory_order_acq_rel);
+
+	if (prev) {
+		log->info("Socket disconnected: {}", err.message());
+	}
 }

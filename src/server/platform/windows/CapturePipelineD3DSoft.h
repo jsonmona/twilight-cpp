@@ -11,12 +11,13 @@
 #include "common/platform/software/ScaleSoftware.h"
 #include "server/platform/software/EncoderSoftware.h"
 
+
 class CapturePipelineD3DSoft : public CapturePipeline {
 	DeviceManagerD3D devs;
 	CaptureD3D capture;
 	ScaleSoftware scale;
 	EncoderSoftware encoder;
-
+	
 	CaptureData<TextureSoftware> _fetchTexture();
 
 public:

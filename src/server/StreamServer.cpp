@@ -11,8 +11,16 @@ StreamServer::StreamServer() :
 
 	server.setOnNewConnection([this](std::unique_ptr<NetworkSocket>&& _newSock) {
 		std::unique_ptr<NetworkSocket> newSock = std::move(_newSock);
-		//TODO: Check if already connected
+
+		if (conn != nullptr && conn->isConnected()) {
+			log->warn("Dropping new connection because current client is already connected");
+			return;
+		}
+
 		conn = std::move(newSock);
+		conn->setOnDisconnected([this]() {
+			capture->stop();
+		});
 		capture->start();
 	});
 }

@@ -18,12 +18,18 @@ class NetworkSocket {
 
 	LoggerPtr log;
 
+	std::atomic<bool> connected;
 	NetworkInputStream nin;
 	NetworkOutputStream nout;
 
 	std::thread recvThread;
 	asio::io_context ioCtx;
 	asio::ip::tcp::socket sock;
+
+	std::function<void()> onDisconnected;
+
+	void reportConnected();
+	void reportDisconnected(const asio::error_code& err);
 
 public:
 	NetworkSocket();
@@ -34,9 +40,13 @@ public:
 	~NetworkSocket();
 
 	bool connect(const char* addr, uint16_t port);
+	bool isConnected() { return connected.load(std::memory_order_acquire); }
 
 	NetworkInputStream& input() { return nin; }
 	NetworkOutputStream& output() { return nout; }
+
+	template<class Fn>
+	void setOnDisconnected(Fn fn) { onDisconnected = fn; }
 };
 
 

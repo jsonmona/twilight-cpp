@@ -27,6 +27,8 @@ NetworkOutputStream::~NetworkOutputStream() {
 }
 
 bool NetworkOutputStream::flush() {
+	if (!socket->isConnected())
+		return false;
 	if (dirtyBytes == 0)
 		return true;
 
@@ -35,8 +37,10 @@ bool NetworkOutputStream::flush() {
 	while (offset < dirtyBytes) {
 		auto buffer = asio::buffer(buf.data_char() + offset, dirtyBytes - offset);
 		int64_t ret = socket->sock.write_some(buffer, err);
-		if (err || ret < 0)
+		if (err || ret < 0) {
+			socket->reportDisconnected(err);
 			return false;
+		}
 		offset += ret;
 	}
 
@@ -49,9 +53,7 @@ std::unique_ptr<CodedOutputStream> NetworkOutputStream::coded() {
 }
 
 bool NetworkOutputStream::Next(void** data, int* size) {
-	//TODO: Test if invalid
-
-	//TODO: Somehow improve this (maybe using thread?)
+	//TODO: Could this be improved somehow?
 	if (BUF_SIZE - dirtyBytes <= 64) {
 		if (!flush())
 			return false;
@@ -69,6 +71,7 @@ bool NetworkOutputStream::Next(void** data, int* size) {
 void NetworkOutputStream::BackUp(int count) {
 	dirtyBytes -= count;
 	totalBytes -= count;
+	//TODO: Should we flush here?
 }
 
 int64_t NetworkOutputStream::ByteCount() const {
@@ -76,15 +79,19 @@ int64_t NetworkOutputStream::ByteCount() const {
 }
 
 bool NetworkOutputStream::WriteAliasedRaw(const void* data, int size) {
-	//TODO: Test if invalid
+	if (!socket->isConnected())
+		return false;
 
+	asio::error_code err;
 	const char* ptr = reinterpret_cast<const char*>(data);
 	int offset = 0;
 	while (offset < size) {
 		auto buffer = asio::buffer(ptr + offset, size - offset);
-		int64_t ret = socket->sock.send(buffer);
-		if (ret < 0)
+		int64_t ret = socket->sock.write_some(buffer, err);
+		if (err || ret < 0) {
+			socket->reportDisconnected(err);
 			return false;
+		}
 		offset += ret;
 	}
 	return true;

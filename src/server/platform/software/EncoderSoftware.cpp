@@ -15,8 +15,6 @@ EncoderSoftware::EncoderSoftware(int _width, int _height) :
 }
 
 EncoderSoftware::~EncoderSoftware() {
-	if (encoderCtx)
-		avcodec_free_context(&encoderCtx);
 }
 
 void EncoderSoftware::start() {
@@ -50,6 +48,8 @@ void EncoderSoftware::start() {
 void EncoderSoftware::stop() {
 	runFlag.store(false, std::memory_order_release);
 	runThread.join();
+
+	avcodec_free_context(&encoderCtx);
 }
 
 void EncoderSoftware::_run() {
