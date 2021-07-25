@@ -4,6 +4,7 @@
 #include "server/StreamServer.h"
 
 #include <spdlog/spdlog.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/sinks/msvc_sink.h>
 
 #include <string>
@@ -36,12 +37,18 @@ static bool setDpiAwareness() {
 }
 
 
-int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+int main() {
 	GOOGLE_PROTOBUF_VERIFY_VERSION;
 	HRESULT hr;
 
 	auto msvc_sink = std::make_shared<spdlog::sinks::msvc_sink_mt>();
-	auto default_log = std::make_shared<spdlog::logger>("default", msvc_sink);
+	auto console_sink = std::make_shared<spdlog::sinks::wincolor_stdout_sink_mt>(spdlog::color_mode::automatic);
+
+	std::vector<spdlog::sink_ptr> sinks;
+	sinks.push_back(msvc_sink);
+	sinks.push_back(console_sink);
+
+	auto default_log = std::make_shared<spdlog::logger>("default", sinks.begin(), sinks.end());
 	spdlog::set_default_logger(default_log);
 
 	auto log = createNamedLogger("main");
@@ -57,9 +64,18 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 	StreamServer stream;
 
+	log->info("Starting daylight streaming server...");
+
 	stream.start();
 	Sleep(3600 * 1000);
+
+	log->info("Stopping daylight streaming server...");
 	stream.stop();
 
 	MFShutdown();
+	return 0;
+}
+
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+	return main();
 }

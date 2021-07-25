@@ -100,7 +100,7 @@ target_link_libraries(common PUBLIC
     ${FFMPEG_LIBS}
 )
 
-add_executable(server WIN32 ${SERVER_SRC} ${SERVER_WINDOWS_SRC})
+add_executable(server ${SERVER_SRC} ${SERVER_WINDOWS_SRC})
 target_link_libraries(server PUBLIC
 	common
 	"dxgi.lib" "d3d11.lib"
