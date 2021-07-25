@@ -5,7 +5,37 @@
 #include <deque>
 
 
-static MFTransform getVideoEncoder(const MFDxgiDeviceManager& deviceManager) {
+static std::string intoUTF8(const std::wstring_view& wideStr) {
+	static_assert(sizeof(wchar_t) == sizeof(WCHAR), "Expects wchar_t == WCHAR (from winnt)");
+
+	std::string ret;
+	ret.resize(wideStr.size() * 4);
+	int usedSize = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wideStr.data(), wideStr.size(),
+		ret.data(), ret.size(), nullptr, nullptr);
+
+	if (usedSize >= 0) {
+		ret.resize(usedSize);
+		return ret;
+	}
+	else if (usedSize == ERROR_INSUFFICIENT_BUFFER) {
+		int targetSize = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wideStr.data(), wideStr.size(),
+			nullptr, -1, nullptr, nullptr);
+		ret.resize(targetSize);
+		usedSize = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wideStr.data(), wideStr.size(),
+			ret.data(), ret.size(), nullptr, nullptr);
+		ret.resize(usedSize);
+		return ret;
+	}
+	else {
+		//FIXME: Add a proper error logging mechanism
+		ret.resize(0);
+		ret.append("<Failed to convert wide string into UTF-8>");
+		return ret;
+	}
+}
+
+
+static MFTransform getVideoEncoder(const MFDxgiDeviceManager& deviceManager, const LoggerPtr& log) {
 	HRESULT hr;
 	MFTransform transform;
 	IMFActivate** mftActivate;
@@ -58,6 +88,15 @@ static MFTransform getVideoEncoder(const MFDxgiDeviceManager& deviceManager) {
 			if (FAILED(hr))
 				continue;
 
+			WCHAR* friendlyName = nullptr;
+			UINT32 friendlyNameLen = 0;
+			mftActivate[i]->GetAllocatedString(MFT_FRIENDLY_NAME_Attribute, &friendlyName, &friendlyNameLen);
+			if (friendlyName != nullptr) {
+				std::wstring_view strView(friendlyName, friendlyNameLen);
+				log->info("Selecting MFT codec: {}", intoUTF8(strView));
+			}
+			CoTaskMemFree(friendlyName);
+
 			foundTransform = true;
 		}
 		mftActivate[i]->Release();
@@ -104,7 +143,7 @@ void EncoderD3D::_init() {
 
 	check_quit(!devs.isVideoSupported(), log, "Video not supported by D3D");
 
-	encoder = getVideoEncoder(devs.mfDeviceManager);
+	encoder = getVideoEncoder(devs.mfDeviceManager, log);
 	check_quit(encoder.isInvalid(), log, "Failed to create encoder");
 
 	VARIANT value;

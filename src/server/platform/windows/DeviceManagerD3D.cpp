@@ -26,6 +26,35 @@ static void getMainAdapterWithOutput(const DxgiFactory5& factory, DxgiAdapter1* 
 	outOutput->release();
 }
 
+static std::string intoUTF8(const std::wstring_view& wideStr) {
+	static_assert(sizeof(wchar_t) == sizeof(WCHAR), "Expects wchar_t == WCHAR (from winnt)");
+
+	std::string ret;
+	ret.resize(wideStr.size() * 4);
+	int usedSize = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wideStr.data(), wideStr.size(),
+			ret.data(), ret.size(), nullptr, nullptr);
+
+	if (usedSize >= 0) {
+		ret.resize(usedSize);
+		return ret;
+	}
+	else if (usedSize == ERROR_INSUFFICIENT_BUFFER) {
+		int targetSize = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wideStr.data(), wideStr.size(),
+				nullptr, -1, nullptr, nullptr);
+		ret.resize(targetSize);
+		usedSize = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wideStr.data(), wideStr.size(),
+			ret.data(), ret.size(), nullptr, nullptr);
+		ret.resize(usedSize);
+		return ret;
+	}
+	else {
+		//FIXME: Add a proper error logging mechanism
+		ret.resize(0);
+		ret.append("<Failed to convert wide string into UTF-8>");
+		return ret;
+	}
+}
+
 DeviceManagerD3D::DeviceManagerD3D() : log(createNamedLogger("DeviceManagerD3D")) {
 	HRESULT hr;
 
@@ -44,6 +73,9 @@ DeviceManagerD3D::DeviceManagerD3D() : log(createNamedLogger("DeviceManagerD3D")
 
 	DXGI_OUTPUT_DESC outputDesc;
 	output->GetDesc(&outputDesc);
+
+	log->info("Selected DXGI adapter: {}", intoUTF8(adapterDesc.Description));
+	log->info("Selected DXGI output: {}", intoUTF8(outputDesc.DeviceName));
 
 	UINT flag = D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_VIDEO_SUPPORT;
 #if !defined(NDEBUG) && defined(DAYLIGHT_D3D_DEBUG)
