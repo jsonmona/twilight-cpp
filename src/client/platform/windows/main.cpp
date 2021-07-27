@@ -1,7 +1,8 @@
 #include "common/log.h"
 #include "common/platform/windows/winheaders.h"
-#include "client/StreamViewer.h"
 #include "client/StreamClient.h"
+
+#include "client/platform/windows/StreamViewerD3D.h"
 
 #include <packet.pb.h>
 
@@ -24,9 +25,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	int targetWidth = screenSize.width() * 5 / 6;
 	int targetHeight = screenSize.height() * 5 / 6;
 
-	StreamViewer sv;
+	StreamViewerD3D sv;
 	sc.setOnNextPacket([&](const msg::Packet& pkt, uint8_t* extraData) { sv.onNewPacket(pkt, extraData); });
-	sc.connect("169.254.28.215");
+	//sc.connect("169.254.28.215");
+	sc.connect("127.0.0.1");
 	sv.setFixedSize(QSize(targetWidth, targetHeight));
 	sv.show();
 

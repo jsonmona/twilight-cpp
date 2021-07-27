@@ -147,6 +147,7 @@ using D3D11Buffer = ComWrapper<ID3D11Buffer>;
 using D3D11RenderTargetView = ComWrapper<ID3D11RenderTargetView>;
 using D3D11ShaderResourceView = ComWrapper<ID3D11ShaderResourceView>;
 using D3D11SamplerState = ComWrapper<ID3D11SamplerState>;
+using D3D11BlendState = ComWrapper<ID3D11BlendState>;
 
 using D3DBlob = ComWrapper<ID3DBlob>;
 

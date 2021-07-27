@@ -29,14 +29,17 @@ set(COMMON_WINDOWS_SRC
 set(CLIENT_SRC
     ./client/StreamClient.h
     ./client/StreamClient.cpp
-    ./client/StreamViewer.h
-    ./client/StreamViewer.cpp
+    ./client/StreamViewerBase.h
+    ./client/StreamViewerBase.cpp
 
     ./client/platform/software/DecoderSoftware.h
     ./client/platform/software/DecoderSoftware.cpp
 )
 
 set(CLIENT_WINDOWS_SRC
+    ./client/platform/windows/StreamViewerD3D.h
+    ./client/platform/windows/StreamViewerD3D.cpp
+
     ./client/platform/windows/main.cpp
 )
 
@@ -189,6 +192,9 @@ if(WIN32)
     fn_add_shader("server" "ps_y" "ps_5_0" "./server/platform/windows/rgb2yuv.hlsl")
     fn_add_shader("server" "ps_uv" "ps_5_0" "./server/platform/windows/rgb2yuv.hlsl")
     fn_add_shader("server" "ps_copy" "ps_5_0" "./server/platform/windows/rgb2yuv.hlsl")
+    fn_add_shader("client" "vs_full" "vs_5_0" "./client/platform/windows/viewer.hlsl")
+    fn_add_shader("client" "vs_box" "vs_5_0" "./client/platform/windows/viewer.hlsl")
+    fn_add_shader("client" "ps_main" "ps_5_0" "./client/platform/windows/viewer.hlsl")
     
     add_custom_target(fxc DEPENDS ${FXC_FILES})
 
