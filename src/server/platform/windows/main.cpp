@@ -3,10 +3,6 @@
 
 #include "server/StreamServer.h"
 
-#include <spdlog/spdlog.h>
-#include <spdlog/sinks/stdout_color_sinks.h>
-#include <spdlog/sinks/msvc_sink.h>
-
 #include <string>
 #include <memory>
 #include <vector>
@@ -40,16 +36,6 @@ static bool setDpiAwareness() {
 int main() {
 	GOOGLE_PROTOBUF_VERIFY_VERSION;
 	HRESULT hr;
-
-	auto msvc_sink = std::make_shared<spdlog::sinks::msvc_sink_mt>();
-	auto console_sink = std::make_shared<spdlog::sinks::wincolor_stdout_sink_mt>(spdlog::color_mode::automatic);
-
-	std::vector<spdlog::sink_ptr> sinks;
-	sinks.push_back(msvc_sink);
-	sinks.push_back(console_sink);
-
-	auto default_log = std::make_shared<spdlog::logger>("default", sinks.begin(), sinks.end());
-	spdlog::set_default_logger(default_log);
 
 	auto log = createNamedLogger("main");
 

@@ -4,6 +4,7 @@ endif()
 
 set(COMMON_SRC
     ./common/log.h
+    ./common/log.cpp
     ./common/ByteBuffer.h
 
     ./common/NetworkInputStream.h

@@ -12,10 +12,6 @@
 
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
-	auto msvc_sink = std::make_shared<spdlog::sinks::msvc_sink_mt>();
-	auto default_log = std::make_shared<spdlog::logger>("default", msvc_sink);
-	spdlog::set_default_logger(default_log);
-
 	StreamClient sc;
 
 	QApplication app(__argc, __argv);
