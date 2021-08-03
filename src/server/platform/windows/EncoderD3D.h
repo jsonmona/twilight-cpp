@@ -3,6 +3,7 @@
 
 
 #include "common/log.h"
+#include "common/ByteBuffer.h"
 
 #include "server/CaptureData.h"
 #include "DeviceManagerD3D.h"
@@ -10,6 +11,7 @@
 #include <atomic>
 #include <memory>
 #include <vector>
+#include <deque>
 #include <functional>
 
 
@@ -18,29 +20,36 @@ class EncoderD3D {
 
 	int width, height;
 	DeviceManagerD3D devs;
-	std::function<CaptureData<D3D11Texture2D>()> onFrameRequest;
-	std::function<void(CaptureData<std::vector<uint8_t>>&&)> onDataAvailable;
 
-	std::thread runThread;
+	std::function<CaptureData<D3D11Texture2D>()> onFrameRequest;
+	std::function<void(CaptureData<ByteBuffer>&&)> onDataAvailable;
+
+	std::deque<CaptureData<long long>> extraData;
 
 	MFTransform encoder;
+	MFMediaEventGenerator eventGen;
 	DWORD inputStreamId, outputStreamId;
 
 	void _init();
 	void _run();
 
 	void _pushEncoderTexture(const D3D11Texture2D& tex, long long sampleDur, long long sampleTime);
-	std::vector<uint8_t> _popEncoderData(long long* sampleTime);
+	ByteBuffer _popEncoderData(long long* sampleTime);
 
 public:
 	EncoderD3D(DeviceManagerD3D _devs, int _width, int _height);
 	~EncoderD3D();
 
-	inline void setFrameRequestCallback(const decltype(onFrameRequest)& x) { onFrameRequest = x; }
-	inline void setDataAvailableCallback(const decltype(onDataAvailable)& x) { onDataAvailable = x; }
+	template<typename Fn>
+	void setOnFrameRequest(Fn fn) { onFrameRequest = std::move(fn); }
+
+	template<typename Fn>
+	void setOnDataAvailable(Fn fn) { onDataAvailable = std::move(fn); }
 
 	void start();
 	void stop();
+
+	void poll();
 };
 
 

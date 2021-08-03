@@ -11,29 +11,28 @@
 #include <vector>
 #include <thread>
 #include <cstdint>
-#include <mutex>
 #include <functional>
 
 
 class CaptureD3D {
-	// Valid after constructor
 	LoggerPtr log;
 
-	bool initialized = false;
-	DeviceManagerD3D devs;
+	bool firstFrameSent;
+	bool frameAcquired;
 
-	bool frameAcquired = false;
+	DeviceManagerD3D devs;
 	DxgiOutputDuplication outputDuplication;
 
-public:
-	struct EncodedFrame {
-		std::vector<uint8_t> data;
-	};
+	void parseCursor_(CursorShapeData* cursorShape, const DXGI_OUTDUPL_POINTER_SHAPE_INFO& cursorInfo, const std::vector<uint8_t>& buffer);
 
+public:
 	CaptureD3D(DeviceManagerD3D _devs);
-	void begin();
-	CaptureData<D3D11Texture2D> fetch();
-	void end();
+	~CaptureD3D();
+
+	void start();
+	void stop();
+
+	CaptureData<D3D11Texture2D> poll();
 };
 
 

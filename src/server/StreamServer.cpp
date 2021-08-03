@@ -7,7 +7,7 @@ StreamServer::StreamServer() :
 	log(createNamedLogger("StreamServer"))
 {
 	capture = CapturePipeline::createInstance();
-	capture->setOutputCallback([this](CaptureData<std::vector<uint8_t>>&& cap) { _processOutput(std::move(cap)); });
+	capture->setOutputCallback([this](CaptureData<ByteBuffer>&& cap) { _processOutput(std::move(cap)); });
 
 	server.setOnNewConnection([this](std::unique_ptr<NetworkSocket>&& _newSock) {
 		std::unique_ptr<NetworkSocket> newSock = std::move(_newSock);
@@ -36,7 +36,7 @@ void StreamServer::stop() {
 	server.stopListen();
 }
 
-void StreamServer::_processOutput(CaptureData<std::vector<uint8_t>>&& cap) {
+void StreamServer::_processOutput(CaptureData<ByteBuffer>&& cap) {
 	if (cap.cursor)
 		cursorData = std::move(cap.cursor);
 

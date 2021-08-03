@@ -3,6 +3,8 @@
 
 #include "server/StreamServer.h"
 
+#include "server/platform/windows/CaptureD3D.h"
+
 #include <string>
 #include <memory>
 #include <vector>

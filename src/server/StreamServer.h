@@ -24,7 +24,7 @@ class StreamServer {
 
 	void _runListen();
 
-	void _processOutput(CaptureData<std::vector<uint8_t>>&& cap);
+	void _processOutput(CaptureData<ByteBuffer>&& cap);
 	void _writeOutput(const msg::Packet& pck, const uint8_t* extraData);
 
 public:

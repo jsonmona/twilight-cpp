@@ -2,9 +2,11 @@
 #define SERVER_PLATFORM_SOFTWARE_ENCODER_SOFTWARE_H_
 
 
+#include "common/log.h"
+#include "common/ByteBuffer.h"
+
 #include "common/platform/software/TextureSoftware.h"
 
-#include "common/log.h"
 #include "server/CaptureData.h"
 
 extern "C" {
@@ -20,7 +22,7 @@ class EncoderSoftware {
 
 	int width, height;
 	std::function<CaptureData<TextureSoftware>()> onFrameRequest;
-	std::function<void(CaptureData<std::vector<uint8_t>>&&)> onDataAvailable;
+	std::function<void(CaptureData<ByteBuffer>&&)> onDataAvailable;
 
 	AVCodec* encoder = nullptr;
 	AVCodecContext* encoderCtx = nullptr;
@@ -34,7 +36,7 @@ public:
 	EncoderSoftware(int _width, int _height);
 	~EncoderSoftware();
 
-	inline void setFrameRequestCallback(const decltype(onFrameRequest)& x) { onFrameRequest = x; }
+	inline void setOnFrameRequest(const decltype(onFrameRequest)& x) { onFrameRequest = x; }
 	inline void setDataAvailableCallback(const decltype(onDataAvailable)& x) { onDataAvailable = x; }
 
 	void start();

@@ -46,8 +46,7 @@ static MFTransform getVideoEncoder(const MFDxgiDeviceManager& deviceManager, con
 	outputType.guidSubtype = MFVideoFormat_H264;
 
 	hr = MFTEnumEx(MFT_CATEGORY_VIDEO_ENCODER,
-		MFT_ENUM_FLAG_ASYNCMFT | MFT_ENUM_FLAG_HARDWARE | MFT_ENUM_FLAG_LOCALMFT |
-		MFT_ENUM_FLAG_SORTANDFILTER,
+		MFT_ENUM_FLAG_HARDWARE | MFT_ENUM_FLAG_SORTANDFILTER,
 		nullptr, &outputType,
 		&mftActivate, &arraySize);
 
@@ -119,22 +118,19 @@ EncoderD3D::EncoderD3D(DeviceManagerD3D _devs, int _width, int _height) :
 }
 
 EncoderD3D::~EncoderD3D() {
-	check_quit(runThread.joinable(), log, "Trying to destruct while thread is still running!");
 }
 
 void EncoderD3D::start() {
 	_init();
 
-	encoder->ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, inputStreamId);
+	eventGen = encoder.castTo<IMFMediaEventGenerator>();
 
-	runThread = std::thread([this]() { this->_run(); });
+	encoder->ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, inputStreamId);
 }
 
 void EncoderD3D::stop() {
 	encoder->ProcessMessage(MFT_MESSAGE_NOTIFY_END_OF_STREAM, inputStreamId);
 	encoder->ProcessMessage(MFT_MESSAGE_COMMAND_DRAIN, 0);
-
-	runThread.join();
 }
 
 
@@ -248,13 +244,8 @@ void EncoderD3D::_init() {
 	check_quit(chosenType == -1, log, "No supported input type found");
 }
 
-void EncoderD3D::_run() {
+void EncoderD3D::poll() {
 	HRESULT hr;
-
-	std::deque<CaptureData<long long>> extraData;
-	CaptureData<long long> prev;
-
-	MFMediaEventGenerator gen = encoder.castTo<IMFMediaEventGenerator>();
 
 	// TODO: Assuming 60fps
 	constexpr long long MFTime = 10000000;  // 100-ns to sec (used by MediaFoundation)
@@ -267,22 +258,24 @@ void EncoderD3D::_run() {
 		return (std::chrono::steady_clock::now() - startTime).count() * (frameNum / 10'000) / (frameDen * 100'000);
 	};
 
+	MFMediaEvent ev;
 	while (true) {
-		MFMediaEvent ev;
-		hr = gen->GetEvent(MF_EVENT_FLAG_NO_WAIT, ev.data());
-		if (hr == MF_E_NO_EVENTS_AVAILABLE) {
-			Sleep(0);
-			continue;
-		}
-		if (hr == MF_E_SHUTDOWN)
+		ev.release();
+
+		hr = eventGen->GetEvent(MF_EVENT_FLAG_NO_WAIT, ev.data());
+		if (hr == MF_E_NO_EVENTS_AVAILABLE || hr == MF_E_SHUTDOWN)
 			break;
 		check_quit(FAILED(hr), log, "Failed to get next event ({})", hr);
 
 		MediaEventType evType;
 		ev->GetType(&evType);
-		if (evType == METransformNeedInput) {
-			while (calcNowFrame() < frameCnt)
-				Sleep(0);
+
+		if (evType == METransformDrainComplete) {
+			break;
+		}
+		else if (evType == METransformNeedInput) {
+			//while (calcNowFrame() < frameCnt)
+			//	Sleep(0);
 
 			CaptureData<D3D11Texture2D> cap = onFrameRequest();
 
@@ -296,19 +289,19 @@ void EncoderD3D::_run() {
 			now.desktop = std::make_shared<long long>(sampleTime);
 
 			extraData.push_back(now);
-			prev = std::move(now);
 
 			_pushEncoderTexture(*cap.desktop, sampleDur, sampleTime);
 			frameCnt++;
 		}
 		else if (evType == METransformHaveOutput) {
+			auto oldtime = std::chrono::high_resolution_clock::now();
 			int idx = -1;
 
 			long long sampleTime;
 			CaptureData<long long> now;
-			CaptureData<std::vector<uint8_t>> enc;
+			CaptureData<ByteBuffer> enc;
 
-			enc.desktop = std::make_shared<std::vector<uint8_t>>(_popEncoderData(&sampleTime));
+			enc.desktop = std::make_shared<ByteBuffer>(_popEncoderData(&sampleTime));
 			for (int i = 0; i < extraData.size(); i++) {
 				if (*extraData[i].desktop == sampleTime) {
 					now = std::move(extraData[i]);
@@ -318,7 +311,7 @@ void EncoderD3D::_run() {
 			}
 
 			check_quit(idx == -1, log, "Failed to find matching ExtraData (size={}, sampleTime={})",
-					extraData.size(), sampleTime);
+				extraData.size(), sampleTime);
 
 			// TODO: Measure if this *optimization* is worth it
 			if (idx == 0)
@@ -330,8 +323,9 @@ void EncoderD3D::_run() {
 			enc.cursorShape = std::move(now.cursorShape);
 			onDataAvailable(std::move(enc));
 		}
-		else if (evType == METransformDrainComplete)
-			break;
+		else {
+			log->warn("Ignoring unknown MediaEventType {}", static_cast<DWORD>(evType));
+		}
 	}
 }
 
@@ -356,7 +350,7 @@ void EncoderD3D::_pushEncoderTexture(const D3D11Texture2D& tex, long long sample
 	check_quit(FAILED(hr), log, "Failed to put input into encoder");
 }
 
-std::vector<uint8_t> EncoderD3D::_popEncoderData(long long* sampleTime) {
+ByteBuffer EncoderD3D::_popEncoderData(long long* sampleTime) {
 	HRESULT hr;
 
 	MFT_OUTPUT_STREAM_INFO outputStreamInfo;
@@ -376,6 +370,8 @@ std::vector<uint8_t> EncoderD3D::_popEncoderData(long long* sampleTime) {
 	if (sampleTime)
 		outputBuffer.pSample->GetSampleTime(sampleTime);
 
+	//TODO: check MFSampleExtension_CleanPoint
+
 	DWORD bufferCount = 0;
 	hr = outputBuffer.pSample->GetBufferCount(&bufferCount);
 	check_quit(FAILED(hr), log, "Failed to get buffer count");
@@ -384,20 +380,21 @@ std::vector<uint8_t> EncoderD3D::_popEncoderData(long long* sampleTime) {
 	hr = outputBuffer.pSample->GetTotalLength(&totalLen);
 	check_quit(FAILED(hr), log, "Failed to query total length of sample");
 
-	std::vector<uint8_t> dataVec(0, 0);
-	dataVec.reserve(totalLen);
+	ByteBuffer data(totalLen);
+	size_t idx = 0;
 
 	for (int j = 0; j < bufferCount; j++) {
 		MFMediaBuffer mediaBuffer;
 		hr = outputBuffer.pSample->GetBufferByIndex(j, mediaBuffer.data());
 		check_quit(FAILED(hr), log, "Failed to get buffer");
 
-		BYTE* data;
+		BYTE* ptr;
 		DWORD len;
-		hr = mediaBuffer->Lock(&data, nullptr, &len);
+		hr = mediaBuffer->Lock(&ptr, nullptr, &len);
 		check_quit(FAILED(hr), log, "Failed to lock buffer");
 
-		dataVec.insert(dataVec.end(), data, data + len);
+		memcpy(data.data() + idx, ptr, len);
+		idx += len;
 
 		hr = mediaBuffer->Unlock();
 		check_quit(FAILED(hr), log, "Failed to unlock buffer");
@@ -408,5 +405,5 @@ std::vector<uint8_t> EncoderD3D::_popEncoderData(long long* sampleTime) {
 	if (outputBuffer.pEvents)
 		outputBuffer.pEvents->Release();
 
-	return dataVec;
+	return data;
 }

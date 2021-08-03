@@ -2,6 +2,8 @@
 #define SERVER_CAPTURE_PIPELINE_H_
 
 
+#include "common/ByteBuffer.h"
+
 #include "server/CaptureData.h"
 
 #include <packet.pb.h>
@@ -13,7 +15,7 @@
 
 class CapturePipeline {
 protected:
-	std::function<void(CaptureData<std::vector<uint8_t>>&&)> writeOutput;
+	std::function<void(CaptureData<ByteBuffer>&&)> writeOutput;
 
 public:
 	static std::unique_ptr<CapturePipeline> createInstance();
@@ -26,7 +28,8 @@ public:
 
 	virtual ~CapturePipeline() {};
 
-	inline void setOutputCallback(const decltype(writeOutput)& f) { writeOutput = f; }
+	template<typename Fn>
+	void setOutputCallback(Fn fn) { writeOutput = std::move(fn); }
 
 	virtual void start() = 0;
 	virtual void stop() = 0;

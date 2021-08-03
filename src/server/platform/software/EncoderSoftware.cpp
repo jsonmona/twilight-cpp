@@ -26,19 +26,21 @@ void EncoderSoftware::start() {
 	encoderCtx = avcodec_alloc_context3(encoder);
 	check_quit(encoderCtx == nullptr, log, "Failed to allocate codec context");
 
-	encoderCtx->bit_rate = 15 * 1000;
+	encoderCtx->bit_rate = 8 * 1000 * 1000;
 	encoderCtx->width = width;
 	encoderCtx->height = height;
 	encoderCtx->time_base = AVRational { 60000, 1001 };
-	encoderCtx->gop_size = 30;
+	encoderCtx->gop_size = 60;
 	encoderCtx->pix_fmt = AV_PIX_FMT_YUV420P;
-	
-	stat = av_opt_set(encoderCtx->priv_data, "preset", "superfast", 0);
-	check_quit(stat < 0, log, "Failed to set veryfast");
-	stat = av_opt_set(encoderCtx->priv_data, "tune", "zerolatency", 0);
-	check_quit(stat < 0, log, "Failed to set zerolatency");
+	encoderCtx->thread_count = 0;
+	encoderCtx->thread_type = FF_THREAD_SLICE;
 
-	stat = avcodec_open2(encoderCtx, encoder, nullptr);
+	AVDictionary* opts = nullptr;
+	av_dict_set(&opts, "preset", "ultrafast", 0);
+	av_dict_set(&opts, "tune", "zerolatency", 0);
+	av_dict_set(&opts, "x264-params", "intra-refresh=1", 0);
+
+	stat = avcodec_open2(encoderCtx, encoder, &opts);
 	check_quit(stat < 0, log, "Failed to open codec");
 
 	runFlag.store(true, std::memory_order_release);
@@ -86,24 +88,24 @@ void EncoderSoftware::_run() {
 			else
 				extraData.erase(extraData.begin() + idx);
 
-			CaptureData<std::vector<uint8_t>> enc;
-			enc.desktop = std::make_shared<std::vector<uint8_t>>(pkt->buf->data, pkt->buf->data + pkt->buf->size);
+			CaptureData<ByteBuffer> enc;
+			enc.desktop = std::make_shared<ByteBuffer>(pkt->buf->size);
 			enc.cursor = std::move(now.cursor);
 			enc.cursorShape = std::move(now.cursorShape);
+
+			enc.desktop->write(0, pkt->buf->data, pkt->buf->size);
 
 			onDataAvailable(std::move(enc));
 		}
 		else if (stat == AVERROR(EAGAIN)) {
 			av_frame_unref(frame);
 
-			while ((std::chrono::steady_clock::now() - timeBegin).count() < cnt * 100000 * 1001 / 60000 * 10000)
-				std::this_thread::sleep_for(0ms);
-
 			CaptureData<TextureSoftware> cap = onFrameRequest();
 			check_quit(cap.desktop == nullptr, log, "Texture should've been duplicated by now");
 
 			// Data gets freed when cap is deleted.
 			// This is safe because avcodec_send_frame is suppossed to copy data.
+			// May be improved to use reference counted buffer
 			std::copy(cap.desktop->data, cap.desktop->data + 4, frame->data);
 			std::copy(cap.desktop->linesize, cap.desktop->linesize + 4, frame->linesize);
 			frame->format = AV_PIX_FMT_YUV420P;

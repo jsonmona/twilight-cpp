@@ -87,6 +87,14 @@ public:
 			memmove(ptr + amount, ptr, nowSize - amount);
 	}
 
+	void write(size_t dstOffset, void* src, size_t length) {
+		memcpy(ptr + dstOffset, src, length);
+	}
+
+	void write(size_t dstOffset, const ByteBuffer& other) {
+		memcpy(ptr + dstOffset, other.data(), other.size());
+	}
+
 	size_t size() const { return nowSize; }
 
 	uint8_t* data() { return ptr; }

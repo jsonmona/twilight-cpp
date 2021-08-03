@@ -49,30 +49,39 @@ static AVPixelFormat scale2avpixfmt(ScaleType type) {
 }
 
 CapturePipelineD3DSoft::CapturePipelineD3DSoft(DeviceManagerD3D _devs, int w, int h, ScaleType type) :
+	log(createNamedLogger("CapturePipelineD3DSoft")),
 	devs(_devs), capture(_devs), scale(), encoder(w, h)
 {
 	scale.setOutputFormat(w, h, scale2avpixfmt(type));
-	encoder.setFrameRequestCallback([this]() -> CaptureData<TextureSoftware> { return _fetchTexture(); });
+	encoder.setOnFrameRequest([this]() -> CaptureData<TextureSoftware> { return _fetchTexture(); });
 }
 
 CapturePipelineD3DSoft::~CapturePipelineD3DSoft() {
 }
 
 void CapturePipelineD3DSoft::start() {
-	//FIXME: Possibly unnecessary std::function copy
+	lastPresentTime = std::chrono::steady_clock::now();
+
 	encoder.setDataAvailableCallback(writeOutput);
 
-	capture.begin();
+	capture.start();
 	encoder.start();
 }
 
 void CapturePipelineD3DSoft::stop() {
 	encoder.stop();
-	capture.end();
+	capture.stop();
 }
 
 CaptureData<TextureSoftware> CapturePipelineD3DSoft::_fetchTexture() {
-	CaptureData<D3D11Texture2D> cap = capture.fetch();
+	auto nowTime = std::chrono::steady_clock::now();
+	while (nowTime - lastPresentTime < std::chrono::nanoseconds(1'000'000'000 / 60)) {
+		Sleep(0);
+		nowTime = std::chrono::steady_clock::now();
+	}
+	lastPresentTime = nowTime;
+
+	CaptureData<D3D11Texture2D> cap = capture.poll();
 
 	if (cap.desktop) {
 		D3D11_TEXTURE2D_DESC desc;

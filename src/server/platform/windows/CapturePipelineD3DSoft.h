@@ -11,12 +11,22 @@
 #include "common/platform/software/ScaleSoftware.h"
 #include "server/platform/software/EncoderSoftware.h"
 
+#include <atomic>
+#include <thread>
+
 
 class CapturePipelineD3DSoft : public CapturePipeline {
+	LoggerPtr log;
+
 	DeviceManagerD3D devs;
 	CaptureD3D capture;
 	ScaleSoftware scale;
 	EncoderSoftware encoder;
+
+	std::chrono::steady_clock::time_point lastPresentTime;
+
+	std::atomic<bool> flagRun;
+	std::thread runThread;
 	
 	CaptureData<TextureSoftware> _fetchTexture();
 
