@@ -3,9 +3,9 @@
 
 CapturePipelineD3D::CapturePipelineD3D(DeviceManagerD3D _devs, int w, int h, ScaleType type) :
 	log(createNamedLogger("CapturePipelineD3D")),
-	devs(_devs), capture(_devs), scale(ScaleD3D::createInstance(w, h, type)), encoder(devs, w, h)
+	capture(_devs), scale(ScaleD3D::createInstance(w, h, type)), encoder(_devs, w, h)
 {
-	scale->init(devs.device, devs.context);
+	scale->init(_devs.device, _devs.context);
 	encoder.setOnFrameRequest([this]() -> CaptureData<D3D11Texture2D> { return _fetchTexture(); });
 }
 

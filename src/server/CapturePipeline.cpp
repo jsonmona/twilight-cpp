@@ -1,6 +1,7 @@
 #include "CapturePipeline.h"
 
-#include "server/platform/windows/DeviceManagerD3D.h"
+#include "common/platform/windows/DeviceManagerD3D.h"
+
 #include "server/platform/windows/CapturePipelineD3D.h"
 #include "server/platform/windows/CapturePipelineD3DSoft.h"
 

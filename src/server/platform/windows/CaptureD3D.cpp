@@ -6,7 +6,8 @@
 
 
 CaptureD3D::CaptureD3D(DeviceManagerD3D _devs) :
-	log(createNamedLogger("CaptureD3D")), devs(_devs)
+	log(createNamedLogger("CaptureD3D")),
+	output(_devs.output), device(_devs.device)
 {
 }
 
@@ -22,7 +23,7 @@ void CaptureD3D::start() {
 	frameAcquired = false;
 
 	DXGI_FORMAT supportedFormats[] = { DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM };
-	hr = devs.output->DuplicateOutput1(devs.device.ptr(), 0, 2, supportedFormats, outputDuplication.data());
+	hr = output->DuplicateOutput1(device.ptr(), 0, 2, supportedFormats, outputDuplication.data());
 	check_quit(FAILED(hr), log, "Failed to duplicate output ({:#x})", hr);
 }
 

@@ -25,6 +25,9 @@ set(COMMON_SRC
 set(COMMON_WINDOWS_SRC
     ./common/platform/windows/winheaders.h
     ./common/platform/windows/ComWrapper.h
+
+    ./common/platform/windows/DeviceManagerD3D.h
+    ./common/platform/windows/DeviceManagerD3D.cpp
 )
 
 set(CLIENT_SRC
@@ -63,8 +66,6 @@ set(SERVER_WINDOWS_SRC
     ./server/platform/windows/CapturePipelineD3D.cpp
     ./server/platform/windows/CapturePipelineD3DSoft.h
     ./server/platform/windows/CapturePipelineD3DSoft.cpp
-    ./server/platform/windows/DeviceManagerD3D.h
-    ./server/platform/windows/DeviceManagerD3D.cpp
     ./server/platform/windows/EncoderD3D.h
     ./server/platform/windows/EncoderD3D.cpp
     ./server/platform/windows/ScaleD3D.h

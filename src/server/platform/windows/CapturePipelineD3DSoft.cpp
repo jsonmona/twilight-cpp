@@ -50,7 +50,8 @@ static AVPixelFormat scale2avpixfmt(ScaleType type) {
 
 CapturePipelineD3DSoft::CapturePipelineD3DSoft(DeviceManagerD3D _devs, int w, int h, ScaleType type) :
 	log(createNamedLogger("CapturePipelineD3DSoft")),
-	devs(_devs), capture(_devs), scale(), encoder(w, h)
+	capture(_devs), scale(), encoder(w, h),
+	device(_devs.device), context(_devs.context)
 {
 	scale.setOutputFormat(w, h, scale2avpixfmt(type));
 	encoder.setOnFrameRequest([this]() -> CaptureData<TextureSoftware> { return _fetchTexture(); });
@@ -85,7 +86,7 @@ CaptureData<TextureSoftware> CapturePipelineD3DSoft::_fetchTexture() {
 
 	if (cap.desktop) {
 		D3D11_TEXTURE2D_DESC desc;
-		D3D11Texture2D tex = intoStagedTex(*cap.desktop, devs.device, devs.context);
+		D3D11Texture2D tex = intoStagedTex(*cap.desktop, device, context);
 		tex->GetDesc(&desc);
 
 		AVPixelFormat fmt = dxgi2avpixfmt(desc.Format);
@@ -94,13 +95,13 @@ CaptureData<TextureSoftware> CapturePipelineD3DSoft::_fetchTexture() {
 		scale.setInputFormat(desc.Width, desc.Height, fmt);
 
 		D3D11_MAPPED_SUBRESOURCE mapInfo;
-		devs.context->Map(tex.ptr(), 0, D3D11_MAP_READ, 0, &mapInfo);
+		context->Map(tex.ptr(), 0, D3D11_MAP_READ, 0, &mapInfo);
 
 		const uint8_t* dataPtr = reinterpret_cast<uint8_t*>(mapInfo.pData);
 		const int linesize = mapInfo.RowPitch;
 		av_image_copy(softTex.data, softTex.linesize, &dataPtr, &linesize, fmt, desc.Width, desc.Height);
 
-		devs.context->Unmap(tex.ptr(), 0);
+		context->Unmap(tex.ptr(), 0);
 
 		scale.pushInput(std::move(softTex));
 	}

@@ -5,8 +5,9 @@
 #include "common/log.h"
 #include "common/ByteBuffer.h"
 
+#include "common/platform/windows/DeviceManagerD3D.h"
+
 #include "server/CaptureData.h"
-#include "DeviceManagerD3D.h"
 
 #include <atomic>
 #include <memory>
@@ -19,13 +20,13 @@ class EncoderD3D {
 	LoggerPtr log;
 
 	int width, height;
-	DeviceManagerD3D devs;
 
 	std::function<CaptureData<D3D11Texture2D>()> onFrameRequest;
 	std::function<void(CaptureData<ByteBuffer>&&)> onDataAvailable;
 
 	std::deque<CaptureData<long long>> extraData;
 
+	MFDxgiDeviceManager mfDeviceManager;
 	MFTransform encoder;
 	MFMediaEventGenerator eventGen;
 	DWORD inputStreamId, outputStreamId;

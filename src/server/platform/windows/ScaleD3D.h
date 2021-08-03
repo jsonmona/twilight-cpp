@@ -4,8 +4,9 @@
 
 #include "common/log.h"
 
+#include "common/platform/windows/DeviceManagerD3D.h"
+
 #include "server/CaptureData.h"
-#include "server/platform/windows/DeviceManagerD3D.h"
 
 #include <memory>
 

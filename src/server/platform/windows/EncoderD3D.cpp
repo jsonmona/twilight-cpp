@@ -1,7 +1,5 @@
 #include "EncoderD3D.h"
 
-#include "CaptureD3D.h"
-
 #include <deque>
 
 
@@ -112,9 +110,11 @@ static MFTransform getVideoEncoder(const MFDxgiDeviceManager& deviceManager, con
 
 
 EncoderD3D::EncoderD3D(DeviceManagerD3D _devs, int _width, int _height) :
-	devs(_devs), width(_width), height(_height),
-	log(createNamedLogger("EncoderD3D"))
+	log(createNamedLogger("EncoderD3D")),
+	width(_width), height(_height),
+	mfDeviceManager(_devs.mfDeviceManager)
 {
+	check_quit(!_devs.isVideoSupported(), log, "D3D does not support video");
 }
 
 EncoderD3D::~EncoderD3D() {
@@ -137,9 +137,7 @@ void EncoderD3D::stop() {
 void EncoderD3D::_init() {
 	HRESULT hr;
 
-	check_quit(!devs.isVideoSupported(), log, "Video not supported by D3D");
-
-	encoder = getVideoEncoder(devs.mfDeviceManager, log);
+	encoder = getVideoEncoder(mfDeviceManager, log);
 	check_quit(encoder.isInvalid(), log, "Failed to create encoder");
 
 	VARIANT value;

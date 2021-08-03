@@ -4,8 +4,9 @@
 
 #include "common/log.h"
 
+#include "common/platform/windows/DeviceManagerD3D.h"
+
 #include "server/CapturePipeline.h"
-#include "DeviceManagerD3D.h"
 #include "CaptureD3D.h"
 
 #include "common/platform/software/ScaleSoftware.h"
@@ -18,10 +19,12 @@
 class CapturePipelineD3DSoft : public CapturePipeline {
 	LoggerPtr log;
 
-	DeviceManagerD3D devs;
 	CaptureD3D capture;
 	ScaleSoftware scale;
 	EncoderSoftware encoder;
+
+	D3D11Device device;
+	D3D11DeviceContext context;
 
 	std::chrono::steady_clock::time_point lastPresentTime;
 

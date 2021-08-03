@@ -2,10 +2,11 @@
 #define SERVER_PLATFORM_WINDOWS_CAPTURE_D3D_H_
 
 #include "common/log.h"
-#include "server/CaptureData.h"
-#include "common/platform/windows/ComWrapper.h"
 
-#include "DeviceManagerD3D.h"
+#include "common/platform/windows/ComWrapper.h"
+#include "common/platform/windows/DeviceManagerD3D.h"
+
+#include "server/CaptureData.h"
 
 #include <atomic>
 #include <vector>
@@ -20,7 +21,8 @@ class CaptureD3D {
 	bool firstFrameSent;
 	bool frameAcquired;
 
-	DeviceManagerD3D devs;
+	DxgiOutput5 output;
+	D3D11Device device;
 	DxgiOutputDuplication outputDuplication;
 
 	void parseCursor_(CursorShapeData* cursorShape, const DXGI_OUTDUPL_POINTER_SHAPE_INFO& cursorInfo, const std::vector<uint8_t>& buffer);

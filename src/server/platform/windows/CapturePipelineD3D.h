@@ -4,8 +4,9 @@
 
 #include "common/log.h"
 
+#include "common/platform/windows/DeviceManagerD3D.h"
+
 #include "server/CapturePipeline.h"
-#include "DeviceManagerD3D.h"
 #include "CaptureD3D.h"
 #include "ScaleD3D.h"
 #include "EncoderD3D.h"
@@ -13,7 +14,6 @@
 class CapturePipelineD3D : public CapturePipeline {
 	LoggerPtr log;
 
-	DeviceManagerD3D devs;
 	CaptureD3D capture;
 	std::unique_ptr<ScaleD3D> scale;
 	EncoderD3D encoder;
@@ -22,7 +22,6 @@ class CapturePipelineD3D : public CapturePipeline {
 	std::shared_ptr<CursorShapeData> lastCursorShape;
 
 	std::atomic<bool> flagRun;
-
 	std::thread runThread;
 
 	CaptureData<D3D11Texture2D> _fetchTexture();
