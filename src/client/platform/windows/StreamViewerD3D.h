@@ -51,7 +51,7 @@ class StreamViewerD3D : public StreamViewerBase {
 	int width, height;
 
 	HWND hwnd() const { return reinterpret_cast<HWND>(winId()); }
-	void _onNewFrame(const TextureSoftware& frame);
+	void _onNewFrame(TextureSoftware&& frame);
 	void _init();
 	void _recreateCursorTexture();
 	void _renderLoop();

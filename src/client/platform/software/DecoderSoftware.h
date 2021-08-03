@@ -28,7 +28,7 @@ class DecoderSoftware {
 	std::atomic_bool flagRun;
 	std::thread looper;
 
-	std::function<void(const TextureSoftware&)> onFrameAvailable;
+	std::function<void(TextureSoftware&&)> onFrameAvailable;
 
 	struct EncodedData;
 	std::mutex decoderQueueMutex;

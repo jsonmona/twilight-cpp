@@ -205,7 +205,7 @@ void StreamViewerD3D::_init() {
 	_recreateCursorTexture();
 
 	decoder = std::make_unique<DecoderSoftware>();
-	decoder->setOnFrameAvailable([this](const TextureSoftware& frame) { _onNewFrame(frame); });
+	decoder->setOnFrameAvailable([this](TextureSoftware&& frame) { _onNewFrame(std::move(frame)); });
 	decoder->start();
 
 	flagRunRender.store(true, std::memory_order_release);
@@ -240,8 +240,8 @@ void StreamViewerD3D::_recreateCursorTexture() {
 	check_quit(FAILED(hr), log, "Failed to create cursor SRV");
 }
 
-void StreamViewerD3D::_onNewFrame(const TextureSoftware& frame) {
-	TextureSoftware* ptr = new TextureSoftware(frame.clone());
+void StreamViewerD3D::_onNewFrame(TextureSoftware&& frame) {
+	TextureSoftware* ptr = new TextureSoftware(std::move(frame));
 	ptr = desktopImage.exchange(ptr);
 	delete ptr;
 }

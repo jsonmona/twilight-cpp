@@ -41,9 +41,7 @@ void DecoderSoftware::_run() {
 						frame->width, frame->height, static_cast<AVPixelFormat>(frame->format));
 
 				scale.pushInput(std::move(yuv));
-				TextureSoftware rgb = scale.popOutput();
-
-				onFrameAvailable(rgb);
+				onFrameAvailable(scale.popOutput());
 			}
 			else if (stat == AVERROR(EAGAIN))
 				break;
