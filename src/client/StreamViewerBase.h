@@ -19,11 +19,7 @@ class StreamViewerBase : public QWidget {
 
 
 protected:
-	std::mutex cursorShapeLock;
-	int cursorWidth, cursorHeight;
-	bool hasNewCursorShape;
-	ByteBuffer cursorShapeData;
-
+	virtual bool useAbsCursor() = 0;
 	virtual void processNewPacket(const msg::Packet& pkt, uint8_t* extraData) = 0;
 
 private slots:

@@ -73,17 +73,43 @@ void StreamViewerD3D::processNewPacket(const msg::Packet& pkt, uint8_t* extraDat
 	while (!flagRunRender.load(std::memory_order_acquire))
 		Sleep(0);
 
+	static std::shared_ptr<ByteBuffer> pendingCursorChange;
+	static int cursorWidth, cursorHeight;
+
+	//FIXME: Very tight coupling with base class
+	//FIXME: Peek decoder to latest I-frame on exccesive decoding lag
+	//       ...but it's incompatible with intra-refresh
+
 	switch (pkt.msg_case()) {
 	case msg::Packet::kDesktopFrame:
 		decoder->pushData(extraData, pkt.extra_data_len());
-		cursorVisible = pkt.desktop_frame().cursor_visible();
-		cursorX = pkt.desktop_frame().cursor_x();
-		cursorY = pkt.desktop_frame().cursor_y();
+		/* lock */ {
+			FrameData now;
+			if (pkt.desktop_frame().cursor_visible()) {
+				now.cursorX = pkt.desktop_frame().cursor_x();
+				now.cursorY = pkt.desktop_frame().cursor_y();
+			}
+			else {
+				now.cursorX = -1;
+				now.cursorY = -1;
+			}
+			if (pendingCursorChange != nullptr) {
+				now.cursorDataUpdate = std::move(pendingCursorChange);
+				now.cursorWidth = cursorWidth;
+				now.cursorHeight = cursorHeight;
+				pendingCursorChange.reset();
+			}
+			std::lock_guard lock(frameDataLock);
+			undecodedFrameData.push_back(std::move(now));
+		}
 		break;
-	case msg::Packet::kCursorShape:
-		//FIXME: Very tight coupling with base class
-		hasNewCursorData = true;
-		// data itself should've been copied by now
+	case msg::Packet::kCursorShape: {
+		const auto& data = pkt.cursor_shape();
+		pendingCursorChange = std::make_shared<ByteBuffer>(data.width() * data.height() * 4);
+		memcpy(pendingCursorChange->data(), extraData, pkt.extra_data_len());
+		cursorWidth = data.width();
+		cursorHeight = data.height();
+	}
 		break;
 	default:
 		log->error("processNewPacket received unknown packet type: {}", pkt.msg_case());
@@ -241,9 +267,13 @@ void StreamViewerD3D::_recreateCursorTexture() {
 }
 
 void StreamViewerD3D::_onNewFrame(TextureSoftware&& frame) {
-	TextureSoftware* ptr = new TextureSoftware(std::move(frame));
-	ptr = desktopImage.exchange(ptr);
-	delete ptr;
+	std::lock_guard lock(frameDataLock);
+
+	FrameData now = std::move(undecodedFrameData.front());
+	undecodedFrameData.pop_front();
+
+	now.desktop = std::move(frame);
+	frameData.push_back(std::move(now));
 }
 
 void StreamViewerD3D::_renderLoop() {
@@ -251,18 +281,35 @@ void StreamViewerD3D::_renderLoop() {
 	bool cursorLoaded = false;
 	float clearColor[4] = { 0, 0, 0, 1 };
 
+	int cursorX = -1, cursorY = -1;
+
 	while (flagRunRender.load(std::memory_order_acquire)) {
-		TextureSoftware* newDesktop = desktopImage.exchange(nullptr);
-		if (newDesktop != nullptr) {
+		bool hasNewFrameData = false;
+		FrameData nowFrameData;
+
+		/* lock */ {
+			std::lock_guard lock(frameDataLock);
+
+			while (frameData.size() > 2)
+				frameData.pop_front();
+
+			if (!frameData.empty()) {
+				nowFrameData = std::move(frameData.front());
+				frameData.pop_front();
+				hasNewFrameData = true;
+			}
+		}
+
+		if (hasNewFrameData) {
 			D3D11_MAPPED_SUBRESOURCE mapInfo;
 			context->Map(desktopTex.ptr(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapInfo);
 
 			uint8_t* dstPtr = reinterpret_cast<uint8_t*>(mapInfo.pData);
-			uint8_t* srcPtr = newDesktop->data[0];
+			uint8_t* srcPtr = nowFrameData.desktop.data[0];
 
-			if (mapInfo.RowPitch != newDesktop->linesize[0]) {
+			if (mapInfo.RowPitch != nowFrameData.desktop.linesize[0]) {
 				for (int i = 0; i < height; i++)
-					memcpy(dstPtr + (i * mapInfo.RowPitch), srcPtr + (i * newDesktop->linesize[0]), width * 4);
+					memcpy(dstPtr + (i * mapInfo.RowPitch), srcPtr + (i * nowFrameData.desktop.linesize[0]), width * 4);
 			}
 			else {
 				// Fast path
@@ -270,37 +317,11 @@ void StreamViewerD3D::_renderLoop() {
 			}
 
 			context->Unmap(desktopTex.ptr(), 0);
-			delete newDesktop;
 			desktopLoaded = true;
-		}
 
-		context->ClearRenderTargetView(framebufferRTV.ptr(), clearColor);
-		context->OMSetRenderTargets(1, framebufferRTV.data(), nullptr);
-		context->OMSetBlendState(blendState.ptr(), nullptr, 0xffffffff);
-
-		if (desktopLoaded) {
-			DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
-			swapChain->GetDesc1(&swapChainDesc);
-
-			/* cursorShapeLock */ {
-				std::lock_guard lock(cursorShapeLock);
-				if (hasNewCursorData) {
-					hasNewCursorData = false;
-					cursorLoaded = true;
-					if (cursorTexWidth < cursorWidth || cursorTexHeight < cursorHeight) {
-						cursorTexWidth = cursorTexHeight = std::max(cursorWidth, cursorHeight);
-						_recreateCursorTexture();
-					}
-
-					D3D11_MAPPED_SUBRESOURCE mapInfo = {};
-					context->Map(cursorTex.ptr(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapInfo);
-					uint8_t* pDst = reinterpret_cast<uint8_t*>(mapInfo.pData);
-					uint8_t* pSrc = cursorShapeData.data();
-					memset(pDst, 0, cursorTexHeight * mapInfo.RowPitch);
-					for (int i = 0; i < cursorHeight; i++)
-						memcpy(pDst + (i * mapInfo.RowPitch), pSrc + (i * cursorWidth * 4), cursorWidth * 4);
-					context->Unmap(cursorTex.ptr(), 0);
-				}
+			if (nowFrameData.cursorX != cursorX || nowFrameData.cursorY != cursorY) {
+				cursorX = nowFrameData.cursorX;
+				cursorY = nowFrameData.cursorY;
 
 				D3D11_MAPPED_SUBRESOURCE mapInfo = {};
 				context->Map(cbuffer.ptr(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapInfo);
@@ -311,6 +332,33 @@ void StreamViewerD3D::_renderLoop() {
 				pData[3] = (float)cursorTexHeight / height;
 				context->Unmap(cbuffer.ptr(), 0);
 			}
+
+			if (nowFrameData.cursorDataUpdate != nullptr) {
+				cursorLoaded = true;
+
+				if (cursorTexWidth < nowFrameData.cursorWidth || cursorTexHeight < nowFrameData.cursorHeight) {
+					cursorTexWidth = cursorTexHeight = std::max(nowFrameData.cursorWidth, nowFrameData.cursorHeight);
+					_recreateCursorTexture();
+				}
+
+				D3D11_MAPPED_SUBRESOURCE mapInfo = {};
+				context->Map(cursorTex.ptr(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapInfo);
+				uint8_t* pDst = reinterpret_cast<uint8_t*>(mapInfo.pData);
+				uint8_t* pSrc = nowFrameData.cursorDataUpdate->data();
+				memset(pDst, 0, cursorTexHeight * mapInfo.RowPitch);
+				for (int i = 0; i < nowFrameData.cursorHeight; i++)
+					memcpy(pDst + (i * mapInfo.RowPitch), pSrc + (i * nowFrameData.cursorWidth * 4), nowFrameData.cursorWidth * 4);
+				context->Unmap(cursorTex.ptr(), 0);
+			}
+		}
+
+		context->ClearRenderTargetView(framebufferRTV.ptr(), clearColor);
+		context->OMSetRenderTargets(1, framebufferRTV.data(), nullptr);
+		context->OMSetBlendState(blendState.ptr(), nullptr, 0xffffffff);
+
+		if (desktopLoaded) {
+			DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
+			swapChain->GetDesc1(&swapChainDesc);
 
 			D3D11_VIEWPORT viewport = {
 				0, 0,
@@ -330,7 +378,7 @@ void StreamViewerD3D::_renderLoop() {
 			context->IASetVertexBuffers(0, 1, vertexBuffer.data(), &quadVertexStride, &quadVertexOffset);
 			context->Draw(quadVertexCount, 0);
 
-			if (cursorLoaded && cursorVisible) {
+			if (cursorLoaded && cursorX >= 0) {
 				context->VSSetShader(vertexShaderBox.ptr(), nullptr, 0);
 				context->VSSetConstantBuffers(0, 1, cbuffer.data());
 
@@ -338,8 +386,8 @@ void StreamViewerD3D::_renderLoop() {
 
 				context->IASetInputLayout(inputLayoutBox.ptr());
 				context->IASetVertexBuffers(0, 1, vertexBuffer.data(), &quadVertexStride, &quadVertexOffset);
+				context->Draw(quadVertexCount, 0);
 			}
-			context->Draw(quadVertexCount, 0);
 		}
 
 		swapChain->Present(1, 0);

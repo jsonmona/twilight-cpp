@@ -13,14 +13,21 @@
 #include <thread>
 
 
+struct FrameData {
+	int cursorX, cursorY;
+	TextureSoftware desktop;
+	std::shared_ptr<ByteBuffer> cursorDataUpdate;
+	int cursorWidth, cursorHeight;
+};
+
+
 class StreamViewerD3D : public StreamViewerBase {
 	Q_OBJECT;
 	LoggerPtr log;
 
-	bool cursorVisible = false;
-
 	std::atomic<bool> flagInitialized = false;
 	std::atomic<bool> flagRunRender = false;
+
 	std::thread renderThread;
 
 	DxgiFactory5 dxgiFactory;
@@ -42,13 +49,12 @@ class StreamViewerD3D : public StreamViewerBase {
 	D3D11ShaderResourceView cursorSRV;
 	D3D11BlendState blendState;
 
-	bool hasNewCursorData;
-	int cursorTexWidth, cursorTexHeight;
-
 	std::unique_ptr<DecoderSoftware> decoder;
-	std::atomic<TextureSoftware*> desktopImage = nullptr;
-	int cursorX, cursorY;
 	int width, height;
+	int cursorTexWidth, cursorTexHeight;
+	std::mutex frameDataLock;
+	std::deque<FrameData> frameData;
+	std::deque<FrameData> undecodedFrameData; //FIXME: Assumes dts to increase monotonically
 
 	HWND hwnd() const { return reinterpret_cast<HWND>(winId()); }
 	void _onNewFrame(TextureSoftware&& frame);
@@ -57,6 +63,7 @@ class StreamViewerD3D : public StreamViewerBase {
 	void _renderLoop();
 
 protected:
+	bool useAbsCursor() { return false; }
 	void processNewPacket(const msg::Packet& pkt, uint8_t* extraData) override;
 	void resizeEvent(QResizeEvent* ev) override;
 
