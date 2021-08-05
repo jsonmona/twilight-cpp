@@ -8,6 +8,8 @@
 #include <google/protobuf/io/zero_copy_stream.h>
 #include <google/protobuf/io/coded_stream.h>
 
+#include <condition_variable>
+#include <mutex>
 #include <memory>
 #include <deque>
 
@@ -20,6 +22,7 @@ class NetworkInputStream : public google::protobuf::io::ZeroCopyInputStream {
     LoggerPtr log;
     NetworkSocket* socket;
 
+    std::condition_variable bufferWaitCV;
     std::mutex bufferLock;
     std::deque<ByteBuffer> buf;
     int acquiredSize;

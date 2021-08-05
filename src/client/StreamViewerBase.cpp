@@ -5,6 +5,7 @@
 
 
 StreamViewerBase::StreamViewerBase() : QWidget(),
+	log(createNamedLogger("StreamViewerBase")),
 	hasNewCursorShape(false), cursorWidth(0), cursorHeight(0)
 {
 	setMouseTracking(true);
@@ -24,6 +25,7 @@ bool StreamViewerBase::onNewPacket(const msg::Packet& pkt, uint8_t* extraData) {
 		processNewPacket(pkt, extraData);
 		/* cursorShapeLock */ {
 			std::lock_guard lock(cursorShapeLock);
+
 			hasNewCursorShape = true;
 
 			const msg::CursorShape& cursor = pkt.cursor_shape();

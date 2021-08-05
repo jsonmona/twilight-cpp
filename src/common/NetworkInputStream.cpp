@@ -21,18 +21,26 @@ bool NetworkInputStream::Next(const void** data, int* size) {
 
     ByteBuffer* now = nullptr;
 
-    /* lock_guard */ {
-        std::lock_guard<std::mutex> lock(bufferLock);
-        if (!buf.empty()) {
-            now = &buf.front();
-            if (now->size() <= acquiredSize) {
-                acquiredSize = 0;
-                buf.pop_front();
+    /* unique_lock */ {
+        std::unique_lock<std::mutex> lock(bufferLock);
+        while (now == nullptr) {
+            if (!buf.empty()) {
+                now = &buf.front();
+                if (now->size() <= acquiredSize) {
+                    acquiredSize = 0;
+                    buf.pop_front();
 
-                if (buf.empty())
-                    now = nullptr;
-                else
-                    now = &buf.front();
+                    if (buf.empty())
+                        now = nullptr;
+                    else
+                        now = &buf.front();
+                }
+            }
+
+            if (now == nullptr) {
+                bufferWaitCV.wait_for(lock, std::chrono::milliseconds(125));
+                if (!socket->isConnected())
+                    break;
             }
         }
     }
@@ -42,11 +50,7 @@ bool NetworkInputStream::Next(const void** data, int* size) {
         *size = now->size() - acquiredSize;
         acquiredSize = now->size();
     }
-    else {
-        *data = nullptr;
-        *size = 0;
-    }
-    return true;
+    return (now != nullptr);
 }
 
 void NetworkInputStream::BackUp(int count) {
@@ -69,6 +73,7 @@ void NetworkInputStream::pushData(const uint8_t* data, size_t len) {
     
     std::lock_guard lock(bufferLock);
     buf.emplace_back(std::move(now));
+    bufferWaitCV.notify_one();
 }
 
 std::unique_ptr<CodedInputStream> NetworkInputStream::coded() {
