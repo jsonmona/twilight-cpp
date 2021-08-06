@@ -63,6 +63,8 @@ void StreamServer::_processOutput(CaptureData<ByteBuffer>&& cap) {
 		pkt.set_extra_data_len(cap.desktop->size());
 		_writeOutput(pkt, cap.desktop->data());
 	}
+
+	conn->output().flush();
 }
 
 void StreamServer::_writeOutput(const msg::Packet& pck, const uint8_t* extraData) {
