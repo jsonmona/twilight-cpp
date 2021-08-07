@@ -6,7 +6,8 @@ ScaleSoftware::~ScaleSoftware() {
 }
 
 void ScaleSoftware::reset() {
-	initialized = false;
+	hasTexture = false;
+	dirty = false;
 }
 
 void ScaleSoftware::setInputFormat(int w, int h, AVPixelFormat fmt) {
@@ -30,12 +31,12 @@ void ScaleSoftware::setOutputFormat(int w, int h, AVPixelFormat fmt) {
 void ScaleSoftware::pushInput(TextureSoftware&& tex) {
 	inputTex = std::move(tex);
 
-	initialized = true;
+	hasTexture = true;
 	dirty = true;
 }
 
 TextureSoftware ScaleSoftware::popOutput() {
-	check_quit(!initialized, log, "Used without initialization");
+	check_quit(!hasTexture, log, "Tried to pop output when empty");
 
 	if (dirty)
 		_convert();
@@ -43,10 +44,23 @@ TextureSoftware ScaleSoftware::popOutput() {
 	return outputTex.clone();
 }
 
+TextureSoftware&& ScaleSoftware::moveOutput() {
+	check_quit(!hasTexture, log, "Tried to move output when empty");
+	hasTexture = false;
+
+	if (dirty)
+		_convert();
+
+	return std::move(outputTex.clone());
+}
+
+void ScaleSoftware::flush() {
+	if (dirty)
+		_convert();
+}
+
 void ScaleSoftware::_init() {
 	sws_freeContext(ctx);
-
-	outputTex = TextureSoftware::allocate(outputWidth, outputHeight, outputFormat);
 
 	ctx = sws_getContext(inputWidth, inputHeight, inputFormat,
 		outputWidth, outputHeight, outputFormat,
@@ -54,10 +68,14 @@ void ScaleSoftware::_init() {
 }
 
 void ScaleSoftware::_convert() {
+	dirty = false;
 	setInputFormat(inputTex.width, inputTex.height, inputTex.format);
 
 	if (formatChanged)
 		_init();
+	
+	if(outputTex.allocated == nullptr)
+		outputTex = TextureSoftware::allocate(outputWidth, outputHeight, outputFormat);
 
 	sws_scale(ctx, inputTex.data, inputTex.linesize, 0, inputHeight, outputTex.data, outputTex.linesize);
 }

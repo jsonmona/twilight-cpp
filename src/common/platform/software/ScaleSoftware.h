@@ -13,7 +13,7 @@ extern "C" {
 
 class ScaleSoftware {
 	LoggerPtr log = createNamedLogger("ScaleSoftware");
-	bool initialized = false;
+	bool hasTexture = false;
 	bool formatChanged = false;
 	bool dirty = false;
 
@@ -41,6 +41,9 @@ public:
 
 	void pushInput(TextureSoftware&& tex);
 	TextureSoftware popOutput();
+	TextureSoftware&& moveOutput();
+	
+	void flush();
 };
 
 

@@ -25,12 +25,15 @@ class CapturePipelineD3DSoft : public CapturePipeline {
 
 	D3D11Device device;
 	D3D11DeviceContext context;
+	D3D11Texture2D stageTex;
+	std::shared_ptr<TextureSoftware> lastTex;
 
 	std::chrono::steady_clock::time_point lastPresentTime;
 
 	std::atomic<bool> flagRun;
 	std::thread runThread;
 	
+	D3D11_TEXTURE2D_DESC copyToStageTex_(const D3D11Texture2D& tex);
 	CaptureData<TextureSoftware> _fetchTexture();
 
 public:

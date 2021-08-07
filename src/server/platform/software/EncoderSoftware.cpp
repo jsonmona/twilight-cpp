@@ -38,7 +38,6 @@ void EncoderSoftware::start() {
 	AVDictionary* opts = nullptr;
 	av_dict_set(&opts, "preset", "ultrafast", 0);
 	av_dict_set(&opts, "tune", "zerolatency", 0);
-	av_dict_set(&opts, "x264-params", "intra-refresh=1", 0);
 
 	stat = avcodec_open2(encoderCtx, encoder, &opts);
 	check_quit(stat < 0, log, "Failed to open codec");
