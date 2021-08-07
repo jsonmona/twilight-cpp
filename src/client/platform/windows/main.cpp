@@ -23,8 +23,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 	StreamViewerD3D sv;
 	sc.setOnNextPacket([&](const msg::Packet& pkt, uint8_t* extraData) { sv.onNewPacket(pkt, extraData); });
-	//sc.connect("169.254.28.215");
-	sc.connect("127.0.0.1");
+	sc.connect("192.168.11.129");
 	sv.setFixedSize(QSize(targetWidth, targetHeight));
 	sv.show();
 

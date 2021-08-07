@@ -82,7 +82,7 @@ DeviceManagerD3D::DeviceManagerD3D() : log(createNamedLogger("DeviceManagerD3D")
 	flag |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
 
-	D3D_FEATURE_LEVEL featureLevels[] = { D3D_FEATURE_LEVEL_11_1 };
+	D3D_FEATURE_LEVEL featureLevels[] = { D3D_FEATURE_LEVEL_10_0 };
 	hr = D3D11CreateDevice(adapter.ptr(), D3D_DRIVER_TYPE_UNKNOWN, nullptr, flag,
 		featureLevels, 1, D3D11_SDK_VERSION, device.data(), nullptr, context.data());
 	if (FAILED(hr)) {

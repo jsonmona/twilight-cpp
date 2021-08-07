@@ -181,7 +181,7 @@ if(WIN32)
         get_filename_component(FILE_WE ${FILE} NAME_WE)
         set(FXC_OUTPUT "${CMAKE_BINARY_DIR}/bin/${OUTDIR}/${FILE_WE}-${ENTRY}.fxc")
         add_custom_command(OUTPUT "${FXC_OUTPUT}"
-                           COMMAND ${FXC} /nologo /E "${ENTRY}" /T "${PROFILE}" /Fo "${FXC_OUTPUT}" "${HLSL_PATH}"
+                           COMMAND ${FXC} /nologo /E "${ENTRY}" /T "${PROFILE}_4_0" /Fo "${FXC_OUTPUT}" "${HLSL_PATH}"
                            MAIN_DEPENDENCY "${HLSL_PATH}"
                            COMMENT "Compiling HLSL shader: ${FILE} for ${ENTRY}"
                            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
@@ -189,14 +189,14 @@ if(WIN32)
         list(APPEND FXC_FILES "${FXC_OUTPUT}")
     endmacro()
     
-    fn_add_shader("server" "vs_main" "vs_5_0" "./server/platform/windows/rgb2yuv.hlsl")
-    fn_add_shader("server" "ps_yuv" "ps_5_0" "./server/platform/windows/rgb2yuv.hlsl")
-    fn_add_shader("server" "ps_y" "ps_5_0" "./server/platform/windows/rgb2yuv.hlsl")
-    fn_add_shader("server" "ps_uv" "ps_5_0" "./server/platform/windows/rgb2yuv.hlsl")
-    fn_add_shader("server" "ps_copy" "ps_5_0" "./server/platform/windows/rgb2yuv.hlsl")
-    fn_add_shader("client" "vs_full" "vs_5_0" "./client/platform/windows/viewer.hlsl")
-    fn_add_shader("client" "vs_box" "vs_5_0" "./client/platform/windows/viewer.hlsl")
-    fn_add_shader("client" "ps_main" "ps_5_0" "./client/platform/windows/viewer.hlsl")
+    fn_add_shader("server" "vs_main" "vs" "./server/platform/windows/rgb2yuv.hlsl")
+    fn_add_shader("server" "ps_yuv" "ps" "./server/platform/windows/rgb2yuv.hlsl")
+    fn_add_shader("server" "ps_y" "ps" "./server/platform/windows/rgb2yuv.hlsl")
+    fn_add_shader("server" "ps_uv" "ps" "./server/platform/windows/rgb2yuv.hlsl")
+    fn_add_shader("server" "ps_copy" "ps" "./server/platform/windows/rgb2yuv.hlsl")
+    fn_add_shader("client" "vs_full" "vs" "./client/platform/windows/viewer.hlsl")
+    fn_add_shader("client" "vs_box" "vs" "./client/platform/windows/viewer.hlsl")
+    fn_add_shader("client" "ps_main" "ps" "./client/platform/windows/viewer.hlsl")
     
     add_custom_target(fxc DEPENDS ${FXC_FILES})
 
