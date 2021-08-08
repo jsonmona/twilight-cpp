@@ -290,7 +290,7 @@ void StreamViewerD3D::_renderLoop() {
 		/* lock */ {
 			std::lock_guard lock(frameDataLock);
 
-			while (frameData.size() > 2)
+			while (frameData.size() > 3)
 				frameData.pop_front();
 
 			if (!frameData.empty()) {
