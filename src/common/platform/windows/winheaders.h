@@ -6,9 +6,6 @@
 #define NOMINMAX
 #include <Windows.h>
 
-#include <winsock2.h>
-#include <ws2tcpip.h>
-
 #include <d3d11.h>
 #include <d3d9types.h>
 #include <d3dcompiler.h>
@@ -21,6 +18,10 @@
 #include <icodecapi.h>
 #include <codecapi.h>
 #include <propvarutil.h>
+
+#include <timeapi.h>
+#include <mmdeviceapi.h>
+#include <audioclient.h>
 
 
 #endif

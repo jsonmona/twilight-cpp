@@ -1,5 +1,7 @@
 #include "CaptureD3D.h"
 
+#include "common/platform/windows/winheaders.h"
+
 #include <cassert>
 #include <deque>
 #include <utility>
@@ -19,6 +21,8 @@ void CaptureD3D::start() {
 
 	check_quit(outputDuplication.isValid(), log, "Started without stopping");
 
+	timeBeginPeriod(1);
+
 	firstFrameSent = false;
 	frameAcquired = false;
 
@@ -35,6 +39,8 @@ void CaptureD3D::stop() {
 	}
 
 	outputDuplication.release();
+
+	timeEndPeriod(1);
 }
 
 CaptureData<D3D11Texture2D> CaptureD3D::poll() {

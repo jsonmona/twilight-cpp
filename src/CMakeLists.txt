@@ -103,6 +103,7 @@ target_link_libraries(common PUBLIC
     git-info
     asio mbedtls spdlog::spdlog
     ${FFMPEG_LIBS}
+    "winmm.lib"
 )
 
 add_executable(server ${SERVER_SRC} ${SERVER_WINDOWS_SRC})
@@ -110,7 +111,6 @@ target_link_libraries(server PUBLIC
 	common
 	"dxgi.lib" "d3d11.lib"
 	"mfuuid.lib" "mfplat.lib"
-	"ws2_32.lib"
 )
 set_target_properties(server
     PROPERTIES
