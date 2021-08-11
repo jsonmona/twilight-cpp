@@ -50,6 +50,8 @@ int main() {
 	hr = MFStartup(MF_VERSION, MFSTARTUP_LITE);
 	check_quit(FAILED(hr), log, "Failed to start MediaFoundation");
 
+	setupFFmpegLogs();
+
 	StreamServer stream;
 
 	log->info("Starting daylight streaming server...");

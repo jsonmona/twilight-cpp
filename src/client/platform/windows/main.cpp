@@ -21,6 +21,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	int targetWidth = screenSize.width() * 5 / 6;
 	int targetHeight = screenSize.height() * 5 / 6;
 
+	setupFFmpegLogs();
+
 	StreamViewerD3D sv;
 	sc.setOnNextPacket([&](const msg::Packet& pkt, uint8_t* extraData) { sv.onNewPacket(pkt, extraData); });
 	sc.connect("192.168.11.129");

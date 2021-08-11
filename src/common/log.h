@@ -20,6 +20,9 @@ LoggerPtr getGlobalLogger();
 // Create a named logger and forward it to global logger
 LoggerPtr createNamedLogger(const std::string& name);
 
+// Redirect all ffmepg logs to global logger
+void setupFFmpegLogs();
+
 
 // error_quit
 

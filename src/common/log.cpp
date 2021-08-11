@@ -6,6 +6,12 @@
 #include <spdlog/sinks/msvc_sink.h>
 #include <spdlog/sinks/wincolor_sink.h>
 
+extern "C" {
+#include <libavutil/log.h>
+}
+
+#include <cstdarg>
+
 
 class LogForwardingSink : public spdlog::sinks::base_sink<spdlog::details::null_mutex> {
 	using Super = spdlog::sinks::base_sink<spdlog::details::null_mutex>;
@@ -87,4 +93,41 @@ LoggerPtr createNamedLogger(const std::string& tag) {
 	spdlog::register_logger(ptr);
 
 	return ptr;
+}
+
+static void libav_log_sink(void* _obj, int level, const char* format, va_list vl) {
+	static std::mutex logLock;
+	static char buf[4096] = "";
+
+	auto globalLogger = createNamedLogger("ffmpeg");
+	spdlog::level::level_enum lv;
+	if (level < 0)
+		return;
+	else if (level <= AV_LOG_FATAL)
+		lv = spdlog::level::critical;
+	else if (level <= AV_LOG_ERROR)
+		lv = spdlog::level::err;
+	else if (level <= AV_LOG_WARNING)
+		lv = spdlog::level::warn;
+	else if (level <= AV_LOG_INFO)
+		lv = spdlog::level::info;
+	else if (level <= AV_LOG_VERBOSE)
+		lv = spdlog::level::debug;
+	else
+		return;
+	
+	if (globalLogger->should_log(lv)) {
+		std::lock_guard lock(logLock);
+		int len = vsnprintf(buf, 4095, format, vl);
+
+		// Strip newline
+		while (len > 0 && (buf[len - 1] == '\n' || buf[len - 1] == '\r'))
+			buf[--len] = '\0';
+
+		globalLogger->log(lv, std::string_view(buf, len));
+	}
+}
+
+void setupFFmpegLogs() {
+	av_log_set_callback(libav_log_sink);
 }
