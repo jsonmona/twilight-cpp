@@ -57,6 +57,15 @@ set(ENABLE_TESTING OFF CACHE BOOL "mbedtls build tests" FORCE)
 add_subdirectory(mbedtls EXCLUDE_FROM_ALL)
 
 
+# opus
+
+set(OPUS_BUILD_SHARED_LIBRARY OFF CACHE BOOL "opus build as shared lib" FORCE)
+set(OPUS_BUILD_TESTING OFF CACHE BOOL "opus build tests" FORCE)
+set(OPUS_INSTALL_PKG_CONFIG_MODULE OFF CACHE BOOL "opus install pkgconfig" FORCE)
+set(OPUS_INSTALL_CMAKE_CONFIG_MODULE OFF CACHE BOOL "opus install cmake config" FORCE)
+add_subdirectory(opus EXCLUDE_FROM_ALL)
+
+
 # spdlog
 
 set(SPDLOG_TIDY OFF CACHE BOOL "spdlog clang-tidy" FORCE)

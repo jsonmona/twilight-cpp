@@ -101,7 +101,7 @@ add_library(common STATIC ${COMMON_SRC} ${COMMON_WINDOWS_SRC})
 target_include_directories(common PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(common PUBLIC
     git-info
-    asio mbedtls spdlog::spdlog
+    asio mbedtls opus spdlog::spdlog
     ${FFMPEG_LIBS}
     "winmm.lib"
 )

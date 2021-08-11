@@ -13,3 +13,6 @@
 [submodule "external/imgui"]
 	path = external/imgui
 	url = https://github.com/ocornut/imgui
+[submodule "external/opus"]
+	path = external/opus
+	url = https://github.com/xiph/opus
