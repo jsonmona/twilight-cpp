@@ -24,17 +24,14 @@ void CaptureD3D::start() {
 	timeBeginPeriod(1);
 
 	firstFrameSent = false;
-	frameAcquired = false;
-
-	DXGI_FORMAT supportedFormats[] = { DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM };
-	hr = output->DuplicateOutput1(device.ptr(), 0, 2, supportedFormats, outputDuplication.data());
-	check_quit(FAILED(hr), log, "Failed to duplicate output ({:#x})", hr);
+	openDuplication_();
 }
 
 void CaptureD3D::stop() {
 	if (frameAcquired) {
 		HRESULT hr = outputDuplication->ReleaseFrame();
-		check_quit(FAILED(hr), log, "Failed to release frame ({})", hr);
+		if (hr != DXGI_ERROR_ACCESS_LOST)
+			check_quit(FAILED(hr), log, "Failed to release frame ({})", hr);
 		frameAcquired = false;
 	}
 
@@ -47,10 +44,30 @@ CaptureData<D3D11Texture2D> CaptureD3D::poll() {
 	HRESULT hr;
 	CaptureData<D3D11Texture2D> cap;
 
+	// Access denied (secure desktop, etc.)
+	//TODO: Show black screen instead of last image
+	if (outputDuplication.isInvalid()) {
+		openDuplication_();
+		if (outputDuplication.isInvalid())
+			return cap;
+	}
+
 	if (frameAcquired) {
 		hr = outputDuplication->ReleaseFrame();
-		check_quit(FAILED(hr), log, "Failed to release frame ({})", hr);
+		if (hr == DXGI_ERROR_ACCESS_LOST)
+			openDuplication_();
+		else
+			check_quit(FAILED(hr), log, "Failed to release frame ({})", hr);
 		frameAcquired = false;
+	}
+
+	// Access denied (secure desktop, etc.)
+	//TODO: Show black screen instead of last image
+	//FIXME: And this code block is duplicate of above
+	if (outputDuplication.isInvalid()) {
+		openDuplication_();
+		if (outputDuplication.isInvalid())
+			return cap;
 	}
 
 	DxgiResource desktopResource;
@@ -64,7 +81,7 @@ CaptureData<D3D11Texture2D> CaptureD3D::poll() {
 			D3D11Texture2D rgbTex = desktopResource.castTo<ID3D11Texture2D>();
 			cap.desktop = std::make_shared<D3D11Texture2D>(std::move(rgbTex));
 		}
-		
+
 		if (frameInfo.LastMouseUpdateTime.QuadPart != 0) {
 			cap.cursor = std::make_shared<CursorData>();
 			cap.cursor->visible = frameInfo.PointerPosition.Visible;
@@ -94,11 +111,27 @@ CaptureData<D3D11Texture2D> CaptureD3D::poll() {
 		// ignore
 	}
 	else if (hr == DXGI_ERROR_ACCESS_LOST)
-		error_quit(log, "Needs to recreate output duplication");
+		openDuplication_();
 	else
 		error_quit(log, "Failed to acquire next frame ({})", hr);
 
 	return cap;
+}
+
+void CaptureD3D::openDuplication_() {
+	HRESULT hr;
+
+	if (outputDuplication.isValid())
+		outputDuplication.release();
+
+	frameAcquired = false;
+
+	DXGI_FORMAT supportedFormats[] = { DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM };
+	hr = output->DuplicateOutput1(device.ptr(), 0, 2, supportedFormats, outputDuplication.data());
+	if (hr == E_ACCESSDENIED)
+		Sleep(1);
+	else
+		check_quit(FAILED(hr), log, "Failed to duplicate output ({:#x})", hr);
 }
 
 void CaptureD3D::parseCursor_(CursorShapeData* cursorShape, const DXGI_OUTDUPL_POINTER_SHAPE_INFO& cursorInfo, const std::vector<uint8_t>& buffer) {

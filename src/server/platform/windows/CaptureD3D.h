@@ -25,6 +25,7 @@ class CaptureD3D {
 	D3D11Device device;
 	DxgiOutputDuplication outputDuplication;
 
+	void openDuplication_();
 	void parseCursor_(CursorShapeData* cursorShape, const DXGI_OUTDUPL_POINTER_SHAPE_INFO& cursorInfo, const std::vector<uint8_t>& buffer);
 
 public:
