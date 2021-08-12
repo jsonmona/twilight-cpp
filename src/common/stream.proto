@@ -48,6 +48,11 @@ message CursorShape {
 	float hotspot_y = 5;
 }
 
+// Extra data contains opus audio stream
+message AudioFrame {
+	int32 channels = 1;
+}
+
 message MouseInput {
 	bool is_abs = 1;
 

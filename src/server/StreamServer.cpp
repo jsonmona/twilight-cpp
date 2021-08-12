@@ -8,6 +8,13 @@ StreamServer::StreamServer() :
 {
 	capture = CapturePipeline::createInstance();
 	capture->setOutputCallback([this](CaptureData<ByteBuffer>&& cap) { _processOutput(std::move(cap)); });
+	audioEncoder.setOnAudioData([this](const uint8_t* data, size_t len) {
+		msg::Packet pkt;
+		pkt.set_extra_data_len(len);
+		auto audioFrame = pkt.mutable_audio_frame();
+		audioFrame->set_channels(2);
+		_writeOutput(pkt, data);
+	});
 
 	server.setOnNewConnection([this](std::unique_ptr<NetworkSocket>&& _newSock) {
 		std::unique_ptr<NetworkSocket> newSock = std::move(_newSock);
@@ -19,9 +26,11 @@ StreamServer::StreamServer() :
 
 		conn = std::move(newSock);
 		conn->setOnDisconnected([this]() {
+			audioEncoder.stop();
 			capture->stop();
 		});
 		capture->start();
+		audioEncoder.start();
 	});
 }
 
@@ -68,11 +77,12 @@ void StreamServer::_processOutput(CaptureData<ByteBuffer>&& cap) {
 }
 
 void StreamServer::_writeOutput(const msg::Packet& pck, const uint8_t* extraData) {
+	check_quit(pck.ByteSizeLong() > UINT32_MAX, log, "Packet too large");
 	uint32_t extraDataLen = pck.extra_data_len();
 
-	auto coded = conn->output().coded();
+	std::lock_guard lock(connWriteLock);
 
-	check_quit(pck.ByteSizeLong() > UINT32_MAX, log, "Packet too large");
+	auto coded = conn->output().coded();
 
 	coded->WriteVarint32(static_cast<uint32_t>(pck.ByteSizeLong()));
 	pck.SerializeToCodedStream(coded.get());

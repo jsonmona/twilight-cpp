@@ -7,9 +7,12 @@
 #include "common/log.h"
 #include "common/NetworkServer.h"
 
+#include "server/AudioEncoder.h"
+
 #include <cstdio>
 #include <memory>
 #include <thread>
+#include <mutex>
 #include <atomic>
 
 
@@ -18,6 +21,9 @@ class StreamServer {
 
 	NetworkServer server;
 	std::unique_ptr<NetworkSocket> conn;
+	std::mutex connWriteLock;
+
+	AudioEncoder audioEncoder;
 	
 	std::unique_ptr<CapturePipeline> capture;
 	std::shared_ptr<CursorData> cursorData;

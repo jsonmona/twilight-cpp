@@ -11,5 +11,6 @@ message Packet {
 	oneof msg {
 		DesktopFrame desktop_frame = 2;
 		CursorShape cursor_shape = 3;
+		AudioFrame audio_frame = 4;
 	}
 }

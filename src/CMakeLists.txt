@@ -49,6 +49,9 @@ set(CLIENT_WINDOWS_SRC
 
 set(SERVER_SRC
     ./server/CaptureData.h
+
+    ./server/AudioEncoder.h
+    ./server/AudioEncoder.cpp
     ./server/CapturePipeline.h
     ./server/CapturePipeline.cpp
     ./server/StreamServer.h
@@ -60,6 +63,9 @@ set(SERVER_SRC
 
 set(SERVER_WINDOWS_SRC
     ./server/platform/windows/main.cpp
+    
+    ./server/platform/windows/AudioCaptureWASAPI.h
+    ./server/platform/windows/AudioCaptureWASAPI.cpp
     ./server/platform/windows/CaptureD3D.h
     ./server/platform/windows/CaptureD3D.cpp
     ./server/platform/windows/CapturePipelineD3D.h
