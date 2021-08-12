@@ -15,6 +15,11 @@ target_compile_definitions(asio PUBLIC
 )
 
 
+# cubeb
+
+add_subdirectory(cubeb EXCLUDE_FROM_ALL)
+
+
 # FFmpeg
 
 if(WIN32)

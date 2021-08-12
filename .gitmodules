@@ -16,3 +16,6 @@
 [submodule "external/opus"]
 	path = external/opus
 	url = https://github.com/xiph/opus
+[submodule "external/cubeb"]
+	path = external/cubeb
+	url = https://github.com/mozilla/cubeb
