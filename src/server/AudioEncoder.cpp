@@ -112,6 +112,8 @@ void AudioEncoder::runWorker_() {
 				int stat = opus_encode_float(enc,
 					reinterpret_cast<float*>(buf.data()), frameSize,
 					output.data(), output.size());
+				check_quit(stat < 0, log, "Failed to call opus_encode_float");
+				onAudioData(output.data(), stat);
 			}
 		}
 	}

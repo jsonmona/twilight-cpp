@@ -72,21 +72,27 @@ void StreamServer::_processOutput(CaptureData<ByteBuffer>&& cap) {
 		pkt.set_extra_data_len(cap.desktop->size());
 		_writeOutput(pkt, cap.desktop->data());
 	}
-
-	conn->output().flush();
 }
 
 void StreamServer::_writeOutput(const msg::Packet& pck, const uint8_t* extraData) {
 	check_quit(pck.ByteSizeLong() > UINT32_MAX, log, "Packet too large");
 	uint32_t extraDataLen = pck.extra_data_len();
 
-	std::lock_guard lock(connWriteLock);
+	//FIXME: Ugly code
 
-	auto coded = conn->output().coded();
+	/* lock */ {
+		std::lock_guard lock(connWriteLock);
 
-	coded->WriteVarint32(static_cast<uint32_t>(pck.ByteSizeLong()));
-	pck.SerializeToCodedStream(coded.get());
-	
-	if (extraDataLen > 0)
-		coded->WriteRaw(extraData, extraDataLen);
+		/* coded */ {
+			auto coded = conn->output().coded();
+
+			coded->WriteVarint32(static_cast<uint32_t>(pck.ByteSizeLong()));
+			pck.SerializeToCodedStream(coded.get());
+
+			if (extraDataLen > 0)
+				coded->WriteRaw(extraData, extraDataLen);
+		}
+
+		conn->output().flush();
+	}
 }
