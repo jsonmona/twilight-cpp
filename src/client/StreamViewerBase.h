@@ -7,16 +7,30 @@
 
 #include <packet.pb.h>
 
+#include <opus.h>
+#include <cubeb/cubeb.h>
+
 #include <QtWidgets/qwidget.h>
 
 #include <atomic>
+#include <thread>
 #include <mutex>
+#include <deque>
 
 
 class StreamViewerBase : public QWidget {
 	Q_OBJECT;
 	LoggerPtr log;
 
+	OpusDecoder* dec;
+	std::thread audioThread;
+	std::atomic<bool> flagRunAudio;
+	std::mutex audioFrameLock;
+	std::deque<ByteBuffer> audioFrames;
+
+private:
+	void handleAudioFrame_(const msg::Packet& pkt, uint8_t* extraData);
+	void audioRun_();
 
 protected:
 	virtual bool useAbsCursor() = 0;
