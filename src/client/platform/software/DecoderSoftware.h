@@ -3,6 +3,7 @@
 
 
 #include "common/log.h"
+#include "common/ffmpeg-headers.h"
 
 #include "common/platform/software/TextureSoftware.h"
 #include "common/platform/software/ScaleSoftware.h"
@@ -13,9 +14,6 @@
 #include <memory>
 #include <thread>
 #include <functional>
-
-struct AVCodec;
-struct AVCodecContext;
 
 
 class DecoderSoftware {

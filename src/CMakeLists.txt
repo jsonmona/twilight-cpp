@@ -3,10 +3,11 @@ if(DAYLIGHT_D3D_DEBUG)
 endif()
 
 set(COMMON_SRC
+    ./common/ByteBuffer.h
+    ./common/ffmpeg-headers.h
+    
     ./common/log.h
     ./common/log.cpp
-    ./common/ByteBuffer.h
-
     ./common/NetworkInputStream.h
     ./common/NetworkInputStream.cpp
     ./common/NetworkOutputStream.h

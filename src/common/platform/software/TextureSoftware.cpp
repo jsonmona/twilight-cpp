@@ -2,10 +2,6 @@
 
 #include "common/log.h"
 
-extern "C" {
-#include <libavutil/imgutils.h>
-}
-
 
 TextureSoftware::TextureSoftware() {
 	width = -1;

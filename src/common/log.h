@@ -2,7 +2,16 @@
 #define COMMON_LOG_H_
 
 
+#ifdef _MSC_VER
+#pragma warning (push)
+#pragma warning (disable : 4819)
+#endif
+
 #include <spdlog/spdlog.h>
+
+#ifdef _MSC_VER
+#pragma warning (pop)
+#endif
 
 #include <type_traits>
 #include <string>

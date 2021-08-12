@@ -4,17 +4,11 @@
 
 #include "common/log.h"
 #include "common/ByteBuffer.h"
+#include "common/ffmpeg-headers.h"
 
 #include "common/platform/software/TextureSoftware.h"
 
 #include "server/CaptureData.h"
-
-extern "C" {
-#include <libavutil/opt.h>
-#include <libavutil/imgutils.h>
-#include <libavcodec/avcodec.h>
-#include <libswscale/swscale.h>
-}
 
 
 class EncoderSoftware {

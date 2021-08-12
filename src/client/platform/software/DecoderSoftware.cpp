@@ -1,13 +1,6 @@
 #include "DecoderSoftware.h"
 
 
-extern "C" {
-	#include <libavcodec/avcodec.h>
-	#include <libavutil/avutil.h>
-	#include <libswscale/swscale.h>
-}
-
-
 struct DecoderSoftware::EncodedData {
 	uint8_t* data;
 	size_t len;

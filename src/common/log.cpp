@@ -1,14 +1,12 @@
 #include "log.h"
 
+#include "common/ffmpeg-headers.h"
+
 #include <spdlog/pattern_formatter.h>
 
 #include <spdlog/sinks/base_sink.h>
 #include <spdlog/sinks/msvc_sink.h>
 #include <spdlog/sinks/wincolor_sink.h>
-
-extern "C" {
-#include <libavutil/log.h>
-}
 
 #include <cstdarg>
 

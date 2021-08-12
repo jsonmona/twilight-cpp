@@ -4,12 +4,9 @@
 
 #include "common/log.h"
 #include "common/ByteBuffer.h"
+#include "common/ffmpeg-headers.h"
 
 #include "common/platform/windows/ComWrapper.h"
-
-extern "C" {
-#include <libavutil/samplefmt.h>
-}
 
 #include <thread>
 #include <atomic>

@@ -4,12 +4,9 @@
 
 #include "common/log.h"
 #include "common/ByteBuffer.h"
+#include "common/ffmpeg-headers.h"
 
 #include "server/platform/windows/AudioCaptureWASAPI.h"
-
-extern "C" {
-#include <libswresample/swresample.h>
-}
 
 #include <opus.h>
 

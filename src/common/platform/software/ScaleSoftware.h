@@ -3,12 +3,9 @@
 
 
 #include "common/log.h"
+#include "common/ffmpeg-headers.h"
 
 #include "TextureSoftware.h"
-
-extern "C" {
-#include <libswscale/swscale.h>
-}
 
 
 class ScaleSoftware {

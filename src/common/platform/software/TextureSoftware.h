@@ -2,11 +2,10 @@
 #define SERVER_PLATFORM_SOFTWARE_TEXTURE_SOFTWARE_H_
 
 
+#include "common/ffmpeg-headers.h"
+
 #include <memory>
 
-extern "C" {
-#include <libavcodec/avcodec.h>
-}
 
 struct TextureSoftware {
 	int width, height;

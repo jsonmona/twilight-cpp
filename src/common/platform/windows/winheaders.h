@@ -2,8 +2,13 @@
 #define COMMON_PLATFORM_WINDOWS_WINHEADERS_H_
 
 
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
+
 #include <Windows.h>
 
 #include <d3d11.h>
