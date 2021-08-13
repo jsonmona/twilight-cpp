@@ -18,8 +18,11 @@ NetworkSocket::NetworkSocket(asio::ip::tcp::socket&& _sock) :
 }
 
 NetworkSocket::~NetworkSocket() {
-	check_quit(isConnected(), log, "Being destroyed while connected");
-	recvThread.join();
+	if (recvThread.joinable() || isConnected()) {
+		log->warn("Socket deconstructed in inconsistent state");
+		if(recvThread.joinable())
+			recvThread.join();
+	}
 }
 
 bool NetworkSocket::connect(const char* addr, uint16_t port) {
@@ -43,6 +46,14 @@ bool NetworkSocket::connect(const char* addr, uint16_t port) {
 	reportConnected();
 
 	return true;
+}
+
+void NetworkSocket::disconnect() {
+	asio::error_code err;
+	sock.close(err);
+	if (err)
+		log->warn("Error while disconnecting socket: {}", err.message());
+	recvThread.join();
 }
 
 void NetworkSocket::reportConnected() {

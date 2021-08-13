@@ -37,6 +37,11 @@ void NetworkServer::startListen(uint16_t port) {
 }
 
 void NetworkServer::stopListen() {
+	asio::error_code err;
+	acceptor.close(err);
+	if (err)
+		log->warn("Error while closeing acceptor: {}", err.message());
+
 	flagListen.store(false, std::memory_order_release);
 	listenThread.join();
 }

@@ -43,6 +43,9 @@ void StreamServer::start() {
 
 void StreamServer::stop() {
 	server.stopListen();
+
+	if (conn != nullptr)
+		conn->disconnect();
 }
 
 void StreamServer::_processOutput(CaptureData<ByteBuffer>&& cap) {

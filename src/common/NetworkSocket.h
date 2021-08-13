@@ -42,6 +42,8 @@ public:
 	bool connect(const char* addr, uint16_t port);
 	bool isConnected() { return connected.load(std::memory_order_acquire); }
 
+	void disconnect();
+
 	NetworkInputStream& input() { return nin; }
 	NetworkOutputStream& output() { return nout; }
 
