@@ -35,7 +35,7 @@ public:
 	void start();
 	void stop();
 
-	CaptureData<D3D11Texture2D> poll();
+	CaptureData<D3D11Texture2D> poll(std::chrono::milliseconds awaitTime);
 };
 
 

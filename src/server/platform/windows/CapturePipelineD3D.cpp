@@ -45,8 +45,6 @@ void CapturePipelineD3D::run_() {
 	hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 	check_quit(hr != S_OK, log, "Failed to initialize COM");
 
-	bool firstFrameReceived = false;
-
 	const double maxDriftRatio = 0.0001;
 	const int maxPrevTicks = 60;
 	const std::chrono::nanoseconds encodeTicks = std::chrono::nanoseconds(1'000'000'000 / 60);
@@ -54,23 +52,25 @@ void CapturePipelineD3D::run_() {
 	auto oldTime = std::chrono::steady_clock::now();
 
 	while (flagRun.load(std::memory_order_acquire)) {
-		/* poll capture */ {
-			firstFrameReceived = true;
-
-			auto now = capture.poll();
+		bool firstLoop = true;
+		auto nowTime = std::chrono::steady_clock::now();
+		while(firstLoop || nowTime - oldTime < encodeTicks) {
+			firstLoop = false;
+			auto awaitTime = encodeTicks - (nowTime - oldTime);
+			auto awaitTimeMillis = std::chrono::duration_cast<std::chrono::milliseconds>(awaitTime) - std::chrono::milliseconds(1);
+			auto now = capture.poll(awaitTimeMillis);
 			if (now.desktop)
 				scale->pushInput(*now.desktop);
 			if (now.cursor)
 				lastCursor = std::move(now.cursor);
 			if (now.cursorShape)
 				lastCursorShape = std::move(now.cursorShape);
+
+			nowTime = std::chrono::steady_clock::now();
 		}
 
-		auto nowTime = std::chrono::steady_clock::now();
-		if (firstFrameReceived && (nowTime - oldTime) >= encodeTicks) {
-			oldTime = nowTime;
-			encoder.poll();
-		}
+		oldTime = nowTime;
+		encoder.poll();
 	}
 
 	CoUninitialize();

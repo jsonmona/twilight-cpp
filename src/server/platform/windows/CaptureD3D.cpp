@@ -40,7 +40,7 @@ void CaptureD3D::stop() {
 	timeEndPeriod(1);
 }
 
-CaptureData<D3D11Texture2D> CaptureD3D::poll() {
+CaptureData<D3D11Texture2D> CaptureD3D::poll(std::chrono::milliseconds awaitTime) {
 	HRESULT hr;
 	CaptureData<D3D11Texture2D> cap;
 
@@ -70,9 +70,10 @@ CaptureData<D3D11Texture2D> CaptureD3D::poll() {
 			return cap;
 	}
 
+	UINT timeoutMillis = std::min<long long>(std::numeric_limits<UINT>::max(), std::max<long long>(0, awaitTime.count()));
 	DxgiResource desktopResource;
 	DXGI_OUTDUPL_FRAME_INFO frameInfo;
-	hr = outputDuplication->AcquireNextFrame(0, &frameInfo, desktopResource.data());
+	hr = outputDuplication->AcquireNextFrame(timeoutMillis, &frameInfo, desktopResource.data());
 	if (SUCCEEDED(hr)) {
 		frameAcquired = true;
 

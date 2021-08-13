@@ -88,14 +88,28 @@ D3D11_TEXTURE2D_DESC CapturePipelineD3DSoft::copyToStageTex_(const D3D11Texture2
 }
 
 CaptureData<TextureSoftware> CapturePipelineD3DSoft::_fetchTexture() {
+	CaptureData<D3D11Texture2D> cap;
+
+	bool firstLoop = true;
+
+	auto encodeTicks = std::chrono::nanoseconds(1'000'000'000 / 60);
 	auto nowTime = std::chrono::steady_clock::now();
-	while (nowTime - lastPresentTime < std::chrono::nanoseconds(1'000'000'000 / 60)) {
-		Sleep(0);
+	while (firstLoop || nowTime - lastPresentTime < encodeTicks) {
+		firstLoop = false;
+		auto awaitTime = encodeTicks - (nowTime - lastPresentTime);
+		auto awaitTimeMillis = std::chrono::duration_cast<std::chrono::milliseconds>(awaitTime) - std::chrono::milliseconds(1);
+		auto now = capture.poll(awaitTimeMillis);
+
+		if (now.desktop)
+			cap.desktop = std::move(now.desktop);
+		if (now.cursor)
+			cap.cursor = std::move(now.cursor);
+		if (now.cursorShape)
+			cap.cursorShape = std::move(now.cursorShape);
+
 		nowTime = std::chrono::steady_clock::now();
 	}
 	lastPresentTime = nowTime;
-
-	CaptureData<D3D11Texture2D> cap = capture.poll();
 
 	if (cap.desktop) {
 		D3D11_TEXTURE2D_DESC desc = copyToStageTex_(*cap.desktop);
