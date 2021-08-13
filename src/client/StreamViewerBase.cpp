@@ -1,5 +1,6 @@
 #include "StreamViewerBase.h"
 
+#include "common/RingBuffer.h"
 #include "common/platform/windows/winheaders.h"
 
 #include <packet.pb.h>
@@ -19,6 +20,8 @@ StreamViewerBase::StreamViewerBase() : QWidget(),
 }
 
 StreamViewerBase::~StreamViewerBase() {
+	flagRunAudio.store(false, std::memory_order_relaxed);
+	audioFrameCV.notify_all();
 }
 
 bool StreamViewerBase::onNewPacket(const msg::Packet& pkt, uint8_t* extraData) {
@@ -57,37 +60,30 @@ void StreamViewerBase::handleAudioFrame_(const msg::Packet& pkt, uint8_t* extraD
 
 	std::lock_guard lock(audioFrameLock);
 	audioFrames.push_back(std::move(now));
+	audioFrameCV.notify_one();
 }
 
 struct CubebUserData {
 	LoggerPtr log;
 	std::mutex dataLock;
-	std::deque<float> data;
+	RingBuffer<float, 5760 * 4> data;
 };
-
-constexpr int DATA_LEN = 4 * 5760 * 2;
 
 static long data_cb(cubeb_stream* stm, void* user, const void* input_buffer, void* output_buffer, long nframes) {
 	CubebUserData* self = reinterpret_cast<CubebUserData*>(user);
 
 	float* p = reinterpret_cast<float*>(output_buffer);
 
-	int idx = 0;
+	int requestedLength = nframes * 2;
+	int readAmount;
 	/* lock */ {
 		std::lock_guard lock(self->dataLock);
-		auto itr = self->data.begin();
-		auto end = self->data.end();
-		while (itr != end) {
-			p[idx++] = *itr;
-			++itr;
-			if (idx == nframes * 2)
-				break;
-		}
-		self->data.erase(self->data.begin(), itr);
+		readAmount = std::min<int>(requestedLength, self->data.size());
+		self->data.read(reinterpret_cast<float*>(output_buffer), readAmount);
 	}
 
-	if(idx < nframes * 2)
-		memset(p + idx, 0, (nframes * 2 - idx) * sizeof(float));
+	if(readAmount < requestedLength)
+		memset(p + readAmount, 0, (requestedLength - readAmount) * sizeof(float));
 
 	return nframes;
 }
@@ -133,28 +129,31 @@ void StreamViewerBase::audioRun_() {
 	stat = cubeb_stream_start(stm);
 	check_quit(stat != CUBEB_OK, log, "Failed to start cubeb stream");
 
-	while (flagRunAudio.load(std::memory_order_acquire)) {
-		bool hasNewFrame = false;
+	while (flagRunAudio.load(std::memory_order_relaxed)) {
 		ByteBuffer nowFrame;
 
 		/* lock */ {
-			std::lock_guard lock(audioFrameLock);
-			if (!audioFrames.empty()) {
-				hasNewFrame = true;
-				nowFrame = std::move(audioFrames.front());
-				audioFrames.pop_front();
-			}
+			std::unique_lock lock(audioFrameLock);
+
+			while (audioFrames.empty() && flagRunAudio.load(std::memory_order_relaxed))
+				audioFrameCV.wait(lock);
+			
+			nowFrame = std::move(audioFrames.front());
+			audioFrames.pop_front();
 		}
 
-		if (hasNewFrame) {
-			float pcm[5760 * 2];
-			stat = opus_decode_float(dec, nowFrame.data(), nowFrame.size(), pcm, 5760, 0);
-			check_quit(stat < 0, log, "Failed to decode opus stream");
-			int decodedFrames = stat;
+		if (!flagRunAudio.load(std::memory_order_relaxed))
+			break;
 
-			std::lock_guard lock(self->dataLock);
-			self->data.insert(self->data.end(), pcm, pcm + (decodedFrames * 2));
-		}
+		float pcm[5760 * 2];
+		stat = opus_decode_float(dec, nowFrame.data(), nowFrame.size(), pcm, 5760, 0);
+		check_quit(stat < 0, log, "Failed to decode opus stream");
+		int decodedFrames = stat;
+
+		std::lock_guard lock(self->dataLock);
+		if (self->data.available() < decodedFrames * 2)
+			self->data.drop(decodedFrames * 2 - self->data.available());
+		self->data.write(pcm, decodedFrames * 2);
 	}
 
 	stat = cubeb_stream_stop(stm);

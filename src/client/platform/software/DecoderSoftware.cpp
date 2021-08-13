@@ -45,38 +45,41 @@ void DecoderSoftware::_run() {
 		}
 
 		/* lock_guard */ {
+			std::unique_lock<std::mutex> lock(decoderQueueMutex);
+
+			while (decoderQueue.empty() && flagRun.load(std::memory_order_relaxed))
+				decoderQueueCV.wait(lock);
+
+			data = std::move(decoderQueue.front());
+			decoderQueue.pop_front();
+		}
+
+		if (!flagRun.load(std::memory_order_relaxed))
+			break;
+
+		av_packet_unref(pkt);
+		pkt->buf = nullptr;
+		pkt->data = data->data;
+		pkt->size = data->len;
+		pkt->dts = AV_NOPTS_VALUE;
+		pkt->pts = AV_NOPTS_VALUE;
+		//pkt->flags = AV_PKT_FLAG_KEY;
+		pkt->flags = 0;
+
+		stat = avcodec_send_packet(codecCtx, pkt);
+
+		if (stat == AVERROR(EAGAIN)) {
 			std::lock_guard<std::mutex> lock(decoderQueueMutex);
-			if (!decoderQueue.empty()) {
-				data = std::move(decoderQueue.front());
-				decoderQueue.pop_front();
-			}
+			decoderQueue.emplace_front(std::move(data));
 		}
+		else
+			av_free(data->data);
 
-		if (data != nullptr) {
-			av_packet_unref(pkt);
-			pkt->buf = nullptr;
-			pkt->data = data->data;
-			pkt->size = data->len;
-			pkt->dts = AV_NOPTS_VALUE;
-			pkt->pts = AV_NOPTS_VALUE;
-			//pkt->flags = AV_PKT_FLAG_KEY;
-			pkt->flags = 0;
-
-			stat = avcodec_send_packet(codecCtx, pkt);
-
-			if (stat == AVERROR(EAGAIN)) {
-				std::lock_guard<std::mutex> lock(decoderQueueMutex);
-				decoderQueue.emplace_front(std::move(data));
-			}
-			else
-				av_free(data->data);
-
-			if (stat == AVERROR_EOF)
-				break;
-			else if (stat == AVERROR(EAGAIN)) {}
-			else if (stat < 0)
-				error_quit(log, "Unknown error from avcoded_send_packet: {}", stat);
-		}
+		if (stat == AVERROR_EOF)
+			break;
+		else if (stat == AVERROR(EAGAIN)) {}
+		else if (stat < 0)
+			error_quit(log, "Unknown error from avcoded_send_packet: {}", stat);
 	}
 
 	av_packet_free(&pkt);
@@ -92,6 +95,7 @@ void DecoderSoftware::pushData(uint8_t* data, size_t len) {
 
 	std::lock_guard<std::mutex> lock(decoderQueueMutex);
 	decoderQueue.emplace_back(std::make_unique<EncodedData>(EncodedData{ paddedData, len }));
+	decoderQueueCV.notify_one();
 }
 
 void DecoderSoftware::start() {
@@ -113,6 +117,7 @@ void DecoderSoftware::start() {
 
 void DecoderSoftware::stop() {
 	flagRun.store(false, std::memory_order_release);
+	decoderQueueCV.notify_all();
 	looper.join();
 
 	avcodec_free_context(&codecCtx);

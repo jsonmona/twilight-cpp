@@ -4,6 +4,7 @@
 
 #include "common/log.h"
 #include "common/ByteBuffer.h"
+#include "common/util.h"
 
 #include <packet.pb.h>
 
@@ -26,6 +27,7 @@ class StreamViewerBase : public QWidget {
 	std::thread audioThread;
 	std::atomic<bool> flagRunAudio;
 	std::mutex audioFrameLock;
+	std::condition_variable audioFrameCV;
 	std::deque<ByteBuffer> audioFrames;
 
 private:

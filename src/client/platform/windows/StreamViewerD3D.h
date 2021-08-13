@@ -52,7 +52,7 @@ class StreamViewerD3D : public StreamViewerBase {
 	std::unique_ptr<DecoderSoftware> decoder;
 	int width, height;
 	int cursorTexWidth, cursorTexHeight;
-	std::mutex frameDataLock;
+	spinlock frameDataLock;
 	std::deque<FrameData> frameData;
 	std::deque<FrameData> undecodedFrameData; //FIXME: Assumes dts to increase monotonically
 

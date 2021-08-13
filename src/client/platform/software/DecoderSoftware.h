@@ -30,6 +30,7 @@ class DecoderSoftware {
 
 	struct EncodedData;
 	std::mutex decoderQueueMutex;
+	std::condition_variable decoderQueueCV;
 	std::deque<std::unique_ptr<EncodedData>> decoderQueue;
 
 	void _run();
