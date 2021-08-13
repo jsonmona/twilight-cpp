@@ -5,6 +5,8 @@ endif()
 set(COMMON_SRC
     ./common/ByteBuffer.h
     ./common/ffmpeg-headers.h
+    ./common/RingBuffer.h
+    ./common/util.h
     
     ./common/log.h
     ./common/log.cpp
