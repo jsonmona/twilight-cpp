@@ -18,11 +18,14 @@ NetworkSocket::NetworkSocket(asio::ip::tcp::socket&& _sock) :
 }
 
 NetworkSocket::~NetworkSocket() {
-	if (recvThread.joinable() || isConnected()) {
-		log->warn("Socket deconstructed in inconsistent state");
-		if(recvThread.joinable())
-			recvThread.join();
+	if (isConnected()) {
+		log->warn("Socket deconstructed while connected");
+		disconnect();
 	}
+
+	// The thread probably is ended but not joined
+	if (recvThread.joinable())
+		recvThread.join();
 }
 
 bool NetworkSocket::connect(const char* addr, uint16_t port) {
