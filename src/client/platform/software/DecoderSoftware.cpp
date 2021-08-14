@@ -50,6 +50,9 @@ void DecoderSoftware::_run() {
 			while (decoderQueue.empty() && flagRun.load(std::memory_order_relaxed))
 				decoderQueueCV.wait(lock);
 
+			if (!flagRun.load(std::memory_order_relaxed))
+				break;
+
 			data = std::move(decoderQueue.front());
 			decoderQueue.pop_front();
 		}

@@ -6,13 +6,15 @@
 NetworkSocket::NetworkSocket() :
 	log(createNamedLogger("NetworkSocket")),
 	nin(this), nout(this), connected(false),
-	sock(ioCtx)
+	sock(ioCtx),
+	onDisconnected([](){})
 {}
 
 NetworkSocket::NetworkSocket(asio::ip::tcp::socket&& _sock) :
 	log(createNamedLogger("NetworkSocket")),
 	nin(this), nout(this), connected(true),
-	sock(std::move(_sock))
+	sock(std::move(_sock)),
+	onDisconnected([]() {})
 {
 	reportConnected();
 }

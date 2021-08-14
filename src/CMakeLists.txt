@@ -38,6 +38,8 @@ set(CLIENT_SRC
     ./client/StreamClient.cpp
     ./client/StreamViewerBase.h
     ./client/StreamViewerBase.cpp
+    ./client/StreamWindow.h
+    ./client/StreamWindow.cpp
 
     ./client/platform/software/DecoderSoftware.h
     ./client/platform/software/DecoderSoftware.cpp

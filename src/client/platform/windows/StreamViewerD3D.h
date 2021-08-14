@@ -3,6 +3,8 @@
 
 
 #include "common/log.h"
+#include "common/ByteBuffer.h"
+#include "common/util.h"
 #include "common/platform/windows/ComWrapper.h"
 
 #include "client/StreamViewerBase.h"
@@ -64,7 +66,7 @@ class StreamViewerD3D : public StreamViewerBase {
 
 protected:
 	bool useAbsCursor() { return false; }
-	void processNewPacket(const msg::Packet& pkt, uint8_t* extraData) override;
+	bool processNewPacket(const msg::Packet& pkt, uint8_t* extraData) override;
 	void resizeEvent(QResizeEvent* ev) override;
 
 public:

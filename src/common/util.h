@@ -21,6 +21,7 @@ template<typename T,
 }
 
 
+#if defined(ATOMIC_BOOL_LOCK_FREE) && ATOMIC_BOOL_LOCK_FREE >= 1
 class spinlock {
 public:
 	spinlock() : af(false) {}
@@ -54,6 +55,33 @@ public:
 private:
 	std::atomic<bool> af;
 };
+#else
+class spinlock {
+public:
+	spinlock() {}
+	spinlock(const spinlock& copy) = delete;
+	spinlock(spinlock&& move) = delete;
+
+	spinlock& operator=(const spinlock& copy) = delete;
+	spinlock&& operator=(spinlock&& move) = delete;
+
+	void lock() noexcept {
+		while (af.test_and_set(std::memory_order_acquire))
+			_mm_pause();
+	}
+
+	bool try_lock() noexcept {
+		return !af.test_and_set(std::memory_order_acquire);
+	}
+
+	void unlock() noexcept {
+		af.clear(std::memory_order_release);
+	}
+
+private:
+	std::atomic_flag af = ATOMIC_FLAG_INIT;
+};
+#endif
 
 
 #endif

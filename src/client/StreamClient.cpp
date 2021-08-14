@@ -19,8 +19,7 @@ void StreamClient::connect(const char* addr) {
 }
 
 void StreamClient::disconnect() {
-    log->warn("STUB: disconnect()");
-    //conn.disconnect();
+    conn.disconnect();
     recvThread.join();
 }
 
@@ -31,6 +30,8 @@ void StreamClient::_runRecv() {
 
     while (true) {
         auto coded = conn.input().coded();
+        if (!conn.isConnected())
+            break;
 
         auto limit = coded->ReadLengthAndPushLimit();
 

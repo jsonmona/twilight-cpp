@@ -54,6 +54,7 @@ StreamViewerD3D::StreamViewerD3D() :
 }
 
 StreamViewerD3D::~StreamViewerD3D() {
+	log->info("Stopping!!!");
 	decoder->stop();
 
 	flagRunRender.store(false, std::memory_order_release);
@@ -69,7 +70,7 @@ void StreamViewerD3D::resizeEvent(QResizeEvent* ev) {
 	}
 }
 
-void StreamViewerD3D::processNewPacket(const msg::Packet& pkt, uint8_t* extraData) {
+bool StreamViewerD3D::processNewPacket(const msg::Packet& pkt, uint8_t* extraData) {
 	while (!flagRunRender.load(std::memory_order_acquire))
 		Sleep(0);
 
@@ -113,7 +114,9 @@ void StreamViewerD3D::processNewPacket(const msg::Packet& pkt, uint8_t* extraDat
 		break;
 	default:
 		log->error("processNewPacket received unknown packet type: {}", pkt.msg_case());
+		return false;
 	}
+	return true;
 }
 
 void StreamViewerD3D::_init() {
@@ -290,7 +293,7 @@ void StreamViewerD3D::_renderLoop() {
 		/* lock */ {
 			std::lock_guard lock(frameDataLock);
 
-			while (frameData.size() > 3)
+			while (frameData.size() > 30)
 				frameData.pop_front();
 
 			if (!frameData.empty()) {
