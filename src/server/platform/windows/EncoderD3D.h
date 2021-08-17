@@ -19,30 +19,31 @@
 class EncoderD3D {
 	LoggerPtr log;
 
+	std::atomic<bool> flagWaitingInput;
 	int width, height;
+	long long frameCnt;
 
-	std::function<CaptureData<D3D11Texture2D>()> onFrameRequest;
 	std::function<void(CaptureData<ByteBuffer>&&)> onDataAvailable;
 
 	std::deque<CaptureData<long long>> extraData;
 
 	MFDxgiDeviceManager mfDeviceManager;
 	MFTransform encoder;
-	MFMediaEventGenerator eventGen;
 	DWORD inputStreamId, outputStreamId;
 
-	void _init();
-	void _run();
+	std::thread workerThread;
+	std::mutex dataPushLock;
+	std::condition_variable dataPushCV;
 
-	void _pushEncoderTexture(const D3D11Texture2D& tex, long long sampleDur, long long sampleTime);
-	ByteBuffer _popEncoderData(long long* sampleTime);
+	void init_();
+	void run_();
+
+	void pushEncoderTexture_(const D3D11Texture2D& tex, long long sampleDur, long long sampleTime);
+	ByteBuffer popEncoderData_(long long* sampleTime);
 
 public:
 	EncoderD3D(DeviceManagerD3D _devs, int _width, int _height);
 	~EncoderD3D();
-
-	template<typename Fn>
-	void setOnFrameRequest(Fn fn) { onFrameRequest = std::move(fn); }
 
 	template<typename Fn>
 	void setOnDataAvailable(Fn fn) { onDataAvailable = std::move(fn); }
@@ -50,7 +51,7 @@ public:
 	void start();
 	void stop();
 
-	void poll();
+	void pushData(CaptureData<D3D11Texture2D>&& cap);
 };
 
 

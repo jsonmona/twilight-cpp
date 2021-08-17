@@ -34,7 +34,7 @@ class CapturePipelineD3DSoft : public CapturePipeline {
 	std::thread runThread;
 	
 	D3D11_TEXTURE2D_DESC copyToStageTex_(const D3D11Texture2D& tex);
-	CaptureData<TextureSoftware> _fetchTexture();
+	void captureNextFrame_(CaptureData<D3D11Texture2D>&& cap);
 
 public:
 	CapturePipelineD3DSoft(DeviceManagerD3D _devs, int w, int h, ScaleType type);

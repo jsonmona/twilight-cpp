@@ -38,16 +38,31 @@ void EncoderSoftware::start() {
 	AVDictionary* opts = nullptr;
 	av_dict_set(&opts, "preset", "ultrafast", 0);
 	av_dict_set(&opts, "tune", "zerolatency", 0);
+	av_dict_set(&opts, "x264-params", "keyint=infinite", 0);
 
 	stat = avcodec_open2(encoderCtx, encoder, &opts);
 	check_quit(stat < 0, log, "Failed to open codec");
 
-	runFlag.store(true, std::memory_order_release);
+	if (av_dict_count(opts) > 0) {
+		std::string buf;
+		AVDictionaryEntry* entry = av_dict_get(opts, "", nullptr, AV_DICT_IGNORE_SUFFIX);
+		while (entry != nullptr) {
+			buf += entry->key;
+			buf += "=";
+			buf += entry->value;
+			buf += " ";
+			entry = av_dict_get(opts, "", entry, AV_DICT_IGNORE_SUFFIX);
+		}
+		log->warn("libx264 ignored some options: {}", buf);
+	}
+	av_dict_free(&opts);
+
+	flagRun.store(true, std::memory_order_release);
 	runThread = std::thread([this]() { _run(); });
 }
 
 void EncoderSoftware::stop() {
-	runFlag.store(false, std::memory_order_release);
+	flagRun.store(false, std::memory_order_release);
 	runThread.join();
 
 	avcodec_free_context(&encoderCtx);
@@ -67,7 +82,7 @@ void EncoderSoftware::_run() {
 	int lastCursorX, lastCursorY;
 
 	while (true) {
-		if (!runFlag.load(std::memory_order_acquire))
+		if (!flagRun.load(std::memory_order_acquire))
 			avcodec_send_frame(encoderCtx, nullptr);
 
 		stat = avcodec_receive_packet(encoderCtx, pkt);
@@ -99,7 +114,23 @@ void EncoderSoftware::_run() {
 		else if (stat == AVERROR(EAGAIN)) {
 			av_frame_unref(frame);
 
-			CaptureData<TextureSoftware> cap = onFrameRequest();
+			CaptureData<TextureSoftware> cap;
+
+			/* lock */ {
+				std::unique_lock lock(dataLock);
+				while (dataQueue.empty() && flagRun.load(std::memory_order_relaxed))
+					dataCV.wait(lock);
+
+				if (!flagRun.load(std::memory_order_relaxed))
+					continue;
+
+				if (dataQueue.size() > 50)
+					log->warn("High number of pending textures for encoder ({}). Is encoder overloaded?", dataQueue.size());
+
+				cap = std::move(dataQueue.front());
+				dataQueue.pop_front();
+			}
+
 			check_quit(cap.desktop == nullptr, log, "Texture should've been duplicated by now");
 
 			// Data gets freed when cap is deleted.
@@ -136,4 +167,10 @@ void EncoderSoftware::_run() {
 
 	av_packet_free(&pkt);
 	av_frame_free(&frame);
+}
+
+void EncoderSoftware::pushData(CaptureData<TextureSoftware>&& newData) {
+	std::lock_guard lock(dataLock);
+	dataQueue.push_back(std::move(newData));
+	dataCV.notify_one();
 }

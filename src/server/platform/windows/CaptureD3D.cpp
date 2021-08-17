@@ -7,27 +7,48 @@
 #include <utility>
 
 
+static long long getPerformanceFreqency() {
+	static_assert(sizeof(LARGE_INTEGER::QuadPart) == sizeof(long long), "long long must be compatible with QuadPart");
+
+	LARGE_INTEGER a;
+	QueryPerformanceFrequency(&a);
+	return a.QuadPart;
+}
+
+static long long getPerformanceCounter() {
+	LARGE_INTEGER a;
+	QueryPerformanceCounter(&a);
+	return a.QuadPart;
+}
+
+
 CaptureD3D::CaptureD3D(DeviceManagerD3D _devs) :
 	log(createNamedLogger("CaptureD3D")),
 	output(_devs.output), device(_devs.device)
 {
+	perfCounterFreq = getPerformanceFreqency();
 }
 
 CaptureD3D::~CaptureD3D() {
 }
 
-void CaptureD3D::start() {
+void CaptureD3D::start(int fps) {
 	HRESULT hr;
 
 	check_quit(outputDuplication.isValid(), log, "Started without stopping");
 
-	timeBeginPeriod(1);
+	timeBeginPeriod(2);
 
+	this->fps = fps;
 	firstFrameSent = false;
-	openDuplication_();
+	flagRun.store(true, std::memory_order_release);
+	runThread = std::thread([this]() { run_(); });
 }
 
 void CaptureD3D::stop() {
+	flagRun.store(false, std::memory_order_relaxed);
+	runThread.join();
+
 	if (frameAcquired) {
 		HRESULT hr = outputDuplication->ReleaseFrame();
 		if (hr != DXGI_ERROR_ACCESS_LOST)
@@ -37,43 +58,100 @@ void CaptureD3D::stop() {
 
 	outputDuplication.release();
 
-	timeEndPeriod(1);
+	timeEndPeriod(2);
 }
 
-CaptureData<D3D11Texture2D> CaptureD3D::poll(std::chrono::milliseconds awaitTime) {
+bool CaptureD3D::tryReleaseFrame_() {
 	HRESULT hr;
+
+	if (outputDuplication.isInvalid() || !frameAcquired)
+		return true;
+
+	frameAcquired = false;
+	hr = outputDuplication->ReleaseFrame();
+	if (SUCCEEDED(hr))
+		return true;
+	if (hr == DXGI_ERROR_ACCESS_LOST)
+		return openDuplication_();
+	else
+		check_quit(FAILED(hr), log, "Failed to release frame ({})", hr);
+
+	return false;
+}
+
+bool CaptureD3D::openDuplication_() {
+	HRESULT hr;
+
+	if (outputDuplication.isValid())
+		outputDuplication.release();
+
+	frameAcquired = false;
+
+	DXGI_FORMAT supportedFormats[] = { DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM };
+	hr = output->DuplicateOutput1(device.ptr(), 0, 2, supportedFormats, outputDuplication.data());
+	if(SUCCEEDED(hr)) {
+		DXGI_OUTDUPL_DESC desc;
+		outputDuplication->GetDesc(&desc);
+		frameInterval = perfCounterFreq / fps;
+		//TODO: Align FPS to actual monitor refresh rate (e.g. 59.94 hz or 60.052 hz)
+	}
+	else if (hr == E_ACCESSDENIED) {
+		Sleep(1);
+		return false;
+	}
+	else
+		check_quit(FAILED(hr), log, "Failed to duplicate output ({:#x})", hr);
+
+	return true;
+}
+
+void CaptureD3D::run_() {
+	HRESULT hr;
+
+	// This thread does not require COM, but its callback might need it
+	hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+	check_quit(FAILED(hr), log, "Failed to initialize COM");
+
+	while (!openDuplication_())
+		Sleep(1);
+
+	long long oldTime = getPerformanceCounter() - frameInterval;
+
+	while (flagRun.load(std::memory_order_acquire)) {
+		long long sleepTime = frameInterval - (getPerformanceCounter() - oldTime);
+		if (sleepTime > 0) {
+			int waitMillis = sleepTime * 1000 / perfCounterFreq;
+			waitMillis -= waitMillis % 2;  // Align to multiple of 2 since current timer resolution is 2ms
+			if (waitMillis > 0)
+				Sleep(waitMillis);
+
+			while (getPerformanceCounter() - oldTime < frameInterval)
+				Sleep(0);
+		}
+
+		oldTime += frameInterval;
+		onNextFrame(captureFrame_());
+	}
+
+	CoUninitialize();
+}
+
+CaptureData<D3D11Texture2D> CaptureD3D::captureFrame_() {
+	HRESULT hr;
+
 	CaptureData<D3D11Texture2D> cap;
 
 	// Access denied (secure desktop, etc.)
 	//TODO: Show black screen instead of last image
-	if (outputDuplication.isInvalid()) {
-		openDuplication_();
-		if (outputDuplication.isInvalid())
-			return cap;
-	}
+	if (outputDuplication.isInvalid() && !openDuplication_())
+		return cap;
 
-	if (frameAcquired) {
-		hr = outputDuplication->ReleaseFrame();
-		if (hr == DXGI_ERROR_ACCESS_LOST)
-			openDuplication_();
-		else
-			check_quit(FAILED(hr), log, "Failed to release frame ({})", hr);
-		frameAcquired = false;
-	}
+	if (!tryReleaseFrame_())
+		return cap;
 
-	// Access denied (secure desktop, etc.)
-	//TODO: Show black screen instead of last image
-	//FIXME: And this code block is duplicate of above
-	if (outputDuplication.isInvalid()) {
-		openDuplication_();
-		if (outputDuplication.isInvalid())
-			return cap;
-	}
-
-	UINT timeoutMillis = std::min<long long>(std::numeric_limits<UINT>::max(), std::max<long long>(0, awaitTime.count()));
 	DxgiResource desktopResource;
 	DXGI_OUTDUPL_FRAME_INFO frameInfo;
-	hr = outputDuplication->AcquireNextFrame(timeoutMillis, &frameInfo, desktopResource.data());
+	hr = outputDuplication->AcquireNextFrame(0, &frameInfo, desktopResource.data());
 	if (SUCCEEDED(hr)) {
 		frameAcquired = true;
 
@@ -117,22 +195,6 @@ CaptureData<D3D11Texture2D> CaptureD3D::poll(std::chrono::milliseconds awaitTime
 		error_quit(log, "Failed to acquire next frame ({})", hr);
 
 	return cap;
-}
-
-void CaptureD3D::openDuplication_() {
-	HRESULT hr;
-
-	if (outputDuplication.isValid())
-		outputDuplication.release();
-
-	frameAcquired = false;
-
-	DXGI_FORMAT supportedFormats[] = { DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM };
-	hr = output->DuplicateOutput1(device.ptr(), 0, 2, supportedFormats, outputDuplication.data());
-	if (hr == E_ACCESSDENIED)
-		Sleep(1);
-	else
-		check_quit(FAILED(hr), log, "Failed to duplicate output ({:#x})", hr);
 }
 
 void CaptureD3D::parseCursor_(CursorShapeData* cursorShape, const DXGI_OUTDUPL_POINTER_SHAPE_INFO& cursorInfo, const std::vector<uint8_t>& buffer) {

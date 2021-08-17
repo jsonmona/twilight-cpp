@@ -18,14 +18,7 @@ class CapturePipelineD3D : public CapturePipeline {
 	std::unique_ptr<ScaleD3D> scale;
 	EncoderD3D encoder;
 
-	std::shared_ptr<CursorData> lastCursor;
-	std::shared_ptr<CursorShapeData> lastCursorShape;
-
-	std::atomic<bool> flagRun;
-	std::thread runThread;
-
-	CaptureData<D3D11Texture2D> _fetchTexture();
-	void run_();
+	void captureNextFrame_(CaptureData<D3D11Texture2D>&& cap);
 
 public:
 	CapturePipelineD3D(DeviceManagerD3D _devs, int w, int h, ScaleType type);

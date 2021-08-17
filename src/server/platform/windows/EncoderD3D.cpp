@@ -121,20 +121,24 @@ EncoderD3D::~EncoderD3D() {
 }
 
 void EncoderD3D::start() {
-	_init();
+	frameCnt = 0;
 
-	eventGen = encoder.castTo<IMFMediaEventGenerator>();
+	init_();
 
 	encoder->ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, inputStreamId);
+
+	workerThread = std::thread([this]() { run_(); });
 }
 
 void EncoderD3D::stop() {
 	encoder->ProcessMessage(MFT_MESSAGE_NOTIFY_END_OF_STREAM, inputStreamId);
 	encoder->ProcessMessage(MFT_MESSAGE_COMMAND_DRAIN, 0);
+
+	workerThread.join();
 }
 
 
-void EncoderD3D::_init() {
+void EncoderD3D::init_() {
 	HRESULT hr;
 
 	encoder = getVideoEncoder(mfDeviceManager, log);
@@ -242,26 +246,44 @@ void EncoderD3D::_init() {
 	check_quit(chosenType == -1, log, "No supported input type found");
 }
 
-void EncoderD3D::poll() {
+void EncoderD3D::pushData(CaptureData<D3D11Texture2D>&& cap) {
+	std::unique_lock lock(dataPushLock);
+
+	while (!flagWaitingInput.load(std::memory_order_acquire))
+		dataPushCV.wait(lock);
+
+	//FIXME: Assuming 60fps
+	const long long MFTime = 10000000;  // 100-ns to sec (used by MediaFoundation)
+	const long long frameNum = 60, frameDen = 1;
+	const long long sampleDur = MFTime * frameDen / frameNum;
+	const long long sampleTime = frameCnt * MFTime * frameDen / frameNum;
+
+	CaptureData<long long> now;
+	now.cursor = std::move(cap.cursor);
+	now.cursorShape = std::move(cap.cursorShape);
+	now.desktop = std::make_shared<long long>(sampleTime);
+
+	extraData.push_back(std::move(now));
+
+	pushEncoderTexture_(*cap.desktop, sampleDur, sampleTime);
+	frameCnt++;
+
+	flagWaitingInput.store(false, std::memory_order_release);
+	dataPushCV.notify_one();
+}
+
+void EncoderD3D::run_() {
 	HRESULT hr;
 
-	// TODO: Assuming 60fps
-	constexpr long long MFTime = 10000000;  // 100-ns to sec (used by MediaFoundation)
-	const long long frameNum = 60000, frameDen = 1001;
-	const auto startTime = std::chrono::steady_clock::now();
-	long long frameCnt = 0;
+	hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+	check_quit(FAILED(hr), log, "Failed to initialize COM");
 
-	const auto calcNowFrame = [=]() {
-		// Split 1'000'000'000 into two division to avoid overflowing too soon
-		return (std::chrono::steady_clock::now() - startTime).count() * (frameNum / 10'000) / (frameDen * 100'000);
-	};
-
-	MFMediaEvent ev;
+	MFMediaEventGenerator eventGen = encoder.castTo<IMFMediaEventGenerator>();
 	while (true) {
-		ev.release();
+		MFMediaEvent ev;
 
-		hr = eventGen->GetEvent(MF_EVENT_FLAG_NO_WAIT, ev.data());
-		if (hr == MF_E_NO_EVENTS_AVAILABLE || hr == MF_E_SHUTDOWN)
+		hr = eventGen->GetEvent(0, ev.data());
+		if (hr == MF_E_SHUTDOWN)
 			break;
 		check_quit(FAILED(hr), log, "Failed to get next event ({})", hr);
 
@@ -272,34 +294,23 @@ void EncoderD3D::poll() {
 			break;
 		}
 		else if (evType == METransformNeedInput) {
-			//while (calcNowFrame() < frameCnt)
-			//	Sleep(0);
+			flagWaitingInput.store(true, std::memory_order_release);
+			dataPushCV.notify_one();
 
-			CaptureData<D3D11Texture2D> cap = onFrameRequest();
-
-			frameCnt = calcNowFrame();
-			const long long sampleDur = MFTime * frameDen / frameNum;
-			const long long sampleTime = frameCnt * MFTime * frameDen / frameNum;
-
-			CaptureData<long long> now;
-			now.cursor = std::move(cap.cursor);
-			now.cursorShape = std::move(cap.cursorShape);
-			now.desktop = std::make_shared<long long>(sampleTime);
-
-			extraData.push_back(now);
-
-			_pushEncoderTexture(*cap.desktop, sampleDur, sampleTime);
-			frameCnt++;
+			if (flagWaitingInput.load(std::memory_order_acquire)) {
+				std::unique_lock lock(dataPushLock);
+				while (flagWaitingInput.load(std::memory_order_acquire))
+					dataPushCV.wait(lock);
+			}
 		}
 		else if (evType == METransformHaveOutput) {
-			auto oldtime = std::chrono::high_resolution_clock::now();
 			int idx = -1;
 
 			long long sampleTime;
 			CaptureData<long long> now;
 			CaptureData<ByteBuffer> enc;
 
-			enc.desktop = std::make_shared<ByteBuffer>(_popEncoderData(&sampleTime));
+			enc.desktop = std::make_shared<ByteBuffer>(popEncoderData_(&sampleTime));
 			for (int i = 0; i < extraData.size(); i++) {
 				if (*extraData[i].desktop == sampleTime) {
 					now = std::move(extraData[i]);
@@ -325,9 +336,11 @@ void EncoderD3D::poll() {
 			log->warn("Ignoring unknown MediaEventType {}", static_cast<DWORD>(evType));
 		}
 	}
+
+	CoUninitialize();
 }
 
-void EncoderD3D::_pushEncoderTexture(const D3D11Texture2D& tex, long long sampleDur, long long sampleTime) {
+void EncoderD3D::pushEncoderTexture_(const D3D11Texture2D& tex, long long sampleDur, long long sampleTime) {
 	HRESULT hr;
 
 	MFMediaBuffer mediaBuffer;
@@ -348,7 +361,7 @@ void EncoderD3D::_pushEncoderTexture(const D3D11Texture2D& tex, long long sample
 	check_quit(FAILED(hr), log, "Failed to put input into encoder");
 }
 
-ByteBuffer EncoderD3D::_popEncoderData(long long* sampleTime) {
+ByteBuffer EncoderD3D::popEncoderData_(long long* sampleTime) {
 	HRESULT hr;
 
 	MFT_OUTPUT_STREAM_INFO outputStreamInfo;
@@ -385,7 +398,7 @@ ByteBuffer EncoderD3D::_popEncoderData(long long* sampleTime) {
 		MFMediaBuffer mediaBuffer;
 		hr = outputBuffer.pSample->GetBufferByIndex(j, mediaBuffer.data());
 		check_quit(FAILED(hr), log, "Failed to get buffer");
-
+		
 		BYTE* ptr;
 		DWORD len;
 		hr = mediaBuffer->Lock(&ptr, nullptr, &len);

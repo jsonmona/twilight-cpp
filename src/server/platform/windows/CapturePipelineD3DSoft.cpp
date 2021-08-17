@@ -31,7 +31,6 @@ CapturePipelineD3DSoft::CapturePipelineD3DSoft(DeviceManagerD3D _devs, int w, in
 	device(_devs.device), context(_devs.context)
 {
 	scale.setOutputFormat(w, h, scale2avpixfmt(type));
-	encoder.setOnFrameRequest([this]() -> CaptureData<TextureSoftware> { return _fetchTexture(); });
 }
 
 CapturePipelineD3DSoft::~CapturePipelineD3DSoft() {
@@ -40,9 +39,10 @@ CapturePipelineD3DSoft::~CapturePipelineD3DSoft() {
 void CapturePipelineD3DSoft::start() {
 	lastPresentTime = std::chrono::steady_clock::now();
 
+	capture.setOnNextFrame([this](CaptureData<D3D11Texture2D>&& cap) { captureNextFrame_(std::move(cap)); });
 	encoder.setDataAvailableCallback(writeOutput);
 
-	capture.start();
+	capture.start(60);
 	encoder.start();
 }
 
@@ -56,18 +56,18 @@ D3D11_TEXTURE2D_DESC CapturePipelineD3DSoft::copyToStageTex_(const D3D11Texture2
 	D3D11_TEXTURE2D_DESC desc;
 	tex->GetDesc(&desc);
 
-	bool shouldInvalidate = true;
+	bool shouldRecreateTex = true;
 
 	if (stageTex.isValid()) {
 		stageTex->GetDesc(&stageDesc);
 
-		shouldInvalidate =
+		shouldRecreateTex =
 			(stageDesc.Format != desc.Format) ||
 			(stageDesc.Width != desc.Width) ||
 			(stageDesc.Height != desc.Height);
 	}
 
-	if (shouldInvalidate) {
+	if (shouldRecreateTex) {
 		stageTex.release();
 
 		stageDesc = {};
@@ -87,30 +87,7 @@ D3D11_TEXTURE2D_DESC CapturePipelineD3DSoft::copyToStageTex_(const D3D11Texture2
 	return stageDesc;
 }
 
-CaptureData<TextureSoftware> CapturePipelineD3DSoft::_fetchTexture() {
-	CaptureData<D3D11Texture2D> cap;
-
-	bool firstLoop = true;
-
-	auto encodeTicks = std::chrono::nanoseconds(1'000'000'000 / 60);
-	auto nowTime = std::chrono::steady_clock::now();
-	while (firstLoop || nowTime - lastPresentTime < encodeTicks) {
-		firstLoop = false;
-		auto awaitTime = encodeTicks - (nowTime - lastPresentTime);
-		auto awaitTimeMillis = std::chrono::duration_cast<std::chrono::milliseconds>(awaitTime) - std::chrono::milliseconds(1);
-		auto now = capture.poll(awaitTimeMillis);
-
-		if (now.desktop)
-			cap.desktop = std::move(now.desktop);
-		if (now.cursor)
-			cap.cursor = std::move(now.cursor);
-		if (now.cursorShape)
-			cap.cursorShape = std::move(now.cursorShape);
-
-		nowTime = std::chrono::steady_clock::now();
-	}
-	lastPresentTime = nowTime;
-
+void CapturePipelineD3DSoft::captureNextFrame_(CaptureData<D3D11Texture2D>&& cap) {
 	if (cap.desktop) {
 		D3D11_TEXTURE2D_DESC desc = copyToStageTex_(*cap.desktop);
 
@@ -132,9 +109,9 @@ CaptureData<TextureSoftware> CapturePipelineD3DSoft::_fetchTexture() {
 		lastTex = std::make_shared<TextureSoftware>(scale.popOutput());
 	}
 
-	CaptureData<TextureSoftware> ret;
-	ret.desktop = lastTex;
-	ret.cursor = std::move(cap.cursor);
-	ret.cursorShape = std::move(cap.cursorShape);
-	return ret;
+	CaptureData<TextureSoftware> data;
+	data.desktop = lastTex;
+	data.cursor = std::move(cap.cursor);
+	data.cursorShape = std::move(cap.cursorShape);
+	encoder.pushData(std::move(data));
 }

@@ -13,29 +13,42 @@
 #include <thread>
 #include <cstdint>
 #include <functional>
+#include <chrono>
 
 
 class CaptureD3D {
 	LoggerPtr log;
 
-	bool firstFrameSent;
+	int fps;
 	bool frameAcquired;
+	bool firstFrameSent;
+	std::atomic<bool> flagRun;
 
 	DxgiOutput5 output;
 	D3D11Device device;
 	DxgiOutputDuplication outputDuplication;
 
-	void openDuplication_();
+	std::thread runThread;
+	long long perfCounterFreq;
+	long long frameInterval;
+
+	std::function<void(CaptureData<D3D11Texture2D>&&)> onNextFrame;
+
+	bool tryReleaseFrame_();
+	bool openDuplication_();
+	void run_();
+	CaptureData<D3D11Texture2D> captureFrame_();
 	void parseCursor_(CursorShapeData* cursorShape, const DXGI_OUTDUPL_POINTER_SHAPE_INFO& cursorInfo, const std::vector<uint8_t>& buffer);
 
 public:
 	CaptureD3D(DeviceManagerD3D _devs);
 	~CaptureD3D();
 
-	void start();
+	void start(int fps);
 	void stop();
 
-	CaptureData<D3D11Texture2D> poll(std::chrono::milliseconds awaitTime);
+	template<typename Fn>
+	void setOnNextFrame(Fn fn) { onNextFrame = std::move(fn); }
 };
 
 

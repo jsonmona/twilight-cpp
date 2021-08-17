@@ -10,19 +10,24 @@
 
 #include "server/CaptureData.h"
 
+#include <deque>
+
 
 class EncoderSoftware {
 	LoggerPtr log;
 
-	int width, height;
-	std::function<CaptureData<TextureSoftware>()> onFrameRequest;
 	std::function<void(CaptureData<ByteBuffer>&&)> onDataAvailable;
 
+	int width, height;
 	AVCodec* encoder = nullptr;
 	AVCodecContext* encoderCtx = nullptr;
 
-	std::atomic_bool runFlag;
+	std::atomic<bool> flagRun;
+
 	std::thread runThread;
+	std::mutex dataLock;
+	std::condition_variable dataCV;
+	std::deque<CaptureData<TextureSoftware>> dataQueue;
 
 	void _run();
 
@@ -30,11 +35,13 @@ public:
 	EncoderSoftware(int _width, int _height);
 	~EncoderSoftware();
 
-	inline void setOnFrameRequest(const decltype(onFrameRequest)& x) { onFrameRequest = x; }
-	inline void setDataAvailableCallback(const decltype(onDataAvailable)& x) { onDataAvailable = x; }
+	template<typename Fn>
+	void setDataAvailableCallback(Fn fn) { onDataAvailable = std::move(fn); }
 
 	void start();
 	void stop();
+
+	void pushData(CaptureData<TextureSoftware>&& newData);
 };
 
 
