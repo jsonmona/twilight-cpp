@@ -7,7 +7,7 @@ StreamServer::StreamServer() :
 	log(createNamedLogger("StreamServer"))
 {
 	capture = CapturePipeline::createInstance();
-	capture->setOutputCallback([this](CaptureData<ByteBuffer>&& cap) { _processOutput(std::move(cap)); });
+	capture->setOutputCallback([this](DesktopFrame<ByteBuffer>&& cap) { _processOutput(std::move(cap)); });
 	audioEncoder.setOnAudioData([this](const uint8_t* data, size_t len) {
 		msg::Packet pkt;
 		pkt.set_extra_data_len(len);
@@ -48,9 +48,9 @@ void StreamServer::stop() {
 		conn->disconnect();
 }
 
-void StreamServer::_processOutput(CaptureData<ByteBuffer>&& cap) {
-	if (cap.cursor)
-		cursorData = std::move(cap.cursor);
+void StreamServer::_processOutput(DesktopFrame<ByteBuffer>&& cap) {
+	if (cap.cursorPos)
+		cursorPos = std::move(cap.cursorPos);
 
 	msg::Packet pkt;
 	if (cap.cursorShape) {
@@ -64,12 +64,12 @@ void StreamServer::_processOutput(CaptureData<ByteBuffer>&& cap) {
 		_writeOutput(pkt, cap.cursorShape->image.data());
 	}
 
-	if(cursorData && cap.desktop) {
+	if(cursorPos && cap.desktop) {
 		msg::DesktopFrame* m = pkt.mutable_desktop_frame();
-		m->set_cursor_visible(cursorData->visible);
-		if (cursorData->visible) {
-			m->set_cursor_x(cursorData->posX);
-			m->set_cursor_y(cursorData->posY);
+		m->set_cursor_visible(cursorPos->visible);
+		if (cursorPos->visible) {
+			m->set_cursor_x(cursorPos->x);
+			m->set_cursor_y(cursorPos->y);
 		}
 
 		pkt.set_extra_data_len(cap.desktop->size());

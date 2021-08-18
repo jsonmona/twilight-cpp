@@ -3,8 +3,7 @@
 
 
 #include "common/ByteBuffer.h"
-
-#include "server/CaptureData.h"
+#include "common/DesktopFrame.h"
 
 #include <packet.pb.h>
 
@@ -13,9 +12,10 @@
 #include <vector>
 #include <functional>
 
+
 class CapturePipeline {
 protected:
-	std::function<void(CaptureData<ByteBuffer>&&)> writeOutput;
+	std::function<void(DesktopFrame<ByteBuffer>&&)> writeOutput;
 
 public:
 	static std::unique_ptr<CapturePipeline> createInstance();

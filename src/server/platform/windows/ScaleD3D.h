@@ -3,10 +3,9 @@
 
 
 #include "common/log.h"
+#include "common/DesktopFrame.h"
 
 #include "common/platform/windows/DeviceManagerD3D.h"
-
-#include "server/CaptureData.h"
 
 #include <memory>
 

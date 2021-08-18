@@ -4,10 +4,9 @@
 
 #include "common/log.h"
 #include "common/ByteBuffer.h"
+#include "common/DesktopFrame.h"
 
 #include "common/platform/windows/DeviceManagerD3D.h"
-
-#include "server/CaptureData.h"
 
 #include <atomic>
 #include <memory>
@@ -23,9 +22,9 @@ class EncoderD3D {
 	int width, height;
 	long long frameCnt;
 
-	std::function<void(CaptureData<ByteBuffer>&&)> onDataAvailable;
+	std::function<void(DesktopFrame<ByteBuffer>&&)> onDataAvailable;
 
-	std::deque<CaptureData<long long>> extraData;
+	std::deque<DesktopFrame<long long>> extraData;
 
 	MFDxgiDeviceManager mfDeviceManager;
 	MFTransform encoder;
@@ -51,7 +50,7 @@ public:
 	void start();
 	void stop();
 
-	void pushData(CaptureData<D3D11Texture2D>&& cap);
+	void pushData(DesktopFrame<D3D11Texture2D>&& cap);
 };
 
 

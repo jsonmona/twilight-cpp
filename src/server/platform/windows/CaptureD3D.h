@@ -2,11 +2,10 @@
 #define SERVER_PLATFORM_WINDOWS_CAPTURE_D3D_H_
 
 #include "common/log.h"
+#include "common/DesktopFrame.h"
 
 #include "common/platform/windows/ComWrapper.h"
 #include "common/platform/windows/DeviceManagerD3D.h"
-
-#include "server/CaptureData.h"
 
 #include <atomic>
 #include <vector>
@@ -32,13 +31,13 @@ class CaptureD3D {
 	long long perfCounterFreq;
 	long long frameInterval;
 
-	std::function<void(CaptureData<D3D11Texture2D>&&)> onNextFrame;
+	std::function<void(DesktopFrame<D3D11Texture2D>&&)> onNextFrame;
 
 	bool tryReleaseFrame_();
 	bool openDuplication_();
 	void run_();
-	CaptureData<D3D11Texture2D> captureFrame_();
-	void parseCursor_(CursorShapeData* cursorShape, const DXGI_OUTDUPL_POINTER_SHAPE_INFO& cursorInfo, const std::vector<uint8_t>& buffer);
+	DesktopFrame<D3D11Texture2D> captureFrame_();
+	void parseCursor_(CursorShape* cursorShape, const DXGI_OUTDUPL_POINTER_SHAPE_INFO& cursorInfo, const std::vector<uint8_t>& buffer);
 
 public:
 	CaptureD3D(DeviceManagerD3D _devs);

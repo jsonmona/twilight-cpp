@@ -76,8 +76,8 @@ void EncoderSoftware::_run() {
 	auto timeBegin = std::chrono::steady_clock::now();
 
 	long long cnt = 0;
-	CaptureData<long long> prev;
-	std::deque<CaptureData<long long>> extraData;
+	DesktopFrame<long long> prev;
+	std::deque<DesktopFrame<long long>> extraData;
 	bool lastCursorVisible = false;
 	int lastCursorX, lastCursorY;
 
@@ -96,15 +96,15 @@ void EncoderSoftware::_run() {
 			}
 			check_quit(idx == -1, log, "Failed to find matching extra data for pts");
 
-			CaptureData<long long> now = std::move(extraData[idx]);
+			DesktopFrame<long long> now = std::move(extraData[idx]);
 			if (idx == 0)
 				extraData.pop_front();
 			else
 				extraData.erase(extraData.begin() + idx);
 
-			CaptureData<ByteBuffer> enc;
+			DesktopFrame<ByteBuffer> enc;
 			enc.desktop = std::make_shared<ByteBuffer>(pkt->buf->size);
-			enc.cursor = std::move(now.cursor);
+			enc.cursorPos = std::move(now.cursorPos);
 			enc.cursorShape = std::move(now.cursorShape);
 
 			enc.desktop->write(0, pkt->buf->data, pkt->buf->size);
@@ -114,7 +114,7 @@ void EncoderSoftware::_run() {
 		else if (stat == AVERROR(EAGAIN)) {
 			av_frame_unref(frame);
 
-			CaptureData<TextureSoftware> cap;
+			DesktopFrame<TextureSoftware> cap;
 
 			/* lock */ {
 				std::unique_lock lock(dataLock);
@@ -144,13 +144,13 @@ void EncoderSoftware::_run() {
 			frame->width = width;
 			frame->pts = cnt++;
 
-			CaptureData<long long> now;
+			DesktopFrame<long long> now;
 			now.desktop = std::make_shared<long long>(frame->pts);
-			now.cursor = std::move(cap.cursor);
+			now.cursorPos = std::move(cap.cursorPos);
 			now.cursorShape = std::move(cap.cursorShape);
 			extraData.push_back(now);
-			if (now.cursor == nullptr)
-				now.cursor = prev.cursor;
+			if (now.cursorPos == nullptr)
+				now.cursorPos = prev.cursorPos;
 
 			prev = std::move(now);
 
@@ -169,7 +169,7 @@ void EncoderSoftware::_run() {
 	av_frame_free(&frame);
 }
 
-void EncoderSoftware::pushData(CaptureData<TextureSoftware>&& newData) {
+void EncoderSoftware::pushData(DesktopFrame<TextureSoftware>&& newData) {
 	std::lock_guard lock(dataLock);
 	dataQueue.push_back(std::move(newData));
 	dataCV.notify_one();

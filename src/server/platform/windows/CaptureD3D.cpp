@@ -136,10 +136,10 @@ void CaptureD3D::run_() {
 	CoUninitialize();
 }
 
-CaptureData<D3D11Texture2D> CaptureD3D::captureFrame_() {
+DesktopFrame<D3D11Texture2D> CaptureD3D::captureFrame_() {
 	HRESULT hr;
 
-	CaptureData<D3D11Texture2D> cap;
+	DesktopFrame<D3D11Texture2D> cap;
 
 	// Access denied (secure desktop, etc.)
 	//TODO: Show black screen instead of last image
@@ -162,16 +162,16 @@ CaptureData<D3D11Texture2D> CaptureD3D::captureFrame_() {
 		}
 
 		if (frameInfo.LastMouseUpdateTime.QuadPart != 0) {
-			cap.cursor = std::make_shared<CursorData>();
-			cap.cursor->visible = frameInfo.PointerPosition.Visible;
+			cap.cursorPos = std::make_shared<CursorPos>();
+			cap.cursorPos->visible = frameInfo.PointerPosition.Visible;
 			if (frameInfo.PointerPosition.Visible) {
-				cap.cursor->posX = frameInfo.PointerPosition.Position.x;
-				cap.cursor->posY = frameInfo.PointerPosition.Position.y;
+				cap.cursorPos->x = frameInfo.PointerPosition.Position.x;
+				cap.cursorPos->y = frameInfo.PointerPosition.Position.y;
 			}
 		}
 
 		if (frameInfo.PointerShapeBufferSize != 0) {
-			cap.cursorShape = std::make_shared<CursorShapeData>();
+			cap.cursorShape = std::make_shared<CursorShape>();
 
 			UINT bufferSize = frameInfo.PointerShapeBufferSize;
 			std::vector<uint8_t> buffer(bufferSize);
@@ -197,7 +197,7 @@ CaptureData<D3D11Texture2D> CaptureD3D::captureFrame_() {
 	return cap;
 }
 
-void CaptureD3D::parseCursor_(CursorShapeData* cursorShape, const DXGI_OUTDUPL_POINTER_SHAPE_INFO& cursorInfo, const std::vector<uint8_t>& buffer) {
+void CaptureD3D::parseCursor_(CursorShape* cursorShape, const DXGI_OUTDUPL_POINTER_SHAPE_INFO& cursorInfo, const std::vector<uint8_t>& buffer) {
 	if (cursorInfo.Type == DXGI_OUTDUPL_POINTER_SHAPE_TYPE_COLOR) {
 		cursorShape->image.resize(cursorInfo.Height * cursorInfo.Width * 4);
 		cursorShape->width = cursorInfo.Width;

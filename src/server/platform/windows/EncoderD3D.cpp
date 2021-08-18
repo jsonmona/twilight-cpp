@@ -246,7 +246,7 @@ void EncoderD3D::init_() {
 	check_quit(chosenType == -1, log, "No supported input type found");
 }
 
-void EncoderD3D::pushData(CaptureData<D3D11Texture2D>&& cap) {
+void EncoderD3D::pushData(DesktopFrame<D3D11Texture2D>&& cap) {
 	std::unique_lock lock(dataPushLock);
 
 	while (!flagWaitingInput.load(std::memory_order_acquire))
@@ -258,8 +258,8 @@ void EncoderD3D::pushData(CaptureData<D3D11Texture2D>&& cap) {
 	const long long sampleDur = MFTime * frameDen / frameNum;
 	const long long sampleTime = frameCnt * MFTime * frameDen / frameNum;
 
-	CaptureData<long long> now;
-	now.cursor = std::move(cap.cursor);
+	DesktopFrame<long long> now;
+	now.cursorPos = std::move(cap.cursorPos);
 	now.cursorShape = std::move(cap.cursorShape);
 	now.desktop = std::make_shared<long long>(sampleTime);
 
@@ -307,8 +307,8 @@ void EncoderD3D::run_() {
 			int idx = -1;
 
 			long long sampleTime;
-			CaptureData<long long> now;
-			CaptureData<ByteBuffer> enc;
+			DesktopFrame<long long> now;
+			DesktopFrame<ByteBuffer> enc;
 
 			enc.desktop = std::make_shared<ByteBuffer>(popEncoderData_(&sampleTime));
 			for (int i = 0; i < extraData.size(); i++) {
@@ -328,7 +328,7 @@ void EncoderD3D::run_() {
 			else
 				extraData.erase(extraData.begin() + idx);
 
-			enc.cursor = std::move(now.cursor);
+			enc.cursorPos = std::move(now.cursorPos);
 			enc.cursorShape = std::move(now.cursorShape);
 			onDataAvailable(std::move(enc));
 		}

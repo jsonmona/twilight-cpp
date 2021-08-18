@@ -4,6 +4,7 @@ endif()
 
 set(COMMON_SRC
     ./common/ByteBuffer.h
+    ./common/DesktopFrame.h
     ./common/ffmpeg-headers.h
     ./common/RingBuffer.h
     ./common/util.h
@@ -53,8 +54,6 @@ set(CLIENT_WINDOWS_SRC
 )
 
 set(SERVER_SRC
-    ./server/CaptureData.h
-
     ./server/AudioEncoder.h
     ./server/AudioEncoder.cpp
     ./server/CapturePipeline.h

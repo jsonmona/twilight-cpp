@@ -39,7 +39,7 @@ CapturePipelineD3DSoft::~CapturePipelineD3DSoft() {
 void CapturePipelineD3DSoft::start() {
 	lastPresentTime = std::chrono::steady_clock::now();
 
-	capture.setOnNextFrame([this](CaptureData<D3D11Texture2D>&& cap) { captureNextFrame_(std::move(cap)); });
+	capture.setOnNextFrame([this](DesktopFrame<D3D11Texture2D>&& cap) { captureNextFrame_(std::move(cap)); });
 	encoder.setDataAvailableCallback(writeOutput);
 
 	capture.start(60);
@@ -87,7 +87,7 @@ D3D11_TEXTURE2D_DESC CapturePipelineD3DSoft::copyToStageTex_(const D3D11Texture2
 	return stageDesc;
 }
 
-void CapturePipelineD3DSoft::captureNextFrame_(CaptureData<D3D11Texture2D>&& cap) {
+void CapturePipelineD3DSoft::captureNextFrame_(DesktopFrame<D3D11Texture2D>&& cap) {
 	if (cap.desktop) {
 		D3D11_TEXTURE2D_DESC desc = copyToStageTex_(*cap.desktop);
 
@@ -109,9 +109,9 @@ void CapturePipelineD3DSoft::captureNextFrame_(CaptureData<D3D11Texture2D>&& cap
 		lastTex = std::make_shared<TextureSoftware>(scale.popOutput());
 	}
 
-	CaptureData<TextureSoftware> data;
+	DesktopFrame<TextureSoftware> data;
 	data.desktop = lastTex;
-	data.cursor = std::move(cap.cursor);
+	data.cursorPos = std::move(cap.cursorPos);
 	data.cursorShape = std::move(cap.cursorShape);
 	encoder.pushData(std::move(data));
 }

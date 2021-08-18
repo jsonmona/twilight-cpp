@@ -5,10 +5,9 @@
 #include "common/log.h"
 #include "common/ByteBuffer.h"
 #include "common/ffmpeg-headers.h"
+#include "common/DesktopFrame.h"
 
 #include "common/platform/software/TextureSoftware.h"
-
-#include "server/CaptureData.h"
 
 #include <deque>
 
@@ -16,7 +15,7 @@
 class EncoderSoftware {
 	LoggerPtr log;
 
-	std::function<void(CaptureData<ByteBuffer>&&)> onDataAvailable;
+	std::function<void(DesktopFrame<ByteBuffer>&&)> onDataAvailable;
 
 	int width, height;
 	AVCodec* encoder = nullptr;
@@ -27,7 +26,7 @@ class EncoderSoftware {
 	std::thread runThread;
 	std::mutex dataLock;
 	std::condition_variable dataCV;
-	std::deque<CaptureData<TextureSoftware>> dataQueue;
+	std::deque<DesktopFrame<TextureSoftware>> dataQueue;
 
 	void _run();
 
@@ -41,7 +40,7 @@ public:
 	void start();
 	void stop();
 
-	void pushData(CaptureData<TextureSoftware>&& newData);
+	void pushData(DesktopFrame<TextureSoftware>&& newData);
 };
 
 

@@ -26,11 +26,11 @@ class StreamServer {
 	AudioEncoder audioEncoder;
 	
 	std::unique_ptr<CapturePipeline> capture;
-	std::shared_ptr<CursorData> cursorData;
+	std::shared_ptr<CursorPos> cursorPos;
 
 	void _runListen();
 
-	void _processOutput(CaptureData<ByteBuffer>&& cap);
+	void _processOutput(DesktopFrame<ByteBuffer>&& cap);
 	void _writeOutput(const msg::Packet& pck, const uint8_t* extraData);
 
 public:
