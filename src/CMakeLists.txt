@@ -149,8 +149,8 @@ set(PB_GENERATED_FILES)
 macro(FN_GEN_PB FILE)
     add_custom_command(
         OUTPUT "pb/${FILE}.pb.h" "pb/${FILE}.pb.cc"
-        COMMAND protoc "-I=${CMAKE_CURRENT_SOURCE_DIR}/common" "--cpp_out=${CMAKE_CURRENT_BINARY_DIR}/pb/" "${CMAKE_CURRENT_SOURCE_DIR}/common/${FILE}.proto"
-        MAIN_DEPENDENCY "${CMAKE_CURRENT_SOURCE_DIR}/common/${FILE}.proto"
+        COMMAND protoc "-I=${CMAKE_CURRENT_SOURCE_DIR}/common/protobuf" "--cpp_out=${CMAKE_CURRENT_BINARY_DIR}/pb/" "${CMAKE_CURRENT_SOURCE_DIR}/common/protobuf/${FILE}.proto"
+        MAIN_DEPENDENCY "${CMAKE_CURRENT_SOURCE_DIR}/common/protobuf/${FILE}.proto"
         DEPENDS protoc
         COMMENT "Compiling protobuf: ${FILE}.proto"
         VERBATIM
