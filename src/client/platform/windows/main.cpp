@@ -13,6 +13,11 @@
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
 	setupFFmpegLogs();
 
+	LARGE_INTEGER aa, bb;
+	QueryPerformanceCounter(&aa);
+	QueryPerformanceFrequency(&bb);
+	createNamedLogger("main")->info("{} {}", aa.QuadPart, bb.QuadPart);
+
 	QApplication app(__argc, __argv);
 
 	QRect screenSize = app.primaryScreen()->geometry();
