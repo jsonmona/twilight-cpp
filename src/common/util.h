@@ -4,6 +4,9 @@
 
 #include <atomic>
 #include <type_traits>
+#include <optional>
+
+#include "common/ByteBuffer.h"
 
 
 // From https://stackoverflow.com/a/21298525
@@ -20,6 +23,7 @@ template<typename T,
 		: constexpr_nextPowerOfTwo(((value - 1) | ((value - 1) >> curb)) + 1, maxb, curb << 1);
 }
 
+std::optional<ByteBuffer> loadEntireFile(const char* path);
 
 #if defined(ATOMIC_BOOL_LOCK_FREE) && ATOMIC_BOOL_LOCK_FREE >= 1
 class spinlock {

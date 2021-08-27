@@ -48,6 +48,10 @@ void StreamWindow::processNewPacket_(const msg::Packet& pkt, uint8_t* extraData)
 		audioDataCV.notify_one();
 		break;
 	}
+	case msg::Packet::kServerPerfReport: {
+		pkt.server_perf_report();
+		break;
+	}
 	default:
 		log->warn("Unknown packet type: {}", pkt.msg_case());
 	}

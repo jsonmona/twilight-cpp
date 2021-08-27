@@ -7,7 +7,6 @@ set(COMMON_SRC
     ./common/DesktopFrame.h
     ./common/ffmpeg-headers.h
     ./common/RingBuffer.h
-    ./common/util.h
     
     ./common/log.h
     ./common/log.cpp
@@ -21,6 +20,8 @@ set(COMMON_SRC
     ./common/NetworkSocket.cpp
     ./common/StatisticMixer.h
     ./common/StatisticMixer.cpp
+    ./common/util.h
+    ./common/util.cpp
 
     ./common/platform/software/ScaleSoftware.h
     ./common/platform/software/ScaleSoftware.cpp

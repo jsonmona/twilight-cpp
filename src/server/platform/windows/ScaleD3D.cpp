@@ -1,5 +1,6 @@
 #include "ScaleD3D.h"
 
+#include "common/util.h"
 #include "common/platform/windows/ComWrapper.h"
 
 #include <cassert>
@@ -17,38 +18,6 @@ static const float quadVertex[] = {
 static const UINT quadVertexStride = 2 * sizeof(quadVertex[0]);
 static const UINT quadVertexOffset = 0;
 static const UINT quadVertexCount = 4;
-
-
-// load entire file
-static std::vector<uint8_t> loadFile(const wchar_t* path) {
-    std::vector<uint8_t> result(0);
-
-    HANDLE f = CreateFile(path, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (f == INVALID_HANDLE_VALUE)
-        return result;
-
-    static_assert(sizeof(LARGE_INTEGER) == sizeof(long long), "LARGE_INTEGER must be long long!");
-    long long fileSize;
-    if (!GetFileSizeEx(f, (LARGE_INTEGER*)&fileSize))
-        return result;
-
-    // unlikely.
-    if (std::numeric_limits<size_t>::max() < fileSize)
-        return result;
-
-    result.resize(fileSize);
-
-    DWORD readPtr = 0;
-    while (readPtr < fileSize) {
-        if (!ReadFile(f, result.data() + readPtr, fileSize - readPtr, &readPtr, nullptr)) {
-            result.resize(0);
-            return result;
-        }
-    }
-
-    CloseHandle(f);
-    return result;
-}
 
 
 class ScaleD3D_AYUV : public ScaleD3D {
@@ -178,7 +147,8 @@ void ScaleD3D::init(const D3D11Device& device, const D3D11DeviceContext& context
     samplerDesc.MaxLOD = FLT_MAX;
     device->CreateSamplerState(&samplerDesc, clampSampler.data());
 
-    std::vector<uint8_t> vertexBlob = loadFile(L"rgb2yuv-vs_main.fxc");
+    //FIXME: Unchecked std::optional unwrapping
+    ByteBuffer vertexBlob = loadEntireFile("rgb2yuv-vs_main.fxc").value();
     hr = device->CreateVertexShader(vertexBlob.data(), vertexBlob.size(), nullptr, vertexShader.data());
     check_quit(FAILED(hr), log, "Failed to create vertex shader");
 
@@ -266,7 +236,8 @@ void ScaleD3D_AYUV::init(const D3D11Device& device, const D3D11DeviceContext& co
     pixelShader.release();
     rtOutput.release();
 
-    std::vector<uint8_t> blob = loadFile(L"rgb2yuv-ps_yuv.fxc");
+    //FIXME: Unchecked std::optional unwrapping
+    ByteBuffer blob = loadEntireFile("rgb2yuv-ps_yuv.fxc").value();
     device->CreatePixelShader(blob.data(), blob.size(), nullptr, pixelShader.data());
 
     D3D11_RENDER_TARGET_VIEW_DESC rtDesc = {};
@@ -315,13 +286,14 @@ void ScaleD3D_NV12::init(const D3D11Device& device, const D3D11DeviceContext& co
     rtLuma.release();
     rtChroma.release();
 
-    std::vector<uint8_t> blob = loadFile(L"rgb2yuv-ps_y.fxc");
+    //FIXME: Unchecked std::optional unwrapping
+    ByteBuffer blob = loadEntireFile("rgb2yuv-ps_y.fxc").value();
     device->CreatePixelShader(blob.data(), blob.size(), nullptr, pixelShaderY.data());
 
-    blob = loadFile(L"rgb2yuv-ps_uv.fxc");
+    blob = loadEntireFile("rgb2yuv-ps_uv.fxc").value();
     device->CreatePixelShader(blob.data(), blob.size(), nullptr, pixelShaderUV.data());
 
-    blob = loadFile(L"rgb2yuv-ps_copy.fxc");
+    blob = loadEntireFile("rgb2yuv-ps_copy.fxc").value();
     device->CreatePixelShader(blob.data(), blob.size(), nullptr, pixelShaderCopy.data());
 
     D3D11_TEXTURE2D_DESC chromaLargeDesc = {};

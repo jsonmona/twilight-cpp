@@ -1,5 +1,7 @@
 #include "StreamViewerD3D.h"
 
+#include "common/util.h"
+
 #include <vector>
 
 
@@ -12,38 +14,6 @@ static const float quadVertex[] = {
 static const UINT quadVertexStride = 2 * sizeof(quadVertex[0]);
 static const UINT quadVertexOffset = 0;
 static const UINT quadVertexCount = 4;
-
-
-// load entire file
-static std::vector<uint8_t> loadFile(const wchar_t* path) {
-	std::vector<uint8_t> result(0);
-
-	HANDLE f = CreateFile(path, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-	if (f == INVALID_HANDLE_VALUE)
-		return result;
-
-	static_assert(sizeof(LARGE_INTEGER) == sizeof(long long), "LARGE_INTEGER must be long long!");
-	long long fileSize;
-	if (!GetFileSizeEx(f, (LARGE_INTEGER*)&fileSize))
-		return result;
-
-	// unlikely.
-	if (std::numeric_limits<size_t>::max() < fileSize)
-		return result;
-
-	result.resize(fileSize);
-
-	DWORD readPtr = 0;
-	while (readPtr < fileSize) {
-		if (!ReadFile(f, result.data() + readPtr, fileSize - readPtr, &readPtr, nullptr)) {
-			result.resize(0);
-			return result;
-		}
-	}
-
-	CloseHandle(f);
-	return result;
-}
 
 
 StreamViewerD3D::StreamViewerD3D() :
@@ -152,15 +122,16 @@ void StreamViewerD3D::_init() {
 	hr = device->CreateRenderTargetView(framebuffer.ptr(), nullptr, framebufferRTV.data());
 	check_quit(FAILED(hr), log, "Failed to create framebuffer RTV");
 
-	std::vector<uint8_t> vertexBlobFull = loadFile(L"viewer-vs_full.fxc");
+	//FIXME: Unchecked std::optional unwrapping
+	ByteBuffer vertexBlobFull = loadEntireFile("viewer-vs_full.fxc").value();
 	hr = device->CreateVertexShader(vertexBlobFull.data(), vertexBlobFull.size(), nullptr, vertexShaderFull.data());
 	check_quit(FAILED(hr), log, "Failed to create vertex shader (full)");
 
-	std::vector<uint8_t> vertexBlobBox = loadFile(L"viewer-vs_box.fxc");
+	ByteBuffer vertexBlobBox = loadEntireFile("viewer-vs_box.fxc").value();
 	hr = device->CreateVertexShader(vertexBlobBox.data(), vertexBlobBox.size(), nullptr, vertexShaderBox.data());
 	check_quit(FAILED(hr), log, "Failed to create vertex shader (box)");
 
-	std::vector<uint8_t> pixelBlob = loadFile(L"viewer-ps_main.fxc");
+	ByteBuffer pixelBlob = loadEntireFile("viewer-ps_main.fxc").value();
 	hr = device->CreatePixelShader(pixelBlob.data(), pixelBlob.size(), nullptr, pixelShader.data());
 	check_quit(FAILED(hr), log, "Failed to create pixel shader");
 
