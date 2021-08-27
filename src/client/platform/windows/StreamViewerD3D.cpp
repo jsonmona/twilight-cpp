@@ -256,9 +256,7 @@ void StreamViewerD3D::_renderLoop() {
 	float clearColor[4] = { 0, 0, 0, 1 };
 
 	int cursorX = -1, cursorY = -1;
-	int maxFrameLag = 1;
-	int frameBufferHistory[120] = {};
-	int frameBufferHistoryIdx = 0;
+	MinMaxTrackingRingBuffer<size_t, 32> frameHistory;
 
 	while (flagRunRender.load(std::memory_order_acquire)) {
 		bool hasNewFrameData = false;
@@ -267,26 +265,15 @@ void StreamViewerD3D::_renderLoop() {
 		/* lock */ {
 			std::lock_guard lock(frameDataLock);
 
-			frameBufferHistory[frameBufferHistoryIdx] = frameData.size();
-			frameBufferHistoryIdx = (frameBufferHistoryIdx + 1) % 120;
-			int minval = INT_MAX, maxval = INT_MIN;
-			for (int now : frameBufferHistory) {
-				minval = std::min(minval, now);
-				maxval = std::max(maxval, now);
-			}
-			if (minval > 0)
-				maxFrameLag = std::max(1, maxval - minval + 1);
+			frameHistory.push(frameData.size());
 
-			while (frameData.size() > maxFrameLag)
+			while (frameHistory.max - frameHistory.min + 1 < frameData.size())
 				frameData.pop_front();
 
 			if (!frameData.empty()) {
 				nowFrameData = std::move(frameData.front());
 				frameData.pop_front();
 				hasNewFrameData = true;
-			}
-			else {
-				maxFrameLag++;
 			}
 		}
 

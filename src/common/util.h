@@ -88,4 +88,81 @@ private:
 #endif
 
 
+// Great for tracking min-max of last few numbers
+template<class T, size_t LEN>
+struct MinMaxTrackingRingBuffer {
+	size_t idx = 0, size = 0;
+	size_t minCnt = 0, maxCnt = 0;
+	T min = 0, max = 0;
+	T data[LEN];
+
+	void push(const T val) {
+		if (size == LEN)
+			pop();
+
+		if (val < min || minCnt == 0) {
+			min = val;
+			minCnt = 1;
+		}
+		else if (val == min)
+			minCnt++;
+
+		if (max < val || maxCnt == 0) {
+			max = val;
+			maxCnt = 1;
+		}
+		else if (val == max)
+			maxCnt++;
+
+		data[(idx + size) % LEN] = val;
+		size++;
+	}
+
+	T pop() {
+		const T ret = data[idx];
+		idx = (idx + 1) % LEN;
+		size--;
+
+		if (size > 0) {
+			if (min == ret) {
+				minCnt--;
+
+				if (minCnt <= 0) {
+					minCnt = 1;
+					min = data[idx];
+					for (size_t i = 1; i < size; i++) {
+						T now = data[(idx + i) % LEN];
+						if (now == min)
+							minCnt++;
+						else if (now < min) {
+							minCnt = 1;
+							min = now;
+						}
+					}
+				}
+			}
+			if (max == ret) {
+				maxCnt--;
+
+				if (maxCnt <= 0) {
+					maxCnt = 1;
+					max = data[idx];
+					for (size_t i = 1; i < size; i++) {
+						T now = data[(idx + i) % LEN];
+						if (now == max)
+							maxCnt++;
+						else if (max < now) {
+							maxCnt = 1;
+							max = now;
+						}
+					}
+				}
+			}
+		}
+
+		return ret;
+	}
+};
+
+
 #endif
