@@ -26,6 +26,9 @@ public:
 
 	void start() override;
 	void stop() override;
+
+	StatisticMixer::Stat calcCaptureStat() override { return capture.calcCaptureStat(); }
+	StatisticMixer::Stat calcEncoderStat() override { return encoder.calcEncoderStat(); }
 };
 
 

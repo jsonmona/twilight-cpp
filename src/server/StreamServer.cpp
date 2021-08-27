@@ -24,6 +24,7 @@ StreamServer::StreamServer() :
 			return;
 		}
 
+		lastStatReport = std::chrono::steady_clock::now();
 		conn = std::move(newSock);
 		conn->setOnDisconnected([this]() {
 			audioEncoder.stop();
@@ -49,6 +50,8 @@ void StreamServer::stop() {
 }
 
 void StreamServer::_processOutput(DesktopFrame<ByteBuffer>&& cap) {
+	auto nowTime = std::chrono::steady_clock::now();
+
 	if (cap.cursorPos)
 		cursorPos = std::move(cap.cursorPos);
 
@@ -74,6 +77,26 @@ void StreamServer::_processOutput(DesktopFrame<ByteBuffer>&& cap) {
 
 		pkt.set_extra_data_len(cap.desktop->size());
 		_writeOutput(pkt, cap.desktop->data());
+	}
+
+	if (nowTime - lastStatReport > std::chrono::milliseconds(250)) {
+		lastStatReport = nowTime;
+		auto cap = capture->calcCaptureStat();
+		auto enc = capture->calcEncoderStat();
+
+		if (cap.valid() && enc.valid()) {
+			msg::ServerPerfReport* m = pkt.mutable_server_perf_report();
+			m->set_capture_min(cap.min);
+			m->set_capture_avg(cap.avg);
+			m->set_capture_max(cap.max);
+
+			m->set_encoder_min(enc.min);
+			m->set_encoder_avg(enc.avg);
+			m->set_encoder_max(enc.max);
+
+			pkt.set_extra_data_len(0);
+			_writeOutput(pkt, nullptr);
+		}
 	}
 }
 

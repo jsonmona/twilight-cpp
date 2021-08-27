@@ -14,6 +14,7 @@
 #include <thread>
 #include <mutex>
 #include <atomic>
+#include <chrono>
 
 
 class StreamServer {
@@ -27,6 +28,8 @@ class StreamServer {
 	
 	std::unique_ptr<CapturePipeline> capture;
 	std::shared_ptr<CursorPos> cursorPos;
+
+	std::chrono::steady_clock::time_point lastStatReport;
 
 	void _runListen();
 

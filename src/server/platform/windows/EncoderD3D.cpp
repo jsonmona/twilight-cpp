@@ -1,5 +1,6 @@
 #include "EncoderD3D.h"
 
+#include <chrono>
 #include <deque>
 
 
@@ -111,7 +112,7 @@ static MFTransform getVideoEncoder(const MFDxgiDeviceManager& deviceManager, con
 
 EncoderD3D::EncoderD3D(DeviceManagerD3D _devs, int _width, int _height) :
 	log(createNamedLogger("EncoderD3D")),
-	width(_width), height(_height),
+	width(_width), height(_height), statMixer(120),
 	mfDeviceManager(_devs.mfDeviceManager)
 {
 	check_quit(!_devs.isVideoSupported(), log, "D3D does not support video");
@@ -258,10 +259,10 @@ void EncoderD3D::pushData(DesktopFrame<D3D11Texture2D>&& cap) {
 	const long long sampleDur = MFTime * frameDen / frameNum;
 	const long long sampleTime = frameCnt * MFTime * frameDen / frameNum;
 
-	DesktopFrame<long long> now;
+	DesktopFrame<SideData> now;
 	now.cursorPos = std::move(cap.cursorPos);
 	now.cursorShape = std::move(cap.cursorShape);
-	now.desktop = std::make_shared<long long>(sampleTime);
+	now.desktop = std::make_shared<SideData>(SideData{ sampleTime, std::chrono::steady_clock::now() });
 
 	extraData.push_back(std::move(now));
 
@@ -307,12 +308,12 @@ void EncoderD3D::run_() {
 			int idx = -1;
 
 			long long sampleTime;
-			DesktopFrame<long long> now;
+			DesktopFrame<SideData> now;
 			DesktopFrame<ByteBuffer> enc;
 
 			enc.desktop = std::make_shared<ByteBuffer>(popEncoderData_(&sampleTime));
 			for (int i = 0; i < extraData.size(); i++) {
-				if (*extraData[i].desktop == sampleTime) {
+				if (extraData[i].desktop->pts == sampleTime) {
 					now = std::move(extraData[i]);
 					idx = i;
 					break;
@@ -327,6 +328,9 @@ void EncoderD3D::run_() {
 				extraData.pop_front();
 			else
 				extraData.erase(extraData.begin() + idx);
+
+			auto timeTaken = std::chrono::steady_clock::now() - now.desktop->inputTime;
+			statMixer.pushValue(std::chrono::duration_cast<std::chrono::duration<float>>(timeTaken).count());
 
 			enc.cursorPos = std::move(now.cursorPos);
 			enc.cursorShape = std::move(now.cursorShape);

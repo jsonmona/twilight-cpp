@@ -19,6 +19,8 @@ set(COMMON_SRC
     ./common/NetworkServer.cpp
     ./common/NetworkSocket.h
     ./common/NetworkSocket.cpp
+    ./common/StatisticMixer.h
+    ./common/StatisticMixer.cpp
 
     ./common/platform/software/ScaleSoftware.h
     ./common/platform/software/ScaleSoftware.cpp

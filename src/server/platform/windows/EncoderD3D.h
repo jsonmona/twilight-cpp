@@ -5,6 +5,7 @@
 #include "common/log.h"
 #include "common/ByteBuffer.h"
 #include "common/DesktopFrame.h"
+#include "common/StatisticMixer.h"
 
 #include "common/platform/windows/DeviceManagerD3D.h"
 
@@ -16,6 +17,11 @@
 
 
 class EncoderD3D {
+	struct SideData {
+		long long pts;
+		std::chrono::steady_clock::time_point inputTime;
+	};
+
 	LoggerPtr log;
 
 	std::atomic<bool> flagWaitingInput;
@@ -24,11 +30,12 @@ class EncoderD3D {
 
 	std::function<void(DesktopFrame<ByteBuffer>&&)> onDataAvailable;
 
-	std::deque<DesktopFrame<long long>> extraData;
+	std::deque<DesktopFrame<SideData>> extraData;
 
 	MFDxgiDeviceManager mfDeviceManager;
 	MFTransform encoder;
 	DWORD inputStreamId, outputStreamId;
+	StatisticMixer statMixer;
 
 	std::thread workerThread;
 	std::mutex dataPushLock;
@@ -49,6 +56,8 @@ public:
 
 	void start();
 	void stop();
+
+	StatisticMixer::Stat calcEncoderStat() { return statMixer.calcStat(); }
 
 	void pushData(DesktopFrame<D3D11Texture2D>&& cap);
 };

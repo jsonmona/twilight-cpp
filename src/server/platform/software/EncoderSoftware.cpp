@@ -75,9 +75,14 @@ void EncoderSoftware::_run() {
 
 	auto timeBegin = std::chrono::steady_clock::now();
 
+	struct SideData {
+		long long pts;
+		std::chrono::steady_clock::time_point startTime;
+	};
+
 	long long cnt = 0;
-	DesktopFrame<long long> prev;
-	std::deque<DesktopFrame<long long>> extraData;
+	DesktopFrame<SideData> prev;
+	std::deque<DesktopFrame<SideData>> extraData;
 	bool lastCursorVisible = false;
 	int lastCursorX, lastCursorY;
 
@@ -89,14 +94,14 @@ void EncoderSoftware::_run() {
 		if (stat >= 0) {
 			int idx = -1;
 			for (int i = 0; i < extraData.size(); i++) {
-				if (*extraData[i].desktop == pkt->pts) {
+				if (extraData[i].desktop->pts == pkt->pts) {
 					idx = i;
 					break;
 				}
 			}
 			check_quit(idx == -1, log, "Failed to find matching extra data for pts");
 
-			DesktopFrame<long long> now = std::move(extraData[idx]);
+			DesktopFrame<SideData> now = std::move(extraData[idx]);
 			if (idx == 0)
 				extraData.pop_front();
 			else
@@ -108,6 +113,9 @@ void EncoderSoftware::_run() {
 			enc.cursorShape = std::move(now.cursorShape);
 
 			enc.desktop->write(0, pkt->buf->data, pkt->buf->size);
+
+			auto timeDiff = std::chrono::steady_clock::now() - now.desktop->startTime;
+			statMixer.pushValue(std::chrono::duration_cast<std::chrono::duration<float>>(timeDiff).count());
 
 			onDataAvailable(std::move(enc));
 		}
@@ -144,8 +152,8 @@ void EncoderSoftware::_run() {
 			frame->width = width;
 			frame->pts = cnt++;
 
-			DesktopFrame<long long> now;
-			now.desktop = std::make_shared<long long>(frame->pts);
+			DesktopFrame<SideData> now;
+			now.desktop = std::make_shared<SideData>(SideData{ frame->pts, std::chrono::steady_clock::now() });
 			now.cursorPos = std::move(cap.cursorPos);
 			now.cursorShape = std::move(cap.cursorShape);
 			extraData.push_back(now);

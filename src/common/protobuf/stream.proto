@@ -32,6 +32,16 @@ message RequestStreamAnswer {
 	int32 height = 5;
 }
 
+message ServerPerfReport {
+	float capture_min = 1;
+	float capture_avg = 2;
+	float capture_max = 3;
+
+	float encoder_min = 5;
+	float encoder_avg = 6;
+	float encoder_max = 7;
+}
+
 // Extra data contains desktom image (encoded)
 message DesktopFrame {
 	bool cursor_visible = 2;

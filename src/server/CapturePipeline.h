@@ -4,6 +4,7 @@
 
 #include "common/ByteBuffer.h"
 #include "common/DesktopFrame.h"
+#include "common/StatisticMixer.h"
 
 #include <packet.pb.h>
 
@@ -33,6 +34,9 @@ public:
 
 	virtual void start() = 0;
 	virtual void stop() = 0;
+
+	virtual StatisticMixer::Stat calcCaptureStat() = 0;
+	virtual StatisticMixer::Stat calcEncoderStat() = 0;
 };
 
 

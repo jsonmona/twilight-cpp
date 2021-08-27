@@ -6,6 +6,7 @@
 #include "common/ByteBuffer.h"
 #include "common/ffmpeg-headers.h"
 #include "common/DesktopFrame.h"
+#include "common/StatisticMixer.h"
 
 #include "common/platform/software/TextureSoftware.h"
 
@@ -28,6 +29,8 @@ class EncoderSoftware {
 	std::condition_variable dataCV;
 	std::deque<DesktopFrame<TextureSoftware>> dataQueue;
 
+	StatisticMixer statMixer;
+
 	void _run();
 
 public:
@@ -39,6 +42,8 @@ public:
 
 	void start();
 	void stop();
+
+	StatisticMixer::Stat calcEncoderStat() { return statMixer.calcStat(); }
 
 	void pushData(DesktopFrame<TextureSoftware>&& newData);
 };

@@ -3,6 +3,7 @@
 
 #include "common/log.h"
 #include "common/DesktopFrame.h"
+#include "common/StatisticMixer.h"
 
 #include "common/platform/windows/ComWrapper.h"
 #include "common/platform/windows/DeviceManagerD3D.h"
@@ -30,6 +31,7 @@ class CaptureD3D {
 	std::thread runThread;
 	long long perfCounterFreq;
 	long long frameInterval;
+	StatisticMixer statMixer;
 
 	std::function<void(DesktopFrame<D3D11Texture2D>&&)> onNextFrame;
 
@@ -45,6 +47,8 @@ public:
 
 	void start(int fps);
 	void stop();
+
+	StatisticMixer::Stat calcCaptureStat() { return statMixer.calcStat(); }
 
 	template<typename Fn>
 	void setOnNextFrame(Fn fn) { onNextFrame = std::move(fn); }

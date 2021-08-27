@@ -27,6 +27,7 @@ CaptureD3D::CaptureD3D(DeviceManagerD3D _devs) :
 	output(_devs.output), device(_devs.device)
 {
 	perfCounterFreq = getPerformanceFreqency();
+	statMixer.setPoolSize(240);
 }
 
 CaptureD3D::~CaptureD3D() {
@@ -128,6 +129,9 @@ void CaptureD3D::run_() {
 			while (getPerformanceCounter() - oldTime < frameInterval)
 				Sleep(0);
 		}
+
+		long long nowTime = getPerformanceCounter();
+		statMixer.pushValue(static_cast<float>(nowTime - oldTime) / perfCounterFreq);
 
 		oldTime += frameInterval;
 		onNextFrame(captureFrame_());

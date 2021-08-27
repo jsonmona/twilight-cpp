@@ -12,5 +12,7 @@ message Packet {
 		DesktopFrame desktop_frame = 2;
 		CursorShape cursor_shape = 3;
 		AudioFrame audio_frame = 4;
+
+		ServerPerfReport server_perf_report = 100;
 	}
 }

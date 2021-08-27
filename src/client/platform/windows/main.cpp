@@ -24,7 +24,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 	int targetWidth = screenSize.width() * 5 / 6;
 	int targetHeight = screenSize.height() * 5 / 6;
-
+	
 	StreamWindow sw("192.168.11.129");
 	sw.setFixedSize(QSize(targetWidth, targetHeight));
 	sw.show();
