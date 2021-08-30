@@ -3,7 +3,10 @@
 
 
 #include "common/log.h"
+#include "common/util.h"
 #include "common/ffmpeg-headers.h"
+#include "common/ByteBuffer.h"
+#include "common/DesktopFrame.h"
 
 #include "common/platform/software/TextureSoftware.h"
 #include "common/platform/software/ScaleSoftware.h"
@@ -23,15 +26,17 @@ class DecoderSoftware {
 	AVCodecContext* codecCtx;
 	ScaleSoftware scale;
 
-	std::atomic_bool flagRun;
+	std::atomic<bool> flagRun;
 	std::thread looper;
 
-	std::function<void(TextureSoftware&&)> onFrameAvailable;
+	std::mutex packetLock;
+	std::condition_variable packetCV;
+	std::deque<DesktopFrame<std::pair<uint8_t*, size_t>>> packetQueue;
 
-	struct EncodedData;
-	std::mutex decoderQueueMutex;
-	std::condition_variable decoderQueueCV;
-	std::deque<std::unique_ptr<EncodedData>> decoderQueue;
+	std::mutex frameLock;
+	std::condition_variable frameCV;
+	std::deque<DesktopFrame<TextureSoftware>> frameQueue;
+	MinMaxTrackingRingBuffer<size_t, 32> frameBufferHistory;
 
 	void _run();
 
@@ -39,13 +44,11 @@ public:
 	DecoderSoftware();
 	~DecoderSoftware();
 
-	void setOnFrameAvailable(const decltype(onFrameAvailable)& fn) { onFrameAvailable = fn; }
-
-	// thread safe. can be called from any thread
-	void pushData(uint8_t* data, size_t len);
-
 	void start();
 	void stop();
+
+	void pushData(DesktopFrame<ByteBuffer>&& nextData);
+	DesktopFrame<TextureSoftware> popData();
 };
 
 

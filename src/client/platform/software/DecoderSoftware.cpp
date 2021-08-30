@@ -1,10 +1,6 @@
 #include "DecoderSoftware.h"
 
-
-struct DecoderSoftware::EncodedData {
-	uint8_t* data;
-	size_t len;
-};
+#include <map>
 
 
 DecoderSoftware::DecoderSoftware() :
@@ -24,17 +20,34 @@ void DecoderSoftware::_run() {
 	AVPacket* pkt = av_packet_alloc();
 	AVFrame* frame = av_frame_alloc();
 
-	while (flagRun.load(std::memory_order_acquire)) {
-		std::unique_ptr<EncodedData> data;
+	long long currPts = 0;
+	std::map<long long, DesktopFrame<std::chrono::steady_clock::time_point>> sidedata;
 
+	while (flagRun.load(std::memory_order_acquire)) {
 		while (true) {
 			stat = avcodec_receive_frame(codecCtx, frame);
 			if (stat == 0) {
+				DesktopFrame<TextureSoftware> result;
+
 				TextureSoftware yuv = TextureSoftware::reference(frame->data, frame->linesize,
 						frame->width, frame->height, static_cast<AVPixelFormat>(frame->format));
 
 				scale.pushInput(std::move(yuv));
-				onFrameAvailable(scale.popOutput());
+				result.desktop = std::make_shared<TextureSoftware>(scale.popOutput());
+
+				auto itr = sidedata.find(frame->pts);
+				if (itr != sidedata.end()) {
+					result.cursorPos = std::move(itr->second.cursorPos);
+					result.cursorShape = std::move(itr->second.cursorShape);
+					sidedata.erase(itr);
+				}
+				else {
+					log->error("Unable to find sidedata for pts={}  (sidedata.size={})", frame->pts, sidedata.size());
+				}
+
+				std::lock_guard lock(frameLock);
+				frameQueue.push_back(std::move(result));
+				frameCV.notify_one();
 			}
 			else if (stat == AVERROR(EAGAIN))
 				break;
@@ -44,17 +57,19 @@ void DecoderSoftware::_run() {
 				error_quit(log, "Unknown error from avcodec_receive_frame: {}", stat);
 		}
 
-		/* lock_guard */ {
-			std::unique_lock<std::mutex> lock(decoderQueueMutex);
+		DesktopFrame<std::pair<uint8_t*, size_t>> data;
 
-			while (decoderQueue.empty() && flagRun.load(std::memory_order_relaxed))
-				decoderQueueCV.wait(lock);
+		/* lock_guard */ {
+			std::unique_lock lock(packetLock);
+
+			while (packetQueue.empty() && flagRun.load(std::memory_order_relaxed))
+				packetCV.wait(lock);
 
 			if (!flagRun.load(std::memory_order_relaxed))
 				break;
 
-			data = std::move(decoderQueue.front());
-			decoderQueue.pop_front();
+			data = std::move(packetQueue.front());
+			packetQueue.pop_front();
 		}
 
 		if (!flagRun.load(std::memory_order_relaxed))
@@ -62,21 +77,28 @@ void DecoderSoftware::_run() {
 
 		av_packet_unref(pkt);
 		pkt->buf = nullptr;
-		pkt->data = data->data;
-		pkt->size = data->len;
+		pkt->data = data.desktop->first;
+		pkt->size = data.desktop->second;
 		pkt->dts = AV_NOPTS_VALUE;
-		pkt->pts = AV_NOPTS_VALUE;
+		pkt->pts = currPts;
 		//pkt->flags = AV_PKT_FLAG_KEY;
 		pkt->flags = 0;
 
 		stat = avcodec_send_packet(codecCtx, pkt);
 
 		if (stat == AVERROR(EAGAIN)) {
-			std::lock_guard<std::mutex> lock(decoderQueueMutex);
-			decoderQueue.emplace_front(std::move(data));
+			std::lock_guard lock(packetLock);
+			packetQueue.push_front(std::move(data));
 		}
-		else
-			av_free(data->data);
+		else {
+			av_free(data.desktop->first);
+
+			DesktopFrame<std::chrono::steady_clock::time_point> now;
+			now.desktop = std::make_shared<std::chrono::steady_clock::time_point>(std::chrono::steady_clock::now());
+			now.cursorPos = std::move(data.cursorPos);
+			now.cursorShape = std::move(data.cursorShape);
+			sidedata[currPts++] = std::move(now);
+		}
 
 		if (stat == AVERROR_EOF)
 			break;
@@ -89,16 +111,38 @@ void DecoderSoftware::_run() {
 	av_frame_free(&frame);
 }
 
-void DecoderSoftware::pushData(uint8_t* data, size_t len) {
+void DecoderSoftware::pushData(DesktopFrame<ByteBuffer>&& nextData) {
 	constexpr static int PAD = 64;
 
-	uint8_t* paddedData = reinterpret_cast<uint8_t*>(av_malloc(len + PAD));
-	memcpy(paddedData, data, len);
-	memset(paddedData + len, 0, PAD);
+	uint8_t* paddedData = reinterpret_cast<uint8_t*>(av_malloc(nextData.desktop->size() + PAD));
+	memcpy(paddedData, nextData.desktop->data(), nextData.desktop->size());
+	memset(paddedData + nextData.desktop->size(), 0, PAD);
 
-	std::lock_guard<std::mutex> lock(decoderQueueMutex);
-	decoderQueue.emplace_back(std::make_unique<EncodedData>(EncodedData{ paddedData, len }));
-	decoderQueueCV.notify_one();
+	DesktopFrame<std::pair<uint8_t*, size_t>> now;
+	now.desktop = std::make_shared<std::pair<uint8_t*, size_t>>(paddedData, nextData.desktop->size());
+	now.cursorPos = std::move(nextData.cursorPos);
+	now.cursorShape = std::move(nextData.cursorShape);
+
+	std::lock_guard<std::mutex> lock(packetLock);
+	packetQueue.push_back(std::move(now));
+	packetCV.notify_one();
+}
+
+DesktopFrame<TextureSoftware> DecoderSoftware::popData() {
+	DesktopFrame<TextureSoftware> ret;
+
+	std::lock_guard lock(packetLock);
+	if (frameQueue.empty() || !flagRun.load(std::memory_order_relaxed))
+		return ret;
+
+	// Prevent excessive buffering
+	frameBufferHistory.push(frameQueue.size());
+	while (frameBufferHistory.max - frameBufferHistory.min + 1 < frameQueue.size())
+		frameQueue.pop_front();
+
+	ret = frameQueue.front();
+	frameQueue.pop_front();
+	return ret;
 }
 
 void DecoderSoftware::start() {
@@ -120,7 +164,9 @@ void DecoderSoftware::start() {
 
 void DecoderSoftware::stop() {
 	flagRun.store(false, std::memory_order_release);
-	decoderQueueCV.notify_all();
+	packetCV.notify_all();
+	frameCV.notify_all();
+
 	looper.join();
 
 	avcodec_free_context(&codecCtx);

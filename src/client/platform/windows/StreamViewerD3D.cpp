@@ -40,53 +40,43 @@ void StreamViewerD3D::resizeEvent(QResizeEvent* ev) {
 	}
 }
 
-bool StreamViewerD3D::processNewPacket(const msg::Packet& pkt, uint8_t* extraData) {
+void StreamViewerD3D::setDrawCursor(bool newval) {
+}
+
+void StreamViewerD3D::processDesktopFrame(const msg::Packet& pkt, uint8_t* extraData) {
 	while (!flagRunRender.load(std::memory_order_acquire))
-		Sleep(0);
+		Sleep(1);
 
-	static std::shared_ptr<ByteBuffer> pendingCursorChange;
-	static int cursorWidth, cursorHeight;
+	DesktopFrame<ByteBuffer> now;
+	now.desktop = std::make_shared<ByteBuffer>(pkt.extra_data_len());
+	now.desktop->write(0, extraData, pkt.extra_data_len());
 
-	//FIXME: Very tight coupling with base class
-	//FIXME: Peek decoder to latest I-frame on exccesive decoding lag
-	//       ...but it's incompatible with intra-refresh
-
-	switch (pkt.msg_case()) {
-	case msg::Packet::kDesktopFrame:
-		decoder->pushData(extraData, pkt.extra_data_len());
-		/* lock */ {
-			FrameData now;
-			if (pkt.desktop_frame().cursor_visible()) {
-				now.cursorX = pkt.desktop_frame().cursor_x();
-				now.cursorY = pkt.desktop_frame().cursor_y();
-			}
-			else {
-				now.cursorX = -1;
-				now.cursorY = -1;
-			}
-			if (pendingCursorChange != nullptr) {
-				now.cursorDataUpdate = std::move(pendingCursorChange);
-				now.cursorWidth = cursorWidth;
-				now.cursorHeight = cursorHeight;
-				pendingCursorChange.reset();
-			}
-			std::lock_guard lock(frameDataLock);
-			undecodedFrameData.push_back(std::move(now));
-		}
-		break;
-	case msg::Packet::kCursorShape: {
-		const auto& data = pkt.cursor_shape();
-		pendingCursorChange = std::make_shared<ByteBuffer>(data.width() * data.height() * 4);
-		memcpy(pendingCursorChange->data(), extraData, pkt.extra_data_len());
-		cursorWidth = data.width();
-		cursorHeight = data.height();
+	now.cursorPos = std::make_shared<CursorPos>();
+	now.cursorPos->visible = pkt.desktop_frame().cursor_visible();
+	if (now.cursorPos->visible) {
+		now.cursorPos->x = pkt.desktop_frame().cursor_x();
+		now.cursorPos->y = pkt.desktop_frame().cursor_y();
 	}
-		break;
-	default:
-		log->error("processNewPacket received unknown packet type: {}", pkt.msg_case());
-		return false;
+	else {
+		now.cursorPos->x = -1;
+		now.cursorPos->y = -1;
 	}
-	return true;
+
+	now.cursorShape.swap(pendingCursorChange);
+
+	decoder->pushData(std::move(now));
+}
+
+void StreamViewerD3D::processCursorShape(const msg::Packet& pkt, uint8_t* extraData) {
+	const auto& data = pkt.cursor_shape();
+	pendingCursorChange = std::make_shared<CursorShape>();
+	pendingCursorChange->height = data.height();
+	pendingCursorChange->width = data.width();
+	pendingCursorChange->hotspotX = data.hotspot_x();
+	pendingCursorChange->hotspotY = data.hotspot_y();
+	pendingCursorChange->image.resize(pkt.extra_data_len());
+
+	memcpy(pendingCursorChange->image.data(), extraData, pkt.extra_data_len());
 }
 
 void StreamViewerD3D::_init() {
@@ -205,7 +195,6 @@ void StreamViewerD3D::_init() {
 	_recreateCursorTexture();
 
 	decoder = std::make_unique<DecoderSoftware>();
-	decoder->setOnFrameAvailable([this](TextureSoftware&& frame) { _onNewFrame(std::move(frame)); });
 	decoder->start();
 
 	flagRunRender.store(true, std::memory_order_release);
@@ -240,53 +229,30 @@ void StreamViewerD3D::_recreateCursorTexture() {
 	check_quit(FAILED(hr), log, "Failed to create cursor SRV");
 }
 
-void StreamViewerD3D::_onNewFrame(TextureSoftware&& frame) {
-	std::lock_guard lock(frameDataLock);
-
-	FrameData now = std::move(undecodedFrameData.front());
-	undecodedFrameData.pop_front();
-
-	now.desktop = std::move(frame);
-	frameData.push_back(std::move(now));
-}
-
 void StreamViewerD3D::_renderLoop() {
 	bool desktopLoaded = false;
 	bool cursorLoaded = false;
 	float clearColor[4] = { 0, 0, 0, 1 };
 
+	bool cursorVisible = false;
 	int cursorX = -1, cursorY = -1;
 	MinMaxTrackingRingBuffer<size_t, 32> frameHistory;
 
 	while (flagRunRender.load(std::memory_order_acquire)) {
-		bool hasNewFrameData = false;
-		FrameData nowFrameData;
+		DesktopFrame<TextureSoftware> frame = decoder->popData();
 
-		/* lock */ {
-			std::lock_guard lock(frameDataLock);
+		if (frame.desktop) {
+			desktopLoaded = true;
 
-			frameHistory.push(frameData.size());
-
-			while (frameHistory.max - frameHistory.min + 1 < frameData.size())
-				frameData.pop_front();
-
-			if (!frameData.empty()) {
-				nowFrameData = std::move(frameData.front());
-				frameData.pop_front();
-				hasNewFrameData = true;
-			}
-		}
-
-		if (hasNewFrameData) {
 			D3D11_MAPPED_SUBRESOURCE mapInfo;
 			context->Map(desktopTex.ptr(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapInfo);
 
 			uint8_t* dstPtr = reinterpret_cast<uint8_t*>(mapInfo.pData);
-			uint8_t* srcPtr = nowFrameData.desktop.data[0];
+			uint8_t* srcPtr = frame.desktop->data[0];
 
-			if (mapInfo.RowPitch != nowFrameData.desktop.linesize[0]) {
+			if (mapInfo.RowPitch != frame.desktop->linesize[0]) {
 				for (int i = 0; i < height; i++)
-					memcpy(dstPtr + (i * mapInfo.RowPitch), srcPtr + (i * nowFrameData.desktop.linesize[0]), width * 4);
+					memcpy(dstPtr + (i * mapInfo.RowPitch), srcPtr + (i * frame.desktop->linesize[0]), width * 4);
 			}
 			else {
 				// Fast path
@@ -294,11 +260,14 @@ void StreamViewerD3D::_renderLoop() {
 			}
 
 			context->Unmap(desktopTex.ptr(), 0);
-			desktopLoaded = true;
+		}
 
-			if (nowFrameData.cursorX != cursorX || nowFrameData.cursorY != cursorY) {
-				cursorX = nowFrameData.cursorX;
-				cursorY = nowFrameData.cursorY;
+		if (frame.cursorPos) {
+			cursorVisible = frame.cursorPos->visible;
+
+			if (cursorVisible && (frame.cursorPos->x != cursorX || frame.cursorPos->y != cursorY)) {
+				cursorX = frame.cursorPos->x;
+				cursorY = frame.cursorPos->y;
 
 				D3D11_MAPPED_SUBRESOURCE mapInfo = {};
 				context->Map(cbuffer.ptr(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapInfo);
@@ -309,24 +278,25 @@ void StreamViewerD3D::_renderLoop() {
 				pData[3] = (float)cursorTexHeight / height;
 				context->Unmap(cbuffer.ptr(), 0);
 			}
+		}
 
-			if (nowFrameData.cursorDataUpdate != nullptr) {
-				cursorLoaded = true;
+		if (frame.cursorShape) {
+			cursorLoaded = true;
+			auto& shape = *frame.cursorShape;
 
-				if (cursorTexWidth < nowFrameData.cursorWidth || cursorTexHeight < nowFrameData.cursorHeight) {
-					cursorTexWidth = cursorTexHeight = std::max(nowFrameData.cursorWidth, nowFrameData.cursorHeight);
-					_recreateCursorTexture();
-				}
-
-				D3D11_MAPPED_SUBRESOURCE mapInfo = {};
-				context->Map(cursorTex.ptr(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapInfo);
-				uint8_t* pDst = reinterpret_cast<uint8_t*>(mapInfo.pData);
-				uint8_t* pSrc = nowFrameData.cursorDataUpdate->data();
-				memset(pDst, 0, cursorTexHeight * mapInfo.RowPitch);
-				for (int i = 0; i < nowFrameData.cursorHeight; i++)
-					memcpy(pDst + (i * mapInfo.RowPitch), pSrc + (i * nowFrameData.cursorWidth * 4), nowFrameData.cursorWidth * 4);
-				context->Unmap(cursorTex.ptr(), 0);
+			if (cursorTexWidth < shape.width || cursorTexHeight < shape.height) {
+				cursorTexWidth = cursorTexHeight = std::max(shape.width, shape.height);
+				_recreateCursorTexture();
 			}
+
+			D3D11_MAPPED_SUBRESOURCE mapInfo = {};
+			context->Map(cursorTex.ptr(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapInfo);
+			uint8_t* pDst = reinterpret_cast<uint8_t*>(mapInfo.pData);
+			uint8_t* pSrc = shape.image.data();
+			memset(pDst, 0, cursorTexHeight * mapInfo.RowPitch);
+			for (int i = 0; i < shape.height; i++)
+				memcpy(pDst + (i * mapInfo.RowPitch), pSrc + (shape.width * 4) * i, shape.width * 4);
+			context->Unmap(cursorTex.ptr(), 0);
 		}
 
 		context->ClearRenderTargetView(framebufferRTV.ptr(), clearColor);
@@ -355,7 +325,7 @@ void StreamViewerD3D::_renderLoop() {
 			context->IASetVertexBuffers(0, 1, vertexBuffer.data(), &quadVertexStride, &quadVertexOffset);
 			context->Draw(quadVertexCount, 0);
 
-			if (cursorLoaded && cursorX >= 0) {
+			if (cursorLoaded && cursorVisible) {
 				context->VSSetShader(vertexShaderBox.ptr(), nullptr, 0);
 				context->VSSetConstantBuffers(0, 1, cbuffer.data());
 

@@ -11,11 +11,13 @@ class StreamViewerBase : public QWidget {
 	Q_OBJECT;
 
 public:
-	StreamViewerBase();
-	~StreamViewerBase() override;
+	StreamViewerBase() {}
+	~StreamViewerBase() override {}
 
-	// return true if consumed
-	virtual bool processNewPacket(const msg::Packet& pkt, uint8_t* extraData) = 0;
+	virtual void setDrawCursor(bool newval) = 0;
+
+	virtual void processDesktopFrame(const msg::Packet& pkt, uint8_t* extraData) = 0;
+	virtual void processCursorShape(const msg::Packet& pkt, uint8_t* extraData) = 0;
 };
 
 

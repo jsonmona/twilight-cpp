@@ -36,8 +36,10 @@ StreamWindow::~StreamWindow() {
 void StreamWindow::processNewPacket_(const msg::Packet& pkt, uint8_t* extraData) {
 	switch (pkt.msg_case()) {
 	case msg::Packet::kDesktopFrame:
+		viewer->processDesktopFrame(pkt, extraData);
+		break;
 	case msg::Packet::kCursorShape:
-		viewer->processNewPacket(pkt, extraData);
+		viewer->processCursorShape(pkt, extraData);
 		break;
 	case msg::Packet::kAudioFrame: {
 		ByteBuffer buf(pkt.extra_data_len());

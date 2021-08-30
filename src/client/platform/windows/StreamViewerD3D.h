@@ -15,14 +15,6 @@
 #include <thread>
 
 
-struct FrameData {
-	int cursorX, cursorY;
-	TextureSoftware desktop;
-	std::shared_ptr<ByteBuffer> cursorDataUpdate;
-	int cursorWidth, cursorHeight;
-};
-
-
 class StreamViewerD3D : public StreamViewerBase {
 	Q_OBJECT;
 	LoggerPtr log;
@@ -52,21 +44,21 @@ class StreamViewerD3D : public StreamViewerBase {
 	D3D11BlendState blendState;
 
 	std::unique_ptr<DecoderSoftware> decoder;
+	std::shared_ptr<CursorShape> pendingCursorChange;
+
 	int width, height;
 	int cursorTexWidth, cursorTexHeight;
-	spinlock frameDataLock;
-	std::deque<FrameData> frameData;
-	std::deque<FrameData> undecodedFrameData; //FIXME: Assumes dts to increase monotonically
 
 	HWND hwnd() const { return reinterpret_cast<HWND>(winId()); }
-	void _onNewFrame(TextureSoftware&& frame);
 	void _init();
 	void _recreateCursorTexture();
 	void _renderLoop();
 
 protected:
-	bool useAbsCursor() { return false; }
-	bool processNewPacket(const msg::Packet& pkt, uint8_t* extraData) override;
+	void setDrawCursor(bool newval) override;
+	void processDesktopFrame(const msg::Packet& pkt, uint8_t* extraData) override;
+	void processCursorShape(const msg::Packet& pkt, uint8_t* extraData) override;
+
 	void resizeEvent(QResizeEvent* ev) override;
 
 public:

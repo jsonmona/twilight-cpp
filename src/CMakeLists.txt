@@ -38,10 +38,10 @@ set(COMMON_WINDOWS_SRC
 )
 
 set(CLIENT_SRC
+    ./client/StreamViewerBase.h
+
     ./client/StreamClient.h
     ./client/StreamClient.cpp
-    ./client/StreamViewerBase.h
-    ./client/StreamViewerBase.cpp
     ./client/StreamWindow.h
     ./client/StreamWindow.cpp
 
