@@ -1,6 +1,7 @@
 #include "StreamViewerD3D.h"
 
 #include "common/util.h"
+#include "common/StatisticMixer.h"
 
 #include <vector>
 
@@ -236,7 +237,6 @@ void StreamViewerD3D::_renderLoop() {
 
 	bool cursorVisible = false;
 	int cursorX = -1, cursorY = -1;
-	MinMaxTrackingRingBuffer<size_t, 32> frameHistory;
 
 	while (flagRunRender.load(std::memory_order_acquire)) {
 		DesktopFrame<TextureSoftware> frame = decoder->popData();
