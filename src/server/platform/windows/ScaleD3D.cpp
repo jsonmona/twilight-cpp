@@ -28,7 +28,7 @@ protected:
     void _convert() override;
 
 public:
-    ScaleD3D_AYUV(int w, int h) : ScaleD3D(createNamedLogger("ScaleD3D_AYUV"), w, h, ScaleType::AYUV) {}
+    ScaleD3D_AYUV(int w, int h, bool copyInput) : ScaleD3D(createNamedLogger("ScaleD3D_AYUV"), w, h, ScaleType::AYUV, copyInput) {}
     void init(const D3D11Device& device, const D3D11DeviceContext& context) override;
 };
 
@@ -42,18 +42,18 @@ protected:
     void _convert() override;
 
 public:
-    ScaleD3D_NV12(int w, int h) : ScaleD3D(createNamedLogger("ScaleD3D_NV12"), w, h, ScaleType::NV12) {}
+    ScaleD3D_NV12(int w, int h, bool copyInput) : ScaleD3D(createNamedLogger("ScaleD3D_NV12"), w, h, ScaleType::NV12, copyInput) {}
     void init(const D3D11Device& device, const D3D11DeviceContext& context) override;
 };
 
 
-std::unique_ptr<ScaleD3D> ScaleD3D::createInstance(int w, int h, ScaleType type) {
+std::unique_ptr<ScaleD3D> ScaleD3D::createInstance(int w, int h, ScaleType type, bool copyInput) {
     std::unique_ptr<ScaleD3D> ret;
 
     if (type == ScaleType::AYUV)
-        ret = std::make_unique<ScaleD3D_AYUV>(w, h);
+        ret = std::make_unique<ScaleD3D_AYUV>(w, h, copyInput);
     else if (type == ScaleType::NV12)
-        ret = std::make_unique<ScaleD3D_NV12>(w, h);
+        ret = std::make_unique<ScaleD3D_NV12>(w, h, copyInput);
     else
         error_quit(createNamedLogger("ScaleD3D"), "Invalid surface type requested");
 
@@ -61,9 +61,10 @@ std::unique_ptr<ScaleD3D> ScaleD3D::createInstance(int w, int h, ScaleType type)
 }
 
 
-ScaleD3D::ScaleD3D(LoggerPtr logger, int w, int h, ScaleType type) :
+ScaleD3D::ScaleD3D(LoggerPtr logger, int w, int h, ScaleType type, bool _copyInput) :
     log(logger), outType(type), outWidth(w), outHeight(h),
-    inFormat(DXGI_FORMAT_UNKNOWN), outFormat(DXGI_FORMAT_UNKNOWN)
+    inFormat(DXGI_FORMAT_UNKNOWN), outFormat(DXGI_FORMAT_UNKNOWN),
+    copyInput(_copyInput)
 {
 }
 
@@ -162,23 +163,25 @@ void ScaleD3D::_reconfigure() {
     inputTex.release();
     srInput.release();
 
-    D3D11_TEXTURE2D_DESC inDesc = {};
-    inDesc.Width = inWidth;
-    inDesc.Height = inHeight;
-    inDesc.Format = inFormat;
-    inDesc.Usage = D3D11_USAGE_DEFAULT;
-    inDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-    inDesc.MipLevels = 1;
-    inDesc.ArraySize = 1;
-    inDesc.SampleDesc.Count = 1;
-    device->CreateTexture2D(&inDesc, nullptr, inputTex.data());
+    if (copyInput) {
+        D3D11_TEXTURE2D_DESC inDesc = {};
+        inDesc.Width = inWidth;
+        inDesc.Height = inHeight;
+        inDesc.Format = inFormat;
+        inDesc.Usage = D3D11_USAGE_DEFAULT;
+        inDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        inDesc.MipLevels = 1;
+        inDesc.ArraySize = 1;
+        inDesc.SampleDesc.Count = 1;
+        device->CreateTexture2D(&inDesc, nullptr, inputTex.data());
 
-    D3D11_SHADER_RESOURCE_VIEW_DESC srDesc = {};
-    srDesc.Format = inFormat;
-    srDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-    srDesc.Texture2D.MostDetailedMip = 0;
-    srDesc.Texture2D.MipLevels = -1;
-    device->CreateShaderResourceView(inputTex.ptr(), &srDesc, srInput.data());
+        D3D11_SHADER_RESOURCE_VIEW_DESC srDesc = {};
+        srDesc.Format = inFormat;
+        srDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+        srDesc.Texture2D.MostDetailedMip = 0;
+        srDesc.Texture2D.MipLevels = -1;
+        device->CreateShaderResourceView(inputTex.ptr(), &srDesc, srInput.data());
+    }
 }
 
 bool ScaleD3D::_checkNeedsReconfigure(const D3D11Texture2D& tex) {
@@ -204,11 +207,28 @@ void ScaleD3D::pushInput(const D3D11Texture2D& tex) {
     if (_checkNeedsReconfigure(tex))
         _reconfigure();
 
-    context->CopyResource(inputTex.ptr(), tex.ptr());
+    if (copyInput) {
+        context->CopyResource(inputTex.ptr(), tex.ptr());
+    }
+    else {
+        inputTex = tex;
+        srInput.release();
+    }
+
     dirty = true;
 }
 
 D3D11Texture2D ScaleD3D::popOutput() {
+    if (!copyInput && srInput.isInvalid()) {
+        //TODO: Deduplicate code below
+        D3D11_SHADER_RESOURCE_VIEW_DESC srDesc = {};
+        srDesc.Format = inFormat;
+        srDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+        srDesc.Texture2D.MostDetailedMip = 0;
+        srDesc.Texture2D.MipLevels = -1;
+        device->CreateShaderResourceView(inputTex.ptr(), &srDesc, srInput.data());
+    }
+
     if (dirty)
         _convert();
 

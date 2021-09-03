@@ -44,11 +44,29 @@ void CapturePipelineD3DSoft::start() {
 
 	capture.start(60);
 	encoder.start();
+
+	flagRun.store(true, std::memory_order_release);
+	runThread = std::thread([this]() { run_(); });
 }
 
 void CapturePipelineD3DSoft::stop() {
+	flagRun.store(false, std::memory_order_relaxed);
+	runThread.join();
+
 	encoder.stop();
 	capture.stop();
+}
+
+void CapturePipelineD3DSoft::run_() {
+	HRESULT hr;
+	hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+	check_quit(FAILED(hr), log, "Failed to initialize COM");
+
+	while (flagRun.load(std::memory_order_acquire)) {
+		capture.poll();
+	}
+
+	CoUninitialize();
 }
 
 D3D11_TEXTURE2D_DESC CapturePipelineD3DSoft::copyToStageTex_(const D3D11Texture2D& tex) {

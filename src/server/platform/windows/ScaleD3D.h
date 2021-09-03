@@ -18,6 +18,7 @@ protected:
 	D3D11DeviceContext context;
 	ScaleType outType;
 	bool dirty = true;
+	bool copyInput;
 
 	int inWidth, inHeight;
 	DXGI_FORMAT inFormat;
@@ -33,14 +34,14 @@ protected:
 	D3D11Texture2D outputTex;
 	D3D11ShaderResourceView srInput;
 
-	explicit ScaleD3D(LoggerPtr logger, int w, int h, ScaleType _outType);
+	explicit ScaleD3D(LoggerPtr logger, int w, int h, ScaleType _outType, bool _copyInput);
 
 	bool _checkNeedsReconfigure(const D3D11Texture2D& tex);
 	virtual void _reconfigure();
 	virtual void _convert() = 0;
 
 public:
-	static std::unique_ptr<ScaleD3D> createInstance(int w, int h, ScaleType type);
+	static std::unique_ptr<ScaleD3D> createInstance(int w, int h, ScaleType type, bool copyInput);
 
 	virtual ~ScaleD3D();
 	virtual void init(const D3D11Device& device, const D3D11DeviceContext& context);

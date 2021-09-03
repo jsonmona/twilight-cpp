@@ -33,6 +33,7 @@ class CapturePipelineD3DSoft : public CapturePipeline {
 	std::atomic<bool> flagRun;
 	std::thread runThread;
 	
+	void run_();
 	D3D11_TEXTURE2D_DESC copyToStageTex_(const D3D11Texture2D& tex);
 	void captureNextFrame_(DesktopFrame<D3D11Texture2D>&& cap);
 

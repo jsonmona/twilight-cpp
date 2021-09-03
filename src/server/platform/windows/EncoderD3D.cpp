@@ -126,16 +126,14 @@ void EncoderD3D::start() {
 
 	init_();
 
-	encoder->ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, inputStreamId);
+	eventGen = encoder.castTo<IMFMediaEventGenerator>();
 
-	workerThread = std::thread([this]() { run_(); });
+	encoder->ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, inputStreamId);
 }
 
 void EncoderD3D::stop() {
 	encoder->ProcessMessage(MFT_MESSAGE_NOTIFY_END_OF_STREAM, inputStreamId);
 	encoder->ProcessMessage(MFT_MESSAGE_COMMAND_DRAIN, 0);
-
-	workerThread.join();
 }
 
 
@@ -247,11 +245,71 @@ void EncoderD3D::init_() {
 	check_quit(chosenType == -1, log, "No supported input type found");
 }
 
-void EncoderD3D::pushData(DesktopFrame<D3D11Texture2D>&& cap) {
-	std::unique_lock lock(dataPushLock);
+void EncoderD3D::poll() {
+	HRESULT hr;
 
-	while (!flagWaitingInput.load(std::memory_order_acquire))
-		dataPushCV.wait(lock);
+	if (waitingInput)
+		return;
+
+	MFMediaEvent ev;
+
+	hr = eventGen->GetEvent(MF_EVENT_FLAG_NO_WAIT, ev.data());
+	if (hr == MF_E_SHUTDOWN || hr == MF_E_NO_EVENTS_AVAILABLE)
+		return;
+	check_quit(FAILED(hr), log, "Failed to get next event ({})", hr);
+
+	MediaEventType evType;
+	ev->GetType(&evType);
+
+	if (evType == METransformDrainComplete) {
+		return;
+	}
+	else if (evType == METransformNeedInput) {
+		waitingInput = true;
+	}
+	else if (evType == METransformHaveOutput) {
+		int idx = -1;
+
+		long long sampleTime;
+		DesktopFrame<SideData> now;
+		DesktopFrame<ByteBuffer> enc;
+
+		enc.desktop = std::make_shared<ByteBuffer>(popEncoderData_(&sampleTime));
+		for (int i = 0; i < extraData.size(); i++) {
+			if (extraData[i].desktop->pts == sampleTime) {
+				now = std::move(extraData[i]);
+				idx = i;
+				break;
+			}
+		}
+
+		check_quit(idx == -1, log, "Failed to find matching ExtraData (size={}, sampleTime={})",
+			extraData.size(), sampleTime);
+
+		// TODO: Measure if this *optimization* is worth it
+		if (idx == 0)
+			extraData.pop_front();
+		else
+			extraData.erase(extraData.begin() + idx);
+
+		auto timeTaken = std::chrono::steady_clock::now() - now.desktop->inputTime;
+		statMixer.pushValue(std::chrono::duration_cast<std::chrono::duration<float>>(timeTaken).count());
+
+		enc.cursorPos = std::move(now.cursorPos);
+		enc.cursorShape = std::move(now.cursorShape);
+		onDataAvailable(std::move(enc));
+	}
+	else {
+		log->warn("Ignoring unknown MediaEventType {}", static_cast<DWORD>(evType));
+	}
+}
+
+void EncoderD3D::pushFrame(DesktopFrame<D3D11Texture2D>&& cap) {
+	if (!waitingInput) {
+		log->info("Frame dropped by encoder");
+		return;
+	}
+	waitingInput = false;
 
 	//FIXME: Assuming 60fps
 	const long long MFTime = 10000000;  // 100-ns to sec (used by MediaFoundation)
@@ -268,80 +326,6 @@ void EncoderD3D::pushData(DesktopFrame<D3D11Texture2D>&& cap) {
 
 	pushEncoderTexture_(*cap.desktop, sampleDur, sampleTime);
 	frameCnt++;
-
-	flagWaitingInput.store(false, std::memory_order_release);
-	dataPushCV.notify_one();
-}
-
-void EncoderD3D::run_() {
-	HRESULT hr;
-
-	hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-	check_quit(FAILED(hr), log, "Failed to initialize COM");
-
-	MFMediaEventGenerator eventGen = encoder.castTo<IMFMediaEventGenerator>();
-	while (true) {
-		MFMediaEvent ev;
-
-		hr = eventGen->GetEvent(0, ev.data());
-		if (hr == MF_E_SHUTDOWN)
-			break;
-		check_quit(FAILED(hr), log, "Failed to get next event ({})", hr);
-
-		MediaEventType evType;
-		ev->GetType(&evType);
-
-		if (evType == METransformDrainComplete) {
-			break;
-		}
-		else if (evType == METransformNeedInput) {
-			flagWaitingInput.store(true, std::memory_order_release);
-			dataPushCV.notify_one();
-
-			if (flagWaitingInput.load(std::memory_order_acquire)) {
-				std::unique_lock lock(dataPushLock);
-				while (flagWaitingInput.load(std::memory_order_acquire))
-					dataPushCV.wait(lock);
-			}
-		}
-		else if (evType == METransformHaveOutput) {
-			int idx = -1;
-
-			long long sampleTime;
-			DesktopFrame<SideData> now;
-			DesktopFrame<ByteBuffer> enc;
-
-			enc.desktop = std::make_shared<ByteBuffer>(popEncoderData_(&sampleTime));
-			for (int i = 0; i < extraData.size(); i++) {
-				if (extraData[i].desktop->pts == sampleTime) {
-					now = std::move(extraData[i]);
-					idx = i;
-					break;
-				}
-			}
-
-			check_quit(idx == -1, log, "Failed to find matching ExtraData (size={}, sampleTime={})",
-				extraData.size(), sampleTime);
-
-			// TODO: Measure if this *optimization* is worth it
-			if (idx == 0)
-				extraData.pop_front();
-			else
-				extraData.erase(extraData.begin() + idx);
-
-			auto timeTaken = std::chrono::steady_clock::now() - now.desktop->inputTime;
-			statMixer.pushValue(std::chrono::duration_cast<std::chrono::duration<float>>(timeTaken).count());
-
-			enc.cursorPos = std::move(now.cursorPos);
-			enc.cursorShape = std::move(now.cursorShape);
-			onDataAvailable(std::move(enc));
-		}
-		else {
-			log->warn("Ignoring unknown MediaEventType {}", static_cast<DWORD>(evType));
-		}
-	}
-
-	CoUninitialize();
 }
 
 void EncoderD3D::pushEncoderTexture_(const D3D11Texture2D& tex, long long sampleDur, long long sampleTime) {

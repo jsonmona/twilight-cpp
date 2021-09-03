@@ -22,14 +22,19 @@ class CaptureD3D {
 	int fps;
 	bool frameAcquired;
 	bool firstFrameSent;
-	std::atomic<bool> flagRun;
+	bool desktopTexDirty;
 
 	DxgiOutput5 output;
 	D3D11Device device;
+	D3D11DeviceContext context;
 	DxgiOutputDuplication outputDuplication;
 
-	std::thread runThread;
+	D3D11Texture2D nextDesktop;
+	std::shared_ptr<CursorPos> nextCursorPos;
+	std::shared_ptr<CursorShape> nextCursorShape;
+
 	long long perfCounterFreq;
+	long long lastPresentTime;
 	long long frameInterval;
 	StatisticMixer statMixer;
 
@@ -37,8 +42,7 @@ class CaptureD3D {
 
 	bool tryReleaseFrame_();
 	bool openDuplication_();
-	void run_();
-	DesktopFrame<D3D11Texture2D> captureFrame_();
+	void captureFrame_();
 	void parseCursor_(CursorShape* cursorShape, const DXGI_OUTDUPL_POINTER_SHAPE_INFO& cursorInfo, const std::vector<uint8_t>& buffer);
 
 public:
@@ -47,6 +51,8 @@ public:
 
 	void start(int fps);
 	void stop();
+
+	void poll();
 
 	StatisticMixer::Stat calcCaptureStat() { return statMixer.calcStat(); }
 

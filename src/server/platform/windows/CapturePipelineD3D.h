@@ -18,7 +18,11 @@ class CapturePipelineD3D : public CapturePipeline {
 	std::unique_ptr<ScaleD3D> scale;
 	EncoderD3D encoder;
 
+	std::thread runThread;
+	std::atomic<bool> flagRun;
+
 	void captureNextFrame_(DesktopFrame<D3D11Texture2D>&& cap);
+	void run_();
 
 public:
 	CapturePipelineD3D(DeviceManagerD3D _devs, int w, int h, ScaleType type);

@@ -24,9 +24,10 @@ class EncoderD3D {
 
 	LoggerPtr log;
 
-	std::atomic<bool> flagWaitingInput;
 	int width, height;
 	long long frameCnt;
+
+	bool waitingInput;
 
 	std::function<void(DesktopFrame<ByteBuffer>&&)> onDataAvailable;
 
@@ -34,15 +35,11 @@ class EncoderD3D {
 
 	MFDxgiDeviceManager mfDeviceManager;
 	MFTransform encoder;
+	MFMediaEventGenerator eventGen;
 	DWORD inputStreamId, outputStreamId;
 	StatisticMixer statMixer;
 
-	std::thread workerThread;
-	std::mutex dataPushLock;
-	std::condition_variable dataPushCV;
-
 	void init_();
-	void run_();
 
 	void pushEncoderTexture_(const D3D11Texture2D& tex, long long sampleDur, long long sampleTime);
 	ByteBuffer popEncoderData_(long long* sampleTime);
@@ -57,9 +54,11 @@ public:
 	void start();
 	void stop();
 
+	void poll();
+
 	StatisticMixer::Stat calcEncoderStat() { return statMixer.calcStat(); }
 
-	void pushData(DesktopFrame<D3D11Texture2D>&& cap);
+	void pushFrame(DesktopFrame<D3D11Texture2D>&& cap);
 };
 
 

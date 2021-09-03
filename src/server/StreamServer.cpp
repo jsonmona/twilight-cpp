@@ -85,6 +85,7 @@ void StreamServer::_processOutput(DesktopFrame<ByteBuffer>&& cap) {
 		auto enc = capture->calcEncoderStat();
 
 		if (cap.valid() && enc.valid()) {
+			log->info("Server stat: cap={:.2f}/{:.2f}/{:.2f}  enc={:.2f}/{:.2f}/{:.2f}", cap.min * 1000, cap.avg * 1000, cap.max * 1000, enc.min * 1000, enc.avg * 1000, enc.max * 1000);
 			msg::ServerPerfReport* m = pkt.mutable_server_perf_report();
 			m->set_capture_min(cap.min);
 			m->set_capture_avg(cap.avg);

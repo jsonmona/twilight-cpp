@@ -24,10 +24,10 @@ static long long getPerformanceCounter() {
 
 CaptureD3D::CaptureD3D(DeviceManagerD3D _devs) :
 	log(createNamedLogger("CaptureD3D")),
-	output(_devs.output), device(_devs.device)
+	output(_devs.output), device(_devs.device), context(_devs.context),
+	statMixer(120)
 {
 	perfCounterFreq = getPerformanceFreqency();
-	statMixer.setPoolSize(240);
 }
 
 CaptureD3D::~CaptureD3D() {
@@ -42,14 +42,15 @@ void CaptureD3D::start(int fps) {
 
 	this->fps = fps;
 	firstFrameSent = false;
-	flagRun.store(true, std::memory_order_release);
-	runThread = std::thread([this]() { run_(); });
+
+	//TODO: Add timeout
+	while (!openDuplication_())
+		Sleep(1);
+
+	lastPresentTime = getPerformanceCounter() - frameInterval;
 }
 
 void CaptureD3D::stop() {
-	flagRun.store(false, std::memory_order_relaxed);
-	runThread.join();
-
 	if (frameAcquired) {
 		HRESULT hr = outputDuplication->ReleaseFrame();
 		if (hr != DXGI_ERROR_ACCESS_LOST)
@@ -60,6 +61,24 @@ void CaptureD3D::stop() {
 	outputDuplication.release();
 
 	timeEndPeriod(2);
+}
+
+void CaptureD3D::poll() {
+	captureFrame_();
+
+	long long nowTime = getPerformanceCounter();
+	if (lastPresentTime + frameInterval <= nowTime) {
+		statMixer.pushValue(static_cast<float>(nowTime - lastPresentTime) / perfCounterFreq);
+		lastPresentTime += frameInterval;
+
+		DesktopFrame<D3D11Texture2D> nextFrame;
+		if(desktopTexDirty)
+			nextFrame.desktop = std::make_shared<D3D11Texture2D>(nextDesktop);
+		nextFrame.cursorPos = std::move(nextCursorPos);
+		nextFrame.cursorShape = std::move(nextCursorShape);
+
+		onNextFrame(std::move(nextFrame));
+	}
 }
 
 bool CaptureD3D::tryReleaseFrame_() {
@@ -95,6 +114,20 @@ bool CaptureD3D::openDuplication_() {
 		outputDuplication->GetDesc(&desc);
 		frameInterval = perfCounterFreq / fps;
 		//TODO: Align FPS to actual monitor refresh rate (e.g. 59.94 hz or 60.052 hz)
+
+		D3D11_TEXTURE2D_DESC texDesc = {};
+		texDesc.Width = desc.ModeDesc.Width;
+		texDesc.Height = desc.ModeDesc.Height;
+		texDesc.Format = desc.ModeDesc.Format;
+		texDesc.MipLevels = 1;
+		texDesc.ArraySize = 1;
+		texDesc.SampleDesc.Count = 1;
+		texDesc.Usage = D3D11_USAGE_DEFAULT;
+		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+		nextDesktop.release();
+		hr = device->CreateTexture2D(&texDesc, nullptr, nextDesktop.data());
+		check_quit(FAILED(hr), log, "Failed to staging texture");
 	}
 	else if (hr == E_ACCESSDENIED) {
 		Sleep(1);
@@ -106,52 +139,16 @@ bool CaptureD3D::openDuplication_() {
 	return true;
 }
 
-void CaptureD3D::run_() {
+void CaptureD3D::captureFrame_() {
 	HRESULT hr;
-
-	// This thread does not require COM, but its callback might need it
-	hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-	check_quit(FAILED(hr), log, "Failed to initialize COM");
-
-	while (!openDuplication_())
-		Sleep(1);
-
-	long long oldTime = getPerformanceCounter() - frameInterval;
-
-	while (flagRun.load(std::memory_order_acquire)) {
-		long long sleepTime = frameInterval - (getPerformanceCounter() - oldTime);
-		if (sleepTime > 0) {
-			int waitMillis = sleepTime * 1000 / perfCounterFreq;
-			waitMillis -= waitMillis % 2;  // Align to multiple of 2 since current timer resolution is 2ms
-			if (waitMillis > 0)
-				Sleep(waitMillis);
-
-			while (getPerformanceCounter() - oldTime < frameInterval)
-				Sleep(0);
-		}
-
-		long long nowTime = getPerformanceCounter();
-		statMixer.pushValue(static_cast<float>(nowTime - oldTime) / perfCounterFreq);
-
-		oldTime += frameInterval;
-		onNextFrame(captureFrame_());
-	}
-
-	CoUninitialize();
-}
-
-DesktopFrame<D3D11Texture2D> CaptureD3D::captureFrame_() {
-	HRESULT hr;
-
-	DesktopFrame<D3D11Texture2D> cap;
 
 	// Access denied (secure desktop, etc.)
 	//TODO: Show black screen instead of last image
 	if (outputDuplication.isInvalid() && !openDuplication_())
-		return cap;
+		return;
 
 	if (!tryReleaseFrame_())
-		return cap;
+		return;
 
 	DxgiResource desktopResource;
 	DXGI_OUTDUPL_FRAME_INFO frameInfo;
@@ -161,21 +158,25 @@ DesktopFrame<D3D11Texture2D> CaptureD3D::captureFrame_() {
 
 		if (frameInfo.LastPresentTime.QuadPart != 0 || !firstFrameSent) {
 			firstFrameSent = true;
+			desktopTexDirty = true;
 			D3D11Texture2D rgbTex = desktopResource.castTo<ID3D11Texture2D>();
-			cap.desktop = std::make_shared<D3D11Texture2D>(std::move(rgbTex));
+			context->CopyResource(nextDesktop.ptr(), rgbTex.ptr());
 		}
 
 		if (frameInfo.LastMouseUpdateTime.QuadPart != 0) {
-			cap.cursorPos = std::make_shared<CursorPos>();
-			cap.cursorPos->visible = frameInfo.PointerPosition.Visible;
+			if(!nextCursorPos)
+				nextCursorPos = std::make_shared<CursorPos>();
+
+			nextCursorPos->visible = frameInfo.PointerPosition.Visible;
 			if (frameInfo.PointerPosition.Visible) {
-				cap.cursorPos->x = frameInfo.PointerPosition.Position.x;
-				cap.cursorPos->y = frameInfo.PointerPosition.Position.y;
+				nextCursorPos->x = frameInfo.PointerPosition.Position.x;
+				nextCursorPos->y = frameInfo.PointerPosition.Position.y;
 			}
 		}
 
 		if (frameInfo.PointerShapeBufferSize != 0) {
-			cap.cursorShape = std::make_shared<CursorShape>();
+			if(!nextCursorShape)
+				nextCursorShape = std::make_shared<CursorShape>();
 
 			UINT bufferSize = frameInfo.PointerShapeBufferSize;
 			std::vector<uint8_t> buffer(bufferSize);
@@ -185,9 +186,9 @@ DesktopFrame<D3D11Texture2D> CaptureD3D::captureFrame_() {
 				&bufferSize, &cursorInfo);
 			check_quit(FAILED(hr), log, "Failed to fetch frame pointer shape");
 
-			cap.cursorShape->hotspotX = cursorInfo.HotSpot.x;
-			cap.cursorShape->hotspotY = cursorInfo.HotSpot.y;
-			parseCursor_(cap.cursorShape.get(), cursorInfo, buffer);
+			nextCursorShape->hotspotX = cursorInfo.HotSpot.x;
+			nextCursorShape->hotspotY = cursorInfo.HotSpot.y;
+			parseCursor_(nextCursorShape.get(), cursorInfo, buffer);
 		}
 	}
 	else if (hr == DXGI_ERROR_WAIT_TIMEOUT) {
@@ -197,8 +198,6 @@ DesktopFrame<D3D11Texture2D> CaptureD3D::captureFrame_() {
 		openDuplication_();
 	else
 		error_quit(log, "Failed to acquire next frame ({})", hr);
-
-	return cap;
 }
 
 void CaptureD3D::parseCursor_(CursorShape* cursorShape, const DXGI_OUTDUPL_POINTER_SHAPE_INFO& cursorInfo, const std::vector<uint8_t>& buffer) {

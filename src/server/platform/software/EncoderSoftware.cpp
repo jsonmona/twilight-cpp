@@ -10,7 +10,8 @@ using namespace std::chrono_literals;
 
 EncoderSoftware::EncoderSoftware(int _width, int _height) :
 	log(createNamedLogger("EncoderSoftware")),
-	width(_width), height(_height)
+	width(_width), height(_height),
+	statMixer(120)
 {
 }
 
