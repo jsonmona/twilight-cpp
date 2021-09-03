@@ -126,6 +126,10 @@ static void libav_log_sink(void* _obj, int level, const char* format, va_list vl
 	}
 }
 
-void setupFFmpegLogs() {
+static void setupFFmpegLogs() {
 	av_log_set_callback(libav_log_sink);
+}
+
+void setupLogger() {
+	setupFFmpegLogs();
 }

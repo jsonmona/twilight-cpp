@@ -36,6 +36,8 @@ static bool setDpiAwareness() {
 
 
 int main() {
+	setupLogger();
+
 	GOOGLE_PROTOBUF_VERIFY_VERSION;
 	HRESULT hr;
 
@@ -49,8 +51,6 @@ int main() {
 
 	hr = MFStartup(MF_VERSION, MFSTARTUP_LITE);
 	check_quit(FAILED(hr), log, "Failed to start MediaFoundation");
-
-	setupFFmpegLogs();
 
 	StreamServer stream;
 

@@ -29,8 +29,9 @@ LoggerPtr getGlobalLogger();
 // Create a named logger and forward it to global logger
 LoggerPtr createNamedLogger(const std::string& name);
 
-// Redirect all ffmepg logs to global logger
-void setupFFmpegLogs();
+// Forward logs from various libraries.
+// Call once at start
+void setupLogger();
 
 
 // error_quit

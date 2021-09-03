@@ -11,12 +11,9 @@
 
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
-	setupFFmpegLogs();
+	setupLogger();
 
-	LARGE_INTEGER aa, bb;
-	QueryPerformanceCounter(&aa);
-	QueryPerformanceFrequency(&bb);
-	createNamedLogger("main")->info("{} {}", aa.QuadPart, bb.QuadPart);
+	GOOGLE_PROTOBUF_VERIFY_VERSION;
 
 	QApplication app(__argc, __argv);
 
