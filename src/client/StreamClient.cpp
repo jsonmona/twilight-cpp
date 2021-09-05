@@ -13,9 +13,15 @@ StreamClient::StreamClient() :
 StreamClient::~StreamClient() {
 }
 
-void StreamClient::connect(const char* addr) {
-    conn.connect(addr, SERVICE_PORT);
-    recvThread = std::thread([this]() { _runRecv(); });
+void StreamClient::connect(const char* addr_) {
+    recvThread = std::thread([this, addr = std::string(addr_)]() {
+        if (conn.connect(addr.c_str(), SERVICE_PORT)) {
+            onStateChange(State::CONNECTED, "");
+            _runRecv();
+        }
+        else
+            onStateChange(State::DISCONNECTED, "Unable to connect"); //TODO: Pass message from OS
+    });
 }
 
 void StreamClient::disconnect() {
@@ -56,4 +62,5 @@ void StreamClient::_runRecv() {
     }
 
     log->info("Stopping receive loop");
+    onStateChange(State::DISCONNECTED, "");  //TODO: Pass message from OS
 }

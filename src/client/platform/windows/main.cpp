@@ -1,13 +1,11 @@
 #include "common/log.h"
 #include "common/platform/windows/winheaders.h"
 
-#include "client/StreamWindow.h"
+#include "client/HubWindow.h"
+
+#include "QtWidgets/qapplication.h"
 
 #include <packet.pb.h>
-
-#include <QtWidgets/qapplication.h>
-#include <QtGui/qscreen.h>
-#include <cstdio>
 
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
@@ -17,14 +15,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 	QApplication app(__argc, __argv);
 
-	QRect screenSize = app.primaryScreen()->geometry();
-
-	int targetWidth = screenSize.width() * 5 / 6;
-	int targetHeight = screenSize.height() * 5 / 6;
-	
-	StreamWindow sw("192.168.11.129");
-	sw.setFixedSize(QSize(targetWidth, targetHeight));
-	sw.show();
+	HubWindow hub;
+	hub.showCentered();
 
 	return app.exec();
 }

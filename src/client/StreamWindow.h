@@ -31,6 +31,10 @@ public:
 	explicit StreamWindow(const char* addr);
 	~StreamWindow();
 
+signals:
+	void showLater();
+	void closeLater();
+
 private:
 	LoggerPtr log;
 	StreamClient sc;
@@ -45,6 +49,7 @@ private:
 	std::condition_variable audioDataCV;
 	std::deque<ByteBuffer> audioData;
 
+	void processStateChange_(StreamClient::State newState, std::string_view msg);
 	void processNewPacket_(const msg::Packet& pkt, uint8_t* extraData);
 
 	void runAudio_();

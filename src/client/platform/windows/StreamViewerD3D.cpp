@@ -26,10 +26,14 @@ StreamViewerD3D::StreamViewerD3D() :
 
 StreamViewerD3D::~StreamViewerD3D() {
 	log->info("Stopping!!!");
-	decoder->stop();
 
-	flagRunRender.store(false, std::memory_order_release);
-	renderThread.join();
+	bool wasInitialized = flagInitialized.load(std::memory_order_seq_cst);;
+	if (wasInitialized) {
+		decoder->stop();
+
+		flagRunRender.store(false, std::memory_order_release);
+		renderThread.join();
+	}
 }
 
 void StreamViewerD3D::resizeEvent(QResizeEvent* ev) {

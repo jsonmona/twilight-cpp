@@ -8,6 +8,7 @@
 #include <opus.h>
 #include <cubeb/cubeb.h>
 
+#include <QtGui/qevent.h>
 
 
 StreamWindow::StreamWindow(const char* addr) : QWidget(),
@@ -15,7 +16,12 @@ StreamWindow::StreamWindow(const char* addr) : QWidget(),
 	viewer(new StreamViewerD3D()),
 	boxLayout(this)
 {
+	connect(this, &StreamWindow::showLater, this, &StreamWindow::show);
+	connect(this, &StreamWindow::closeLater, this, &StreamWindow::close);
+	setAttribute(Qt::WA_DeleteOnClose);
+
 	sc.setOnNextPacket([this](const msg::Packet& pkt, uint8_t* extraData) { processNewPacket_(pkt, extraData); });
+	sc.setOnStateChange([this](StreamClient::State newState, std::string_view msg) { processStateChange_(newState, msg); });
 	sc.connect(addr);
 
 	boxLayout.addWidget(viewer);
@@ -31,6 +37,19 @@ StreamWindow::~StreamWindow() {
 	flagRunAudio.store(false, std::memory_order_release);
 	audioDataCV.notify_all();
 	audioThread.join();
+}
+
+void StreamWindow::processStateChange_(StreamClient::State newState, std::string_view msg) {
+	switch (newState) {
+	case StreamClient::State::CONNECTED:
+		log->debug("State changed to CONNECTED; {}", msg);
+		showLater();
+		break;
+	case StreamClient::State::DISCONNECTED:
+		log->debug("State changed to DISCONNECTED; {}", msg);
+		closeLater();  //TODO: Add a dialog showing reason (unless it was user operation)
+		break;
+	}
 }
 
 void StreamWindow::processNewPacket_(const msg::Packet& pkt, uint8_t* extraData) {

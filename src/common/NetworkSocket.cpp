@@ -54,11 +54,15 @@ bool NetworkSocket::connect(const char* addr, uint16_t port) {
 }
 
 void NetworkSocket::disconnect() {
+	bool prev = connected.exchange(false, std::memory_order_acq_rel);
+
 	asio::error_code err;
 	sock.close(err);
 	if (err)
 		log->warn("Error while disconnecting socket: {}", err.message());
-	recvThread.join();
+
+	if (prev)
+		recvThread.join();
 }
 
 void NetworkSocket::reportConnected() {
