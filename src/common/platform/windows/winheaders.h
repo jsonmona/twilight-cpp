@@ -9,7 +9,9 @@
 #define NOMINMAX
 #endif
 
-#include <Windows.h>
+#include <windows.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
 
 #include <d3d11.h>
 #include <d3d9types.h>
