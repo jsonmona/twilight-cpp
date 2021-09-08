@@ -10,18 +10,19 @@ set(COMMON_SRC
     
     ./common/log.h
     ./common/log.cpp
-    ./common/NetworkInputStream.h
-    ./common/NetworkInputStream.cpp
-    ./common/NetworkOutputStream.h
-    ./common/NetworkOutputStream.cpp
-    ./common/NetworkServer.h
-    ./common/NetworkServer.cpp
-    ./common/NetworkSocket.h
-    ./common/NetworkSocket.cpp
     ./common/StatisticMixer.h
     ./common/StatisticMixer.cpp
     ./common/util.h
     ./common/util.cpp
+
+    ./common/net/NetworkInputStream.h
+    ./common/net/NetworkInputStream.cpp
+    ./common/net/NetworkOutputStream.h
+    ./common/net/NetworkOutputStream.cpp
+    ./common/net/NetworkServer.h
+    ./common/net/NetworkServer.cpp
+    ./common/net/NetworkSocket.h
+    ./common/net/NetworkSocket.cpp
 
     ./common/platform/software/ScaleSoftware.h
     ./common/platform/software/ScaleSoftware.cpp

@@ -1,6 +1,6 @@
 #include "NetworkOutputStream.h"
 
-#include "common/NetworkSocket.h"
+#include "common/net/NetworkSocket.h"
 
 
 using google::protobuf::io::ZeroCopyOutputStream;

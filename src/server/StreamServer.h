@@ -5,7 +5,8 @@
 #include "CapturePipeline.h"
 
 #include "common/log.h"
-#include "common/NetworkServer.h"
+
+#include "common/net/NetworkServer.h"
 
 #include "server/AudioEncoder.h"
 

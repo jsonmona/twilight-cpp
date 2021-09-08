@@ -2,8 +2,8 @@
 #define COMMON_NETWORK_SOCKET_H_
 
 
-#include "common/NetworkInputStream.h"
-#include "common/NetworkOutputStream.h"
+#include "common/net/NetworkInputStream.h"
+#include "common/net/NetworkOutputStream.h"
 
 #include <asio.hpp>
 

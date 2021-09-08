@@ -3,7 +3,8 @@
 
 
 #include "common/log.h"
-#include "common/NetworkSocket.h"
+
+#include "common/net/NetworkSocket.h"
 
 #include <asio.hpp>
 
