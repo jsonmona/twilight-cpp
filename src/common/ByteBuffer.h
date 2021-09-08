@@ -5,11 +5,9 @@
 #include <cstdint>
 #include <cstring>
 #include <type_traits>
+#include <algorithm>
 
 class ByteBuffer {
-	uint8_t* ptr;
-	size_t nowSize;
-
 public:
 	template<class T>
 	class View {
@@ -32,19 +30,21 @@ public:
 		}
 	};
 
-public:
-	ByteBuffer() : ptr(nullptr), nowSize(0) {}
-	ByteBuffer(size_t initialSize) : ptr(nullptr), nowSize(0) { resize(initialSize); }
+	ByteBuffer() : ptr(nullptr), size_(0), capacity_(0) {}
+	ByteBuffer(size_t initialSize) : ptr(nullptr), size_(0), capacity_(0) { resize(initialSize); }
 	ByteBuffer(const ByteBuffer& copy) = delete;
-	ByteBuffer(ByteBuffer&& move) : ptr(nullptr), nowSize(0) {
+	ByteBuffer(ByteBuffer&& move) : ptr(nullptr), size_(0), capacity_(0) {
 		std::swap(ptr, move.ptr);
-		std::swap(nowSize, move.nowSize);
+		std::swap(size_, move.size_);
+		std::swap(capacity_, capacity_);
 	}
 
 	ByteBuffer& operator=(const ByteBuffer& copy) = delete;
 	ByteBuffer& operator=(ByteBuffer&& move) {
+		// This must swap or std::swap overload will be broken
 		std::swap(ptr, move.ptr);
-		std::swap(nowSize, move.nowSize);
+		std::swap(size_, move.size_);
+		std::swap(capacity_, capacity_);
 		return *this;
 	}
 
@@ -60,42 +60,66 @@ public:
 		}
 	}
 
+	void reserve(size_t newCapacity) {
+		if (capacity_ < newCapacity) {
+			void* newPtr = realloc(ptr, newCapacity);
+			if (newPtr == nullptr)
+				abort();  //FIXME: Use of abort
+			ptr = reinterpret_cast<uint8_t*>(newPtr);
+			capacity_ = newCapacity;
+		}
+	}
+
 	void resize(size_t newSize) {
 		if (newSize == 0) {
 			free(ptr);
 			ptr = nullptr;
-			nowSize = 0;
+			size_ = 0;
+			capacity_ = 0;
 		}
-		else if (nowSize != newSize) {
-			void* newPtr = realloc(ptr, newSize);
-			if (newPtr == nullptr)
-				abort();  //FIXME: Use of abort
-			ptr = reinterpret_cast<uint8_t*>(newPtr);
-			nowSize = newSize;
+		else if (newSize <= capacity_) {
+			size_ = newSize;
+		}
+		else {
+			reserve(newSize);
+			size_ = newSize;
 		}
 	}
 
 	// removes content near begin
 	void shiftTowardBegin(size_t amount) {
 		if(amount != 0)
-			memmove(ptr, ptr + amount, nowSize - amount);
+			memmove(ptr, ptr + amount, size() - amount);
 	}
 
 	// removes content near end
 	void shiftTowardEnd(size_t amount) {
 		if(amount != 0)
-			memmove(ptr + amount, ptr, nowSize - amount);
+			memmove(ptr + amount, ptr, size() - amount);
 	}
 
 	void write(size_t dstOffset, void* src, size_t length) {
 		memcpy(ptr + dstOffset, src, length);
+		size_ = std::max(size_, dstOffset + length);
 	}
 
 	void write(size_t dstOffset, const ByteBuffer& other) {
 		memcpy(ptr + dstOffset, other.data(), other.size());
+		size_ = std::max(size_, dstOffset + other.size());
 	}
 
-	size_t size() const { return nowSize; }
+	void append(void* src, size_t length) {
+		memcpy(ptr + size_, src, length);
+		size_ += length;
+	}
+
+	void append(const ByteBuffer& other) {
+		memcpy(ptr + size_, other.data(), other.size());
+		size_ += other.size();
+	}
+
+	size_t capacity() const { return capacity_; }
+	size_t size() const { return size_; }
 
 	uint8_t* data() { return ptr; }
 	uint8_t* begin() { return ptr; }
@@ -115,7 +139,21 @@ public:
 
 	template<class T>
 	View<T> view() { return View<T>(this); }
+
+private:
+	uint8_t* ptr;
+	size_t capacity_;
+	size_t size_;
 };
+
+
+namespace std
+{
+	template<>
+	inline void swap(ByteBuffer& lhs, ByteBuffer& rhs) {
+		lhs = std::move(rhs);
+	}
+}
 
 
 #endif
