@@ -4,6 +4,7 @@
 
 #include "QtWidgets/qapplication.h"
 #include "QtGui/qscreen.h"
+#include <QtGui/qevent.h>
 
 
 HubWindow::HubWindow() : QWidget(),
@@ -26,11 +27,16 @@ HubWindow::HubWindow() : QWidget(),
 	rootBox = new QHBoxLayout(this);
 	rootBox->addLayout(connBox);
 
+	setAttribute(Qt::WA_DeleteOnClose);
+
 	qApp->setQuitOnLastWindowClosed(false);
 }
 
 HubWindow::~HubWindow() {
-	qApp->setQuitOnLastWindowClosed(true);
+	// Won't work
+	//qApp->setQuitOnLastWindowClosed(false);
+
+	qApp->quit();
 }
 
 void HubWindow::showCentered() {

@@ -4,6 +4,7 @@
 #include "client/HubWindow.h"
 
 #include "QtWidgets/qapplication.h"
+#include <QtCore/qpointer.h>
 
 #include <packet.pb.h>
 
@@ -15,8 +16,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 	QApplication app(__argc, __argv);
 
-	HubWindow hub;
-	hub.showCentered();
+	QPointer<HubWindow> hub = new HubWindow();
+	hub->showCentered();
 
 	return app.exec();
 }
