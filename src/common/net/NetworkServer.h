@@ -6,7 +6,7 @@
 
 #include "common/net/NetworkSocket.h"
 
-#include <asio.hpp>
+#include <mbedtls/net_sockets.h>
 
 #include <atomic>
 #include <functional>
@@ -14,15 +14,6 @@
 
 
 class NetworkServer {
-	LoggerPtr log;
-
-	std::atomic<bool> flagListen;
-	std::thread listenThread;
-	asio::io_context ioCtx;
-	asio::ip::tcp::acceptor acceptor;
-
-	std::function<void(std::unique_ptr<NetworkSocket>&&)> onNewConnection;
-
 public:
 	NetworkServer();
 	NetworkServer(const NetworkServer& copy) = delete;
@@ -34,7 +25,17 @@ public:
 	void stopListen();
 
 	template<class Fn>
-	void setOnNewConnection(Fn fn) { onNewConnection = fn; }
+	void setOnNewConnection(Fn fn) { onNewConnection = std::move(fn); }
+
+private:
+	LoggerPtr log;
+
+	std::atomic<bool> flagListen;
+	std::thread listenThread;
+
+	mbedtls_net_context ctx;
+
+	std::function<void(std::unique_ptr<NetworkSocket>&&)> onNewConnection;
 };
 
 

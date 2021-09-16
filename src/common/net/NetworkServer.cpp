@@ -2,46 +2,53 @@
 
 
 NetworkServer::NetworkServer() :
-	log(createNamedLogger("NetworkServer")),
-	acceptor(ioCtx)
+	log(createNamedLogger("NetworkServer"))
 {
+	mbedtls_net_init(&ctx);
 }
 
 NetworkServer::~NetworkServer() {
+	flagListen.store(false, std::memory_order_release);
+	mbedtls_net_free(&ctx);
+
+	if (listenThread.joinable())
+		listenThread.join();
 }
 
 void NetworkServer::startListen(uint16_t port) {
-	check_quit(listenThread.joinable(), log, "Tried to start listening while running");
+	bool prev = flagListen.exchange(true, std::memory_order_acq_rel);
+	check_quit(prev, log, "Starting listening again when already listening");
 
-	asio::error_code err;
-	acceptor.open(asio::ip::tcp::v4());
+	char portString[8] = {};
+	sprintf(portString, "%d", port);
+	static_assert(sizeof(port) == 2, "sprintf above is safe because port is u16");
 
-	asio::ip::tcp::endpoint endpoint(asio::ip::address_v4::any(), port);
-	acceptor.bind(endpoint, err);
+	//FIXME: Can socket be bound twice?
+	int stat = mbedtls_net_bind(&ctx, "0.0.0.0", portString, MBEDTLS_NET_PROTO_TCP);
+	check_quit(stat != 0, log, "Failed to bind socket");
 
-	check_quit(!!err, log, "Unable to bind socket");
+	//FIXME: Is this really needed?
+	if (listenThread.joinable())
+		listenThread.join();
 
-	acceptor.listen();
-
-	flagListen.store(true, std::memory_order_release);
-
-	listenThread = std::thread([this]() {
+	listenThread = std::thread([this, port]() {
 		while (flagListen.load(std::memory_order_acquire)) {
-			asio::error_code err;
-			asio::ip::tcp::socket sock = acceptor.accept(err);
-			if (err)
+			mbedtls_net_context client;
+			mbedtls_net_init(&client);
+			int stat = mbedtls_net_accept(&ctx, &client, nullptr, 0, nullptr);
+			if (stat != 0) {
+				mbedtls_net_free(&client);
 				break;
-			onNewConnection(std::make_unique<NetworkSocket>(std::move(sock)));
+			}
+			onNewConnection(std::make_unique<NetworkSocket>(client));
 		}
 	});
 }
 
 void NetworkServer::stopListen() {
-	asio::error_code err;
-	acceptor.close(err);
-	if (err)
-		log->warn("Error while closeing acceptor: {}", err.message());
-
 	flagListen.store(false, std::memory_order_release);
-	listenThread.join();
+	mbedtls_net_free(&ctx);
+
+	if (listenThread.joinable())
+		listenThread.join();
 }

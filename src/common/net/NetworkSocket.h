@@ -2,53 +2,56 @@
 #define COMMON_NETWORK_SOCKET_H_
 
 
-#include "common/net/NetworkInputStream.h"
-#include "common/net/NetworkOutputStream.h"
+#include "common/log.h"
+#include "common/ByteBuffer.h"
 
-#include <asio.hpp>
+#include <mbedtls/net_sockets.h>
 
 #include <atomic>
 #include <thread>
+#include <string>
 #include <functional>
 
 
 class NetworkSocket {
-	friend class NetworkInputStream;
-	friend class NetworkOutputStream;
-
-	LoggerPtr log;
-
-	std::atomic<bool> connected;
-	NetworkInputStream nin;
-	NetworkOutputStream nout;
-
-	std::thread recvThread;
-	asio::io_context ioCtx;
-	asio::ip::tcp::socket sock;
-
-	std::function<void()> onDisconnected;
-
-	void reportConnected();
-	void reportDisconnected(const asio::error_code& err);
-
 public:
 	NetworkSocket();
-	explicit NetworkSocket(asio::ip::tcp::socket&& _sock);
+	explicit NetworkSocket(mbedtls_net_context initCtx);
 	NetworkSocket(const NetworkSocket& copy) = delete;
 	NetworkSocket(NetworkSocket&& move) = delete;
 
 	~NetworkSocket();
 
 	bool connect(const char* addr, uint16_t port);
-	bool isConnected() { return connected.load(std::memory_order_acquire); }
+	bool isConnected() const { return connected.load(std::memory_order_relaxed); }
 
 	void disconnect();
 
-	NetworkInputStream& input() { return nin; }
-	NetworkOutputStream& output() { return nout; }
-
 	template<class Fn>
-	void setOnDisconnected(Fn fn) { onDisconnected = fn; }
+	void setOnDisconnected(Fn fn) { onDisconnected = std::move(fn); }
+
+	bool send(const void* data, size_t len);
+	bool send(const ByteBuffer& buf);
+
+	bool recvAll(void* data, size_t len);
+	bool recvAll(ByteBuffer* buf);
+
+	int64_t recv(void* data, int64_t len);
+	bool recv(ByteBuffer* buf);
+
+private:
+	LoggerPtr log;
+
+	std::atomic<bool> connected;
+
+	mbedtls_net_context ctx;
+
+	std::mutex sendLock;
+	std::mutex recvLock;
+
+	std::function<void(std::string_view msg)> onDisconnected;
+
+	void reportDisconnected(int errnum);
 };
 
 

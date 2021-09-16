@@ -44,6 +44,8 @@ AudioEncoder::AudioEncoder() :
 }
 
 AudioEncoder::~AudioEncoder() {
+	if (workerThread.joinable())
+		workerThread.join();
 }
 
 void AudioEncoder::start() {
@@ -51,6 +53,9 @@ void AudioEncoder::start() {
 
 	samplingRate = -1;
 	channels = -1;
+
+	if (workerThread.joinable())
+		workerThread.join();
 
 	flagRun.store(true, std::memory_order_release);
 	workerThread = std::thread(&AudioEncoder::runWorker_, this);
@@ -63,7 +68,8 @@ void AudioEncoder::stop() {
 
 	flagRun.store(false, std::memory_order_release);
 	bufferLockCV.notify_all();
-	workerThread.join();
+	//workerThread.join();
+	// Can't join here because workerThread may be the one calling stop; I don't like it
 
 	buffer.clear();
 	swr_free(&swrCtx);

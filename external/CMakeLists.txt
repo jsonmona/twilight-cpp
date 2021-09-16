@@ -1,20 +1,6 @@
 # Supress warning for externals
 add_definitions("/w")
 
-
-# Asio
-
-add_library(asio STATIC asio_impl.cpp)
-target_include_directories(asio PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/asio/asio/include)
-target_compile_definitions(asio PUBLIC
-		ASIO_STANDALONE
-		ASIO_SEPARATE_COMPILATION
-		ASIO_HAVE_CXX11
-		ASIO_HAVE_CXX14
-		ASIO_HAVE_CXX17
-)
-
-
 # cubeb
 
 add_subdirectory(cubeb EXCLUDE_FROM_ALL)

@@ -9,11 +9,16 @@ CapturePipelineD3D::CapturePipelineD3D(DeviceManagerD3D _devs, int w, int h, Sca
 }
 
 CapturePipelineD3D::~CapturePipelineD3D() {
+	if (runThread.joinable())
+		runThread.join();
 }
 
 void CapturePipelineD3D::start() {
 	capture.setOnNextFrame([this](DesktopFrame<D3D11Texture2D>&& cap) { captureNextFrame_(std::move(cap)); });
 	encoder.setOnDataAvailable(writeOutput);
+
+	if (runThread.joinable())
+		runThread.join();
 
 	encoder.start();
 	capture.start(60);
@@ -24,7 +29,8 @@ void CapturePipelineD3D::start() {
 
 void CapturePipelineD3D::stop() {
 	flagRun.store(false, std::memory_order_release);
-	runThread.join();
+	//runThread.join();
+	// Can't join here because runThread may be the one calling stop; I don't like it
 
 	capture.stop();
 	encoder.stop();

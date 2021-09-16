@@ -1,5 +1,7 @@
 #include "StreamServer.h"
 
+#include <google/protobuf/io/zero_copy_stream_impl_lite.h>
+
 constexpr uint16_t SERVICE_PORT = 6495;
 
 
@@ -26,7 +28,7 @@ StreamServer::StreamServer() :
 
 		lastStatReport = std::chrono::steady_clock::now();
 		conn = std::move(newSock);
-		conn->setOnDisconnected([this]() {
+		conn->setOnDisconnected([this](std::string_view msg) {
 			audioEncoder.stop();
 			capture->stop();
 		});
@@ -103,23 +105,27 @@ void StreamServer::_processOutput(DesktopFrame<ByteBuffer>&& cap) {
 
 void StreamServer::_writeOutput(const msg::Packet& pck, const uint8_t* extraData) {
 	check_quit(pck.ByteSizeLong() > UINT32_MAX, log, "Packet too large");
+	uint32_t packetLen = pck.ByteSizeLong();
 	uint32_t extraDataLen = pck.extra_data_len();
 
-	//FIXME: Ugly code
+	//TODO: Cache and share buffer since it already uses a lock down there
+	ByteBuffer outputBuffer(packetLen + 8);
+	google::protobuf::io::ArrayOutputStream aout(outputBuffer.data(), outputBuffer.capacity());
+
+	/* prepare data */ {
+		google::protobuf::io::CodedOutputStream cout(&aout);
+
+		cout.WriteVarint32(packetLen);
+		pck.SerializeToCodedStream(&cout);
+	}
+
+	outputBuffer.resize(aout.ByteCount());
 
 	/* lock */ {
 		std::lock_guard lock(connWriteLock);
+		conn->send(outputBuffer);
 
-		/* coded */ {
-			auto coded = conn->output().coded();
-
-			coded->WriteVarint32(static_cast<uint32_t>(pck.ByteSizeLong()));
-			pck.SerializeToCodedStream(coded.get());
-
-			if (extraDataLen > 0)
-				coded->WriteRaw(extraData, extraDataLen);
-		}
-
-		conn->output().flush();
+		if (extraDataLen > 0)
+			conn->send(extraData, extraDataLen);
 	}
 }

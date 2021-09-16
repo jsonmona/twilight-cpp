@@ -1,54 +1,44 @@
 #include "NetworkSocket.h"
 
+#include <mbedtls/error.h>
+
 #include <common/ByteBuffer.h>
 
 
 NetworkSocket::NetworkSocket() :
 	log(createNamedLogger("NetworkSocket")),
-	nin(this), nout(this), connected(false),
-	sock(ioCtx),
-	onDisconnected([](){})
-{}
-
-NetworkSocket::NetworkSocket(asio::ip::tcp::socket&& _sock) :
-	log(createNamedLogger("NetworkSocket")),
-	nin(this), nout(this), connected(true),
-	sock(std::move(_sock)),
-	onDisconnected([]() {})
+	connected(false)
 {
-	reportConnected();
+	mbedtls_net_init(&ctx);
 }
 
+NetworkSocket::NetworkSocket(mbedtls_net_context initCtx) :
+	log(createNamedLogger("NetworkSocket")),
+	connected(true), ctx(initCtx)
+{}
+
 NetworkSocket::~NetworkSocket() {
-	if (isConnected()) {
+	bool prev = connected.exchange(false, std::memory_order_acq_rel);
+
+	if (prev) {
 		log->warn("Socket deconstructed while connected");
 		disconnect();
 	}
-
-	// The thread probably is ended but not joined
-	if (recvThread.joinable())
-		recvThread.join();
 }
 
 bool NetworkSocket::connect(const char* addr, uint16_t port) {
-	asio::error_code err;
+	int stat;
+	
+	char portString[8] = {};
+	sprintf(portString, "%d", (int) port);
+	static_assert(sizeof(port) == 2, "sprintf above does not overflow because port is u16");
 
-	asio::ip::tcp::resolver resolver(ioCtx);
-	asio::ip::tcp::resolver::query query(addr, "");
-
-	asio::ip::tcp::resolver::iterator end;
-	auto itr = resolver.resolve(query, err);
-	if (err || itr == end)
+	stat = mbedtls_net_connect(&ctx, addr, portString, MBEDTLS_NET_PROTO_TCP);
+	if (stat != 0)
 		return false;
 
-	asio::ip::tcp::endpoint endpoint = itr->endpoint();
-	endpoint.port(port);
-
-	sock.connect(endpoint, err);
-	if (err)
-		return false;
-
-	reportConnected();
+	log->info("Connected to tcp:{}:{}", addr, port);
+	connected.store(true, std::memory_order_release);
 
 	return true;
 }
@@ -56,46 +46,97 @@ bool NetworkSocket::connect(const char* addr, uint16_t port) {
 void NetworkSocket::disconnect() {
 	bool prev = connected.exchange(false, std::memory_order_acq_rel);
 
-	asio::error_code err;
-	sock.close(err);
-	if (err)
-		log->warn("Error while disconnecting socket: {}", err.message());
-
-	if (prev)
-		recvThread.join();
+	if (prev) {
+		mbedtls_net_free(&ctx);
+		if(onDisconnected)
+			onDisconnected("");
+	}
 }
 
-void NetworkSocket::reportConnected() {
-	asio::error_code err;
+bool NetworkSocket::send(const void* data, size_t len) {
+	int stat;
+	if (len <= 0)
+		return true;
 
-	asio::ip::tcp::endpoint endpoint = sock.remote_endpoint(err);
-	check_quit(!!err, log, "Failed to query remote endpoint");
+	std::lock_guard lock(sendLock);
 
-	log->info("Socket connected to {}:{}", endpoint.address().to_string(), endpoint.port());
-	connected.store(true, std::memory_order_release);
+	const uint8_t* ptr = reinterpret_cast<const uint8_t*>(data);
 
-	recvThread = std::thread([this]() {
-		ByteBuffer buffer(4096);
-		asio::error_code err;
-		auto buf = asio::buffer(buffer.data(), buffer.size());
-
-		while (isConnected()) {
-			size_t len = sock.read_some(buf, err);
-			if (err) {
-				reportDisconnected(err);
-				break;
-			}
-			if (len > 0)
-				nin.pushData(buffer.data(), len);
+	size_t written = 0;
+	while (written < len) {
+		stat = mbedtls_net_send(&ctx, ptr + written, len - written);
+		if (stat < 0) {
+			reportDisconnected(stat);
+			return false;
 		}
-		onDisconnected();
-	});
+		written += stat;
+	}
+	return true;
 }
 
-void NetworkSocket::reportDisconnected(const asio::error_code& err) {
+bool NetworkSocket::send(const ByteBuffer& buf) {
+	return send(buf.data(), buf.size());
+}
+
+bool NetworkSocket::recvAll(void* data, size_t len) {
+	int stat;
+	size_t readLen = 0;
+
+	if (len <= 0)
+		return true;
+
+	uint8_t* ptr = reinterpret_cast<uint8_t*>(data);
+
+	std::lock_guard lock(recvLock);
+	while (readLen < len) {
+		stat = mbedtls_net_recv(&ctx, ptr + readLen, len - readLen);
+		if (stat < 0) {
+			reportDisconnected(stat);
+			return false;
+		}
+		readLen += stat;
+	}
+
+	return true;
+}
+
+bool NetworkSocket::recvAll(ByteBuffer* buf) {
+	return recv(buf->data(), buf->size());
+}
+
+int64_t NetworkSocket::recv(void* data, int64_t len) {
+	int stat;
+
+	if (len <= 0)
+		return true;
+
+	uint8_t* ptr = reinterpret_cast<uint8_t*>(data);
+
+	std::lock_guard lock(recvLock);
+	stat = mbedtls_net_recv(&ctx, ptr, len);
+	if (stat < 0) {
+		reportDisconnected(stat);
+		return stat;
+	}
+
+	return stat;
+}
+
+bool NetworkSocket::recv(ByteBuffer* buf) {
+	int64_t read = recv(buf->data(), buf->size());
+	if (read < 0)
+		return false;
+	buf->resize(read);
+	return true;
+}
+
+void NetworkSocket::reportDisconnected(int errnum) {
+	char buf[2048];
 	bool prev = connected.exchange(false, std::memory_order_acq_rel);
 
 	if (prev) {
-		log->info("Socket disconnected: {}", err.message());
+		mbedtls_net_free(&ctx);
+		mbedtls_strerror(errnum, buf, 2048);
+		onDisconnected(buf);
 	}
 }
