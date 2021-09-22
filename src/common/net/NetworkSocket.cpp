@@ -78,7 +78,7 @@ bool NetworkSocket::send(const ByteBuffer& buf) {
 	return send(buf.data(), buf.size());
 }
 
-bool NetworkSocket::recvAll(void* data, size_t len) {
+bool NetworkSocket::recvExact(void* data, size_t len) {
 	int stat;
 	size_t readLen = 0;
 
@@ -100,7 +100,7 @@ bool NetworkSocket::recvAll(void* data, size_t len) {
 	return true;
 }
 
-bool NetworkSocket::recvAll(ByteBuffer* buf) {
+bool NetworkSocket::recvExact(ByteBuffer* buf) {
 	return recv(buf->data(), buf->size());
 }
 

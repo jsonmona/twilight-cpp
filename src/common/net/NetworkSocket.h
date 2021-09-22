@@ -33,8 +33,8 @@ public:
 	bool send(const void* data, size_t len);
 	bool send(const ByteBuffer& buf);
 
-	bool recvAll(void* data, size_t len);
-	bool recvAll(ByteBuffer* buf);
+	bool recvExact(void* data, size_t len);
+	bool recvExact(ByteBuffer* buf);
 
 	int64_t recv(void* data, int64_t len);
 	bool recv(ByteBuffer* buf);
