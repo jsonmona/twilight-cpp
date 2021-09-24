@@ -31,7 +31,7 @@ public:
 	};
 
 	ByteBuffer() : ptr(nullptr), size_(0), capacity_(0) {}
-	ByteBuffer(size_t initialSize) : ptr(nullptr), size_(0), capacity_(0) { resize(initialSize); }
+	explicit ByteBuffer(size_t initialSize) : ptr(nullptr), size_(0), capacity_(0) { resize(initialSize); }
 	ByteBuffer(const ByteBuffer& copy) = delete;
 	ByteBuffer(ByteBuffer&& move) : ptr(nullptr), size_(0), capacity_(0) {
 		std::swap(ptr, move.ptr);
@@ -62,7 +62,12 @@ public:
 
 	void reserve(size_t newCapacity) {
 		if (capacity_ < newCapacity) {
-			void* newPtr = realloc(ptr, newCapacity);
+			void* newPtr;
+			if (ptr == nullptr)
+				newPtr = realloc(ptr, newCapacity);
+			else
+				newPtr = malloc(newCapacity);
+
 			if (newPtr == nullptr)
 				abort();  //FIXME: Use of abort
 			ptr = reinterpret_cast<uint8_t*>(newPtr);
@@ -86,6 +91,14 @@ public:
 		}
 	}
 
+	uint8_t& operator[](size_t idx) {
+		return data()[idx];
+	}
+
+	uint8_t operator[](size_t idx) const {
+		return data()[idx];
+	}
+
 	// removes content near begin
 	void shiftTowardBegin(size_t amount) {
 		if(amount != 0)
@@ -99,23 +112,35 @@ public:
 	}
 
 	void write(size_t dstOffset, void* src, size_t length) {
+		size_t newSize = std::max(size_, dstOffset + length);
+		reserve(newSize);
 		memcpy(ptr + dstOffset, src, length);
-		size_ = std::max(size_, dstOffset + length);
+		size_ = newSize;
 	}
 
 	void write(size_t dstOffset, const ByteBuffer& other) {
+		size_t newSize = std::max(size_, dstOffset + other.size());
+		reserve(newSize);
 		memcpy(ptr + dstOffset, other.data(), other.size());
-		size_ = std::max(size_, dstOffset + other.size());
+		size_ = newSize;
 	}
 
 	void append(void* src, size_t length) {
+		reserve(size_ + length);
 		memcpy(ptr + size_, src, length);
 		size_ += length;
 	}
 
 	void append(const ByteBuffer& other) {
+		reserve(size_ + other.size());
 		memcpy(ptr + size_, other.data(), other.size());
 		size_ += other.size();
+	}
+
+	void append(uint8_t data) {
+		reserve(size_ + 1);
+		ptr[size_] = data;
+		size_++;
 	}
 
 	size_t capacity() const { return capacity_; }
