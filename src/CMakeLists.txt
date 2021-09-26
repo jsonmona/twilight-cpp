@@ -141,6 +141,9 @@ if(DAYLIGHT_BUILD_GUI)
         PROPERTIES
         LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/client"
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/client"
+        AUTOMOC ON
+        AUTORCC ON
+        AUTOUIC ON
     )
 endif()
 

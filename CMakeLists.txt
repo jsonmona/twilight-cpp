@@ -21,12 +21,6 @@ if(DAYLIGHT_BUILD_GUI)
     endif()
 
     find_package(Qt6 COMPONENTS Widgets OpenGLWidgets REQUIRED)
-
-    if(Qt6_FOUND)
-        set(CMAKE_AUTOMOC ON)
-        set(CMAKE_AUTORCC ON)
-        set(CMAKE_AUTOUIC ON)
-    endif()
 endif()
 
 add_definitions(-DWINVER=0x0603 -D_WIN32_WINNT=0x0603 /Zc:__cplusplus -DUNICODE -D_UNICODE)
