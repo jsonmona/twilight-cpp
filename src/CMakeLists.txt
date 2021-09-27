@@ -8,6 +8,8 @@ set(COMMON_SRC
     ./common/ffmpeg-headers.h
     ./common/RingBuffer.h
     
+    ./common/CertStore.h
+    ./common/CertStore.cpp
     ./common/log.h
     ./common/log.cpp
     ./common/StatisticMixer.h

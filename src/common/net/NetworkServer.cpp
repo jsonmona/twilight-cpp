@@ -1,10 +1,56 @@
 #include "NetworkServer.h"
 
+#include "common/util.h"
+
+#include <string>
+
+
+// Mozilla Intermediate SSL but prefers chacha20 over AES
+constexpr static std::string_view ALLOWED_CIPHERS = "\
+TLS-ECDHE-ECDSA-WITH-CHACHA20-POLY1305-SHA256:\
+TLS-ECDHE-RSA-WITH-CHACHA20-POLY1305-SHA256:\
+TLS-ECDHE-ECDSA-WITH-AES-128-GCM-SHA256:\
+TLS-ECDHE-RSA-WITH-AES-128-GCM-SHA256:\
+TLS-ECDHE-ECDSA-WITH-AES-256-GCM-SHA384:\
+TLS-ECDHE-RSA-WITH-AES-256-GCM-SHA384:\
+TLS-DHE-RSA-WITH-CHACHA20-POLY1305-SHA256:\
+TLS-DHE-RSA-WITH-AES-128-GCM-SHA256:\
+TLS-DHE-RSA-WITH-AES-256-GCM-SHA384";
+
 
 NetworkServer::NetworkServer() :
 	log(createNamedLogger("NetworkServer"))
 {
 	mbedtls_net_init(&ctx);
+	mbedtls_ssl_config_init(&ssl);
+	mbedtls_entropy_init(&entropy);
+	mbedtls_ctr_drbg_init(&ctr_drbg);
+
+	stringSplit(ALLOWED_CIPHERS, ':', [&](std::string_view slice) {
+		std::string name(slice.begin(), slice.end());
+		const mbedtls_ssl_ciphersuite_t* ptr = mbedtls_ssl_ciphersuite_from_string(name.c_str());
+		if (ptr != nullptr)
+			allowedCiphersuites.push_back(ptr->id);
+		else
+			log->warn("Unknown cipher suite name {}", name);
+	});
+	allowedCiphersuites.push_back(0); // Terminator
+	allowedCiphersuites.shrink_to_fit();
+
+	int stat;
+	//TODO: Add personalization string
+	stat = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy, nullptr, 0);
+	check_quit(stat < 0, log, "Failed to seed ctr_drbg: {}", interpretMbedtlsError(stat));
+
+	mbedtls_ssl_config_defaults(&ssl, MBEDTLS_SSL_IS_SERVER, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT);
+	mbedtls_ssl_conf_authmode(&ssl, MBEDTLS_SSL_VERIFY_OPTIONAL);
+	mbedtls_ssl_conf_ca_chain(&ssl, certStore.getCert(), nullptr);
+	mbedtls_ssl_conf_rng(&ssl, mbedtls_ctr_drbg_random, &ctr_drbg);
+	mbedtls_ssl_conf_ciphersuites(&ssl, allowedCiphersuites.data());
+	//TODO: Setup session cache
+
+	stat = mbedtls_ssl_conf_own_cert(&ssl, certStore.getCert(), certStore.getPrivkey());
+	check_quit(stat < 0, log, "Failed to set own cert: {}", interpretMbedtlsError(stat));
 }
 
 NetworkServer::~NetworkServer() {
@@ -13,6 +59,10 @@ NetworkServer::~NetworkServer() {
 
 	if (listenThread.joinable())
 		listenThread.join();
+
+	mbedtls_ssl_config_free(&ssl);
+	mbedtls_entropy_free(&entropy);
+	mbedtls_ctr_drbg_free(&ctr_drbg);
 }
 
 void NetworkServer::startListen(uint16_t port) {
@@ -40,7 +90,8 @@ void NetworkServer::startListen(uint16_t port) {
 				mbedtls_net_free(&client);
 				break;
 			}
-			onNewConnection(std::make_unique<NetworkSocket>(client));
+
+			onNewConnection(std::make_unique<NetworkSocket>(client, &ssl));
 		}
 	});
 }

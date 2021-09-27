@@ -2,11 +2,15 @@
 #define COMMON_NETWORK_SERVER_H_
 
 
+#include "common/CertStore.h"
 #include "common/log.h"
 
 #include "common/net/NetworkSocket.h"
 
 #include <mbedtls/net_sockets.h>
+#include <mbedtls/ssl.h>
+#include <mbedtls/entropy.h>
+#include <mbedtls/ctr_drbg.h>
 
 #include <atomic>
 #include <functional>
@@ -33,7 +37,13 @@ private:
 	std::atomic<bool> flagListen;
 	std::thread listenThread;
 
+	CertStore certStore;
+	std::vector<int> allowedCiphersuites;
+
 	mbedtls_net_context ctx;
+	mbedtls_ssl_config ssl;
+	mbedtls_entropy_context entropy;
+	mbedtls_ctr_drbg_context ctr_drbg;
 
 	std::function<void(std::unique_ptr<NetworkSocket>&&)> onNewConnection;
 };

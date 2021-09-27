@@ -33,6 +33,9 @@ LoggerPtr createNamedLogger(const std::string& name);
 // Call once at start
 void setupLogger();
 
+// Stringify mbedtls errors
+std::string interpretMbedtlsError(int errnum);
+
 
 // error_quit
 

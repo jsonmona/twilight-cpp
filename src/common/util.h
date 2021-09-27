@@ -5,8 +5,25 @@
 #include <atomic>
 #include <type_traits>
 #include <optional>
+#include <string>
 
 #include "common/ByteBuffer.h"
+
+
+std::optional<ByteBuffer> loadEntireFile(const char* path);
+
+
+template<typename Fn>
+void stringSplit(std::string_view str, char ch, Fn callback) {
+	size_t begin = 0;
+	for (size_t i = 0; i < str.size(); i++) {
+		if (str[i] == ch) {
+			callback(str.substr(begin, i - begin));
+			begin = i + 1;
+		}
+	}
+	callback(str.substr(begin, str.size() - begin));
+}
 
 
 // From https://stackoverflow.com/a/21298525
@@ -22,8 +39,6 @@ template<typename T,
 		? value
 		: constexpr_nextPowerOfTwo(((value - 1) | ((value - 1) >> curb)) + 1, maxb, curb << 1);
 }
-
-std::optional<ByteBuffer> loadEntireFile(const char* path);
 
 #if defined(ATOMIC_BOOL_LOCK_FREE) && ATOMIC_BOOL_LOCK_FREE >= 1
 class spinlock {

@@ -8,7 +8,10 @@
 #include <spdlog/sinks/msvc_sink.h>
 #include <spdlog/sinks/wincolor_sink.h>
 
+#include <mbedtls/error.h>
+
 #include <cstdarg>
+#include <cstring>
 
 
 class LogForwardingSink : public spdlog::sinks::base_sink<spdlog::details::null_mutex> {
@@ -132,4 +135,13 @@ static void setupFFmpegLogs() {
 
 void setupLogger() {
 	setupFFmpegLogs();
+}
+
+std::string interpretMbedtlsError(int errnum) {
+	std::string ret;
+	ret.resize(2048);
+
+	mbedtls_strerror(errnum, ret.data(), ret.size());
+	ret.resize(strlen(ret.data()));
+	return ret;
 }

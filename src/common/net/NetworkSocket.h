@@ -6,6 +6,9 @@
 #include "common/ByteBuffer.h"
 
 #include <mbedtls/net_sockets.h>
+#include <mbedtls/ssl.h>
+#include <mbedtls/entropy.h>
+#include <mbedtls/ctr_drbg.h>
 
 #include <atomic>
 #include <thread>
@@ -16,7 +19,7 @@
 class NetworkSocket {
 public:
 	NetworkSocket();
-	explicit NetworkSocket(mbedtls_net_context initCtx);
+	NetworkSocket(mbedtls_net_context initCtx, const mbedtls_ssl_config* ssl_conf);
 	NetworkSocket(const NetworkSocket& copy) = delete;
 	NetworkSocket(NetworkSocket&& move) = delete;
 
@@ -42,10 +45,15 @@ public:
 private:
 	LoggerPtr log;
 
-	std::atomic<bool> connected;
-
 	mbedtls_net_context ctx;
+	mbedtls_ssl_context ssl;
+	mbedtls_ssl_config conf;
+	mbedtls_entropy_context entropy;
+	mbedtls_ctr_drbg_context ctr_drbg;
+	
+	std::vector<int> allowedCiphersuites;
 
+	std::atomic<bool> connected;
 	std::mutex sendLock;
 	std::mutex recvLock;
 
