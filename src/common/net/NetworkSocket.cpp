@@ -52,6 +52,7 @@ NetworkSocket::NetworkSocket() :
 	mbedtls_ssl_conf_authmode(&conf, MBEDTLS_SSL_VERIFY_OPTIONAL);
 	mbedtls_ssl_conf_rng(&conf, mbedtls_ctr_drbg_random, &ctr_drbg);
 	mbedtls_ssl_conf_ciphersuites(&conf, allowedCiphersuites.data());
+	mbedtls_ssl_conf_min_version(&conf, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);
 }
 
 NetworkSocket::NetworkSocket(mbedtls_net_context initCtx, const mbedtls_ssl_config* ssl_conf) :

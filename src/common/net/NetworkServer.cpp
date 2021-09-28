@@ -47,6 +47,7 @@ NetworkServer::NetworkServer() :
 	mbedtls_ssl_conf_ca_chain(&ssl, certStore.getCert(), nullptr);
 	mbedtls_ssl_conf_rng(&ssl, mbedtls_ctr_drbg_random, &ctr_drbg);
 	mbedtls_ssl_conf_ciphersuites(&ssl, allowedCiphersuites.data());
+	mbedtls_ssl_conf_min_version(&ssl, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);
 	//TODO: Setup session cache
 
 	stat = mbedtls_ssl_conf_own_cert(&ssl, certStore.getCert(), certStore.getPrivkey());
