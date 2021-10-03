@@ -39,8 +39,17 @@ set(COMMON_WINDOWS_SRC
 set(CLIENT_SRC
     ./client/StreamViewerBase.h
 
+    ./client/FlowLayout.h
+    ./client/FlowLayout.cpp
+    ./client/HostList.h
+    ./client/HostList.cpp
     ./client/HubWindow.h
     ./client/HubWindow.cpp
+    ./client/HubWindow.ui
+    ./client/HubWindowAddHostDialog.ui
+    ./client/HubWindowHostItem.h
+    ./client/HubWindowHostItem.cpp
+    ./client/HubWindowHostItem.ui
     ./client/StreamClient.h
     ./client/StreamClient.cpp
     ./client/StreamWindow.h
@@ -115,7 +124,7 @@ add_library(common STATIC ${COMMON_SRC} ${COMMON_WINDOWS_SRC})
 target_include_directories(common PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(common PUBLIC
     git-info
-    mbedtls opus spdlog::spdlog
+    mbedtls opus spdlog::spdlog toml11
     ${FFMPEG_LIBS}
     "winmm.lib"
 )

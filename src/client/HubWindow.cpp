@@ -2,39 +2,39 @@
 
 #include "client/StreamWindow.h"
 
-#include "QtWidgets/qapplication.h"
-#include "QtGui/qscreen.h"
+#include "ui_HubWindowAddHostDialog.h"
+
+#include <QtWidgets/qapplication.h>
+#include <QtWidgets/qdialog.h>
+#include <QtWidgets/qmessagebox.h>
+#include <QtGui/qscreen.h>
 #include <QtGui/qevent.h>
 
 
 HubWindow::HubWindow() : QWidget(),
-	log(createNamedLogger("HubWindow"))
+	log(createNamedLogger("HubWindow")),
+	hostListChanged(false)
 {
-	addrEdit = new QLineEdit();
-	addrEdit->setPlaceholderText("127.0.0.1");
-	portEdit = new QLineEdit();
-	portEdit->setPlaceholderText("6946");
-	addrBox = new QHBoxLayout();
-	addrBox->addWidget(addrEdit);
-	addrBox->addWidget(portEdit);
+	ui.setupUi(this);
 
-	connBtn = new QPushButton("Connect");  //TODO: Localization
-	connect(connBtn, &QAbstractButton::clicked, this, &HubWindow::onClickConnect);
-	connBox = new QVBoxLayout();
-	connBox->addLayout(addrBox);
-	connBox->addWidget(connBtn);
-
-	rootBox = new QHBoxLayout(this);
-	rootBox->addLayout(connBox);
+	layoutWidget = new QWidget();
+	layout = new FlowLayout(layoutWidget, 10, 7, 7);
+	ui.scrollAreaHosts->setWidget(layoutWidget);
 
 	setAttribute(Qt::WA_DeleteOnClose);
 
 	qApp->setQuitOnLastWindowClosed(false);
+
+	hostList.loadFromFile("hosts.toml");
+	reloadItems_();
 }
 
 HubWindow::~HubWindow() {
 	// Won't work
 	//qApp->setQuitOnLastWindowClosed(false);
+
+	if (hostListChanged)
+		hostList.saveToFile("hosts.toml");
 
 	qApp->quit();
 }
@@ -60,21 +60,48 @@ QSize HubWindow::sizeHint() const {
 	return QSize{ 1280, 720 };
 }
 
-void HubWindow::onClickConnect(bool checked) {
-	QString addr = addrEdit->text();
-	if(addr.isEmpty())
-		addr = addrEdit->placeholderText();
-	addr = addr.trimmed();
+void HubWindow::on_btnAddHost_clicked(bool checked) {
+	QDialog dialog(this);
+	Ui::HubWindowAddHostDialog dialogUi;
 
-	QString port = portEdit->text();
-	if (port.isEmpty())
-		port = portEdit->placeholderText();
-	port = port.trimmed();
+	dialogUi.setupUi(&dialog);
 
-	// Non-standard port not supported for now
-	assert(port == "6946");
+	int ret = dialog.exec();
 
-	streamWindow = new StreamWindow(addr.toUtf8().data());
+	if (ret == QDialog::Accepted) {
+		HostListEntry entry = std::make_shared<HostList::Entry>();
+		entry->nickname = dialogUi.lineEditDisplayName->text().toStdString();
+		entry->addr.push_back(dialogUi.lineEditAddr->text().toStdString());
+		entry->addr.push_back(dialogUi.lineEditAddrFallback->text().toStdString());
+
+		//TODO: Add more validity checks
+
+		if (entry->nickname.empty())
+			entry->nickname = entry->addr.front();
+
+		if (entry->addr.front().empty())
+			entry->addr.erase(entry->addr.begin());
+		if (entry->addr.back().empty())
+			entry->addr.erase(entry->addr.end() - 1);
+
+		if (entry->addr.size() > 1) {
+			//TODO: Remove this when fallback address is supported
+			QMessageBox msg;
+			msg.warning(this, "Warning", "Fallback address is not supported yet", QMessageBox::Ok, QMessageBox::NoButton);
+		}
+
+		if (!entry->addr.empty()) {
+			hostList.hosts.push_back(std::move(entry));
+			hostListChanged = true;
+			reloadItems_();
+		}
+	}
+}
+
+void HubWindow::connectToEntry(HostListEntry entry) {
+	//TODO: Allow use of URI (so that protocol and port can be specified)
+	
+	streamWindow = new StreamWindow(entry->addr[0].c_str());
 
 	QRect screenSize = qApp->primaryScreen()->geometry();
 
@@ -84,4 +111,23 @@ void HubWindow::onClickConnect(bool checked) {
 
 	connect(streamWindow.get(), &QObject::destroyed, this, &QWidget::show);
 	hide();
+}
+
+void HubWindow::reloadItems_() {
+	for (HubWindowHostItem* now : items) {
+		now->deleteLater();
+		layout->removeWidget(now);
+	}
+
+	items.clear();
+	items.reserve(hostList.hosts.size());
+
+	for (HostListEntry& now : hostList.hosts) {
+		HubWindowHostItem* item = new HubWindowHostItem();
+		item->setEntry(now);
+		connect(item, &HubWindowHostItem::onClickConnect, this, &HubWindow::connectToEntry);
+
+		layout->addWidget(item);
+		items.push_back(item);
+	}
 }

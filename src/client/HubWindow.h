@@ -2,7 +2,14 @@
 #define CLIENT_HUB_WINDOW_H_
 
 
+#include "ui_HubWindow.h"
+
+#include "common/CertStore.h"
 #include "common/log.h"
+
+#include "client/FlowLayout.h"
+#include "client/HostList.h"
+#include "client/HubWindowHostItem.h"
 
 #include <QtWidgets/qwidget.h>
 #include <QtWidgets/qpushbutton.h>
@@ -11,6 +18,7 @@
 #include <QtCore/qpointer.h>
 
 #include <atomic>
+#include <vector>
 
 
 class HubWindow : public QWidget {
@@ -24,18 +32,23 @@ public:
 
 	QSize sizeHint() const override;
 
+private slots:
+	void connectToEntry(HostListEntry entry);
+	void on_btnAddHost_clicked(bool checked);
+
 private:
 	LoggerPtr log;
 
-	QHBoxLayout* rootBox;
-	QVBoxLayout* connBox;
-	QHBoxLayout* addrBox;
-	QLineEdit* addrEdit;
-	QLineEdit* portEdit;
-	QPushButton* connBtn;
+	Ui::HubWindow ui;
+	QWidget* layoutWidget;
+	FlowLayout* layout;
+	std::vector<HubWindowHostItem*> items;
 	QPointer<QWidget> streamWindow;
 
-	void onClickConnect(bool checked);
+	HostList hostList;
+	bool hostListChanged;
+
+	void reloadItems_();
 };
 
 
