@@ -10,6 +10,8 @@
 #include <mbedtls/entropy.h>
 #include <mbedtls/ctr_drbg.h>
 
+#include <packet.pb.h>
+
 #include <atomic>
 #include <thread>
 #include <string>
@@ -33,14 +35,10 @@ public:
 	template<class Fn>
 	void setOnDisconnected(Fn fn) { onDisconnected = std::move(fn); }
 
-	bool send(const void* data, size_t len);
-	bool send(const ByteBuffer& buf);
+	bool send(const msg::Packet& pkt, const uint8_t* extraData);
+	bool send(const msg::Packet& pkt, const ByteBuffer& extraData) { return send(pkt, extraData.data()); }
 
-	bool recvExact(void* data, size_t len);
-	bool recvExact(ByteBuffer* buf);
-
-	int64_t recv(void* data, int64_t len);
-	bool recv(ByteBuffer* buf);
+	bool recv(msg::Packet* pkt, ByteBuffer* extraData);
 
 private:
 	LoggerPtr log;
@@ -50,6 +48,10 @@ private:
 	mbedtls_ssl_config conf;
 	mbedtls_entropy_context entropy;
 	mbedtls_ctr_drbg_context ctr_drbg;
+
+	ByteBuffer sendBuffer;
+	std::unique_ptr<google::protobuf::io::ZeroCopyInputStream> zeroCopyInputStream;
+	std::unique_ptr<google::protobuf::io::CodedInputStream> inputStream;
 	
 	std::vector<int> allowedCiphersuites;
 

@@ -23,7 +23,6 @@ class StreamServer {
 
 	NetworkServer server;
 	std::unique_ptr<NetworkSocket> conn;
-	std::mutex connWriteLock;
 
 	AudioEncoder audioEncoder;
 	
@@ -35,7 +34,6 @@ class StreamServer {
 	void _runListen();
 
 	void _processOutput(DesktopFrame<ByteBuffer>&& cap);
-	void _writeOutput(const msg::Packet& pck, const uint8_t* extraData);
 
 public:
 	StreamServer();

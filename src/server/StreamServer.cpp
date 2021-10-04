@@ -1,6 +1,5 @@
 #include "StreamServer.h"
 
-#include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 
 constexpr uint16_t SERVICE_PORT = 6495;
 
@@ -15,7 +14,7 @@ StreamServer::StreamServer() :
 		pkt.set_extra_data_len(len);
 		auto audioFrame = pkt.mutable_audio_frame();
 		audioFrame->set_channels(2);
-		_writeOutput(pkt, data);
+		conn->send(pkt, data);
 	});
 
 	server.setOnNewConnection([this](std::unique_ptr<NetworkSocket>&& _newSock) {
@@ -66,7 +65,7 @@ void StreamServer::_processOutput(DesktopFrame<ByteBuffer>&& cap) {
 		m->set_hotspot_y(cap.cursorShape->hotspotY);
 
 		pkt.set_extra_data_len(cap.cursorShape->image.size());
-		_writeOutput(pkt, cap.cursorShape->image.data());
+		conn->send(pkt, cap.cursorShape->image.data());
 	}
 
 	if(cursorPos && cap.desktop) {
@@ -78,7 +77,7 @@ void StreamServer::_processOutput(DesktopFrame<ByteBuffer>&& cap) {
 		}
 
 		pkt.set_extra_data_len(cap.desktop->size());
-		_writeOutput(pkt, cap.desktop->data());
+		conn->send(pkt, *cap.desktop);
 	}
 
 	if (nowTime - lastStatReport > std::chrono::milliseconds(250)) {
@@ -98,34 +97,7 @@ void StreamServer::_processOutput(DesktopFrame<ByteBuffer>&& cap) {
 			m->set_encoder_max(enc.max);
 
 			pkt.set_extra_data_len(0);
-			_writeOutput(pkt, nullptr);
+			conn->send(pkt, nullptr);
 		}
-	}
-}
-
-void StreamServer::_writeOutput(const msg::Packet& pck, const uint8_t* extraData) {
-	check_quit(pck.ByteSizeLong() > UINT32_MAX, log, "Packet too large");
-	uint32_t packetLen = pck.ByteSizeLong();
-	uint32_t extraDataLen = pck.extra_data_len();
-
-	//TODO: Cache and share buffer since it already uses a lock down there
-	ByteBuffer outputBuffer(packetLen + 8);
-	google::protobuf::io::ArrayOutputStream aout(outputBuffer.data(), outputBuffer.capacity());
-
-	/* prepare data */ {
-		google::protobuf::io::CodedOutputStream cout(&aout);
-
-		cout.WriteVarint32(packetLen);
-		pck.SerializeToCodedStream(&cout);
-	}
-
-	outputBuffer.resize(aout.ByteCount());
-
-	/* lock */ {
-		std::lock_guard lock(connWriteLock);
-		conn->send(outputBuffer);
-
-		if (extraDataLen > 0)
-			conn->send(extraData, extraDataLen);
 	}
 }

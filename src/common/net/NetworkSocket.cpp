@@ -5,6 +5,8 @@
 
 #include <mbedtls/error.h>
 
+#include <google/protobuf/io/zero_copy_stream_impl_lite.h>
+
 #include <string>
 
 
@@ -20,6 +22,66 @@ TLS-ECDHE-RSA-WITH-AES-256-GCM-SHA384:\
 TLS-DHE-RSA-WITH-CHACHA20-POLY1305-SHA256:\
 TLS-DHE-RSA-WITH-AES-128-GCM-SHA256:\
 TLS-DHE-RSA-WITH-AES-256-GCM-SHA384";
+
+
+template<typename Fn>
+class SocketInputWrapper : public google::protobuf::io::ZeroCopyInputStream {
+public:
+	SocketInputWrapper(mbedtls_ssl_context* ssl_, Fn onError_) :
+		ssl(ssl_), onError(onError_), offset(0), byteCount(0) {}
+	~SocketInputWrapper() = default;
+
+	bool Next(const void** data, int* size) override {
+		if (buf.size() <= offset) {
+			buf.resize(16384);
+			int stat = mbedtls_ssl_read(ssl, buf.data(), buf.size());
+			if (stat < 0) {
+				onError(stat);
+				return false;
+			}
+			else
+				buf.resize(stat);
+			offset = 0;
+		}
+
+		*data = buf.data() + offset;
+		*size = buf.size() - offset;
+		offset = buf.size();
+		byteCount += *size;
+		return true;
+	}
+
+	void BackUp(int count) override {
+		offset -= count;
+		byteCount -= count;
+	}
+
+	bool Skip(int count) override {
+		int consumed = 0;
+		const void* data;
+		int size;
+		while (consumed < count) {
+			if (!Next(&data, &size))
+				return false;
+			consumed += size;
+		}
+		if (count < consumed)
+			BackUp(consumed - count);
+
+		return true;
+	}
+
+	int64_t ByteCount() const override {
+		return byteCount;
+	}
+
+private:
+	mbedtls_ssl_context* ssl;
+	Fn onError;
+	size_t offset;
+	int64_t byteCount;
+	ByteBuffer buf;
+};
 
 
 NetworkSocket::NetworkSocket() :
@@ -133,80 +195,94 @@ void NetworkSocket::disconnect() {
 	}
 }
 
-bool NetworkSocket::send(const void* data, size_t len) {
-	int stat;
-	if (len <= 0)
-		return true;
-
+bool NetworkSocket::send(const msg::Packet& pkt, const uint8_t* extraData) {
 	std::lock_guard lock(sendLock);
 
-	const uint8_t* ptr = reinterpret_cast<const uint8_t*>(data);
+	int ret;
 
+	size_t packetLen = pkt.ByteSizeLong();
 	size_t written = 0;
-	while (written < len) {
-		stat = mbedtls_ssl_write(&ssl, ptr + written, len - written);
-		if (stat < 0) {
-			reportDisconnected(stat);
+	sendBuffer.resize(packetLen + 16);
+
+	const size_t extraDataLen = pkt.extra_data_len();
+
+	/* Write data */ {
+		google::protobuf::io::ArrayOutputStream aout(sendBuffer.data(), sendBuffer.size());
+		google::protobuf::io::CodedOutputStream cout(&aout);
+
+		cout.WriteVarint64(packetLen);
+		if (sendBuffer.size() - cout.ByteCount() < packetLen) {
+			log->critical("Packet length takes too much space: {} bytes used", cout.ByteCount());
 			return false;
 		}
-		written += stat;
+
+		if (!pkt.SerializeToCodedStream(&cout)) {
+			log->critical("Failed to serialize to coded stream");
+			return false;
+		}
+
+		written = cout.ByteCount();
 	}
+
+	size_t offset = 0;
+	while (offset < written) {
+		ret = mbedtls_ssl_write(&ssl, sendBuffer.data() + offset, written - offset);
+		if (ret < 0) {
+			reportDisconnected(ret);
+			return false;
+		}
+
+		offset += ret;
+	}
+
+	if (extraDataLen > 0) {
+		check_quit(extraData == nullptr, log, "Extra data is nullptr (expected {} bytes)", extraDataLen);
+		offset = 0;
+		while (offset < extraDataLen) {
+			ret = mbedtls_ssl_write(&ssl, extraData + offset, extraDataLen - offset);
+			if (ret < 0) {
+				reportDisconnected(ret);
+				return false;
+			}
+
+			offset += ret;
+		}
+	}
+
 	return true;
 }
 
-bool NetworkSocket::send(const ByteBuffer& buf) {
-	return send(buf.data(), buf.size());
-}
-
-bool NetworkSocket::recvExact(void* data, size_t len) {
-	int stat;
-	size_t readLen = 0;
-
-	if (len <= 0)
-		return true;
-
-	uint8_t* ptr = reinterpret_cast<uint8_t*>(data);
-
-	std::lock_guard lock(recvLock);
-	while (readLen < len) {
-		stat = mbedtls_ssl_read(&ssl, ptr + readLen, len - readLen);
-		if (stat < 0) {
-			reportDisconnected(stat);
-			return false;
-		}
-		readLen += stat;
-	}
-
-	return true;
-}
-
-bool NetworkSocket::recvExact(ByteBuffer* buf) {
-	return recv(buf->data(), buf->size());
-}
-
-int64_t NetworkSocket::recv(void* data, int64_t len) {
-	int stat;
-
-	if (len <= 0)
-		return true;
-
-	uint8_t* ptr = reinterpret_cast<uint8_t*>(data);
-
-	std::lock_guard lock(recvLock);
-	stat = mbedtls_ssl_read(&ssl, ptr, len);
-	if (stat < 0) {
-		reportDisconnected(stat);
-		return stat;
-	}
-
-	return stat;
-}
-
-bool NetworkSocket::recv(ByteBuffer* buf) {
-	int64_t read = recv(buf->data(), buf->size());
-	if (read < 0)
+bool NetworkSocket::recv(msg::Packet* pkt, ByteBuffer* extraData) {
+	if (!connected.load(std::memory_order_acquire))
 		return false;
-	buf->resize(read);
+
+	std::lock_guard lock(recvLock);
+
+	if (inputStream == nullptr) {
+		google::protobuf::io::ZeroCopyInputStream* zin = new SocketInputWrapper(&ssl, [this](int errnum) { reportDisconnected(errnum); });
+		zeroCopyInputStream = std::unique_ptr<google::protobuf::io::ZeroCopyInputStream>(zin);
+		inputStream = std::make_unique<google::protobuf::io::CodedInputStream>(zeroCopyInputStream.get());
+	}
+
+	auto limit = inputStream->ReadLengthAndPushLimit();
+
+	if (!pkt->ParseFromCodedStream(inputStream.get()))
+		return false;
+
+	if (!inputStream->ConsumedEntireMessage())
+		return false;
+
+	inputStream->PopLimit(limit);
+
+	int extraDataLen = pkt->extra_data_len();
+
+	if (extraDataLen > 0 && extraData != nullptr) {
+		extraData->resize(extraDataLen);
+
+		if (!inputStream->ReadRaw(extraData->data(), extraDataLen))
+			return false;
+	}
+
 	return true;
 }
 
@@ -215,6 +291,9 @@ void NetworkSocket::reportDisconnected(int errnum) {
 	bool prev = connected.exchange(false, std::memory_order_acq_rel);
 
 	if (prev) {
+		inputStream.reset();
+		zeroCopyInputStream.reset();
+
 		mbedtls_net_free(&ctx);
 		mbedtls_strerror(errnum, buf, 2048);
 		onDisconnected(buf);
