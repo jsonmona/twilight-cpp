@@ -63,7 +63,7 @@ public:
 	void reserve(size_t newCapacity) {
 		if (capacity_ < newCapacity) {
 			void* newPtr;
-			if (ptr == nullptr)
+			if (ptr != nullptr)
 				newPtr = realloc(ptr, newCapacity);
 			else
 				newPtr = malloc(newCapacity);
