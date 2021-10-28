@@ -42,3 +42,18 @@ failed:
 
 	return ret;
 }
+
+
+bool writeByteBuffer(const char* filename, const ByteBuffer& data) {
+	FILE* f = fopen(filename, "wb");
+	size_t offset = 0;
+	while (offset < data.size()) {
+		size_t write = fwrite(data.data() + offset, 1, data.size() - offset, f);
+		if (write == 0)
+			break;
+		offset += write;
+	}
+	fclose(f);
+
+	return offset == data.size();
+}

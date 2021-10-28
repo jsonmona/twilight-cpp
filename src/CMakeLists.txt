@@ -10,6 +10,8 @@ set(COMMON_SRC
     
     ./common/CertStore.h
     ./common/CertStore.cpp
+    ./common/Keypair.h
+    ./common/Keypair.cpp
     ./common/log.h
     ./common/log.cpp
     ./common/StatisticMixer.h
@@ -174,6 +176,7 @@ macro(FN_GEN_PB FILE)
     list(APPEND PB_GENERATED_FILES "${CMAKE_CURRENT_BINARY_DIR}/pb/${FILE}.pb.h" "${CMAKE_CURRENT_BINARY_DIR}/pb/${FILE}.pb.cc")
 endmacro()
 
+fn_gen_pb(auth)
 fn_gen_pb(packet)
 fn_gen_pb(stream)
 add_library(protobuf_gen STATIC ${PB_GENERATED_FILES})

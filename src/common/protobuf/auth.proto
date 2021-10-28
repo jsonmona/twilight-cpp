@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+option optimize_for = LITE_RUNTIME;
+package msg;
+
+
+// extra_data contains SHA384([server pubkey DER, client pubkey DER, client nonce].concat) and client pubkey DER concated
+// Server may response with SignResponse where status=VERSION_MISMATCH_ERROR
+message SignRequest {
+	int32 auth_protocol_version = 1;
+	string hostname = 2;
+}
+
+// extra_data contains server nonce (16 bytes)
+message ServerNonceNotify {
+}
+
+// extra_data contains client nonce (16 bytes)
+// Server should check client nonce using the partial hash
+message ClientNonceNotify {
+}
+
+// Client should display PIN after receiving this message
+// PIN: Take most significant uint64le of SHA256([server pubkey DER, client pubkey DER, server nonce, client nonce].concat)
+//      Then convert it to decimal and take 8 least significant digits
+//      ex) 1234 5678
+message ServerPinReady {
+}
+
+// extra_data may contain signed certificate in DER format
+message SignResponse {
+	enum AuthStatus {
+		SUCCESS = 0;
+		UNKNOWN_ERROR = 1;
+		PIN_ERROR = 2;
+		PUBKEY_ERROR = 3;
+		VERSION_MISMATCH_ERROR = 4;
+	}
+
+	AuthStatus status = 1;
+	string error_msg = 2;
+}

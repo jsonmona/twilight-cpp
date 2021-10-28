@@ -26,6 +26,11 @@ NetworkServer::NetworkServer() :
 	mbedtls_entropy_init(&entropy);
 	mbedtls_ctr_drbg_init(&ctr_drbg);
 
+	std::unique_ptr<Keypair> keypair = std::make_unique<Keypair>();
+	keypair->loadOrGenerate("privkey.der");
+	certStore.loadKey(std::move(keypair));
+	certStore.loadCert("cert.der");
+
 	stringSplit(ALLOWED_CIPHERS, ':', [&](std::string_view slice) {
 		std::string name(slice.begin(), slice.end());
 		const mbedtls_ssl_ciphersuite_t* ptr = mbedtls_ssl_ciphersuite_from_string(name.c_str());
@@ -44,13 +49,13 @@ NetworkServer::NetworkServer() :
 
 	mbedtls_ssl_config_defaults(&ssl, MBEDTLS_SSL_IS_SERVER, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT);
 	mbedtls_ssl_conf_authmode(&ssl, MBEDTLS_SSL_VERIFY_OPTIONAL);
-	mbedtls_ssl_conf_ca_chain(&ssl, certStore.getCert(), nullptr);
+	mbedtls_ssl_conf_ca_chain(&ssl, certStore.cert(), nullptr);
 	mbedtls_ssl_conf_rng(&ssl, mbedtls_ctr_drbg_random, &ctr_drbg);
 	mbedtls_ssl_conf_ciphersuites(&ssl, allowedCiphersuites.data());
 	mbedtls_ssl_conf_min_version(&ssl, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);
 	//TODO: Setup session cache
 
-	stat = mbedtls_ssl_conf_own_cert(&ssl, certStore.getCert(), certStore.getPrivkey());
+	stat = mbedtls_ssl_conf_own_cert(&ssl, certStore.cert(), certStore.keypair().pk());
 	check_quit(stat < 0, log, "Failed to set own cert: {}", interpretMbedtlsError(stat));
 }
 

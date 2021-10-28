@@ -21,6 +21,14 @@ bool HostList::Entry::hasConnected() const {
 	return lastConnected.time_since_epoch().count() != 0;
 }
 
+bool HostList::Entry::hasServerCert() const {
+	return serverCert.raw.p != nullptr;
+}
+
+bool HostList::Entry::hasClientCert() const {
+	return clientCert.raw.p != nullptr;
+}
+
 void HostList::Entry::updateLastConnected() {
 	lastConnected = std::chrono::system_clock::now();
 }
@@ -42,7 +50,7 @@ bool HostList::save(std::ostream& out) {
 		int ret;
 		char buffer[8192];
 		size_t olen;
-		if (now->serverCert.raw.p != nullptr) {
+		if (now->hasServerCert()) {
 			ret = mbedtls_pem_write_buffer("-----BEGIN CERTIFICATE-----\n",
 				"-----END CERTIFICATE-----\n",
 				now->serverCert.raw.p, now->serverCert.raw.len,
@@ -53,10 +61,10 @@ bool HostList::save(std::ostream& out) {
 			}
 		}
 
-		if (now->clientCert.raw.p != nullptr) {
+		if (now->hasClientCert()) {
 			ret = mbedtls_pem_write_buffer("-----BEGIN CERTIFICATE-----\n",
 				"-----END CERTIFICATE-----\n",
-				now->serverCert.raw.p, now->serverCert.raw.len,
+				now->clientCert.raw.p, now->clientCert.raw.len,
 				(unsigned char*)buffer, 8191, &olen);
 			if (ret == 0) {
 				buffer[olen] = '\0';

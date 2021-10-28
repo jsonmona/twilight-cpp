@@ -4,6 +4,7 @@
 
 #include "common/ByteBuffer.h"
 #include "common/log.h"
+#include "common/Keypair.h"
 
 #include <mbedtls/ssl.h>
 #include <mbedtls/x509.h>
@@ -19,17 +20,20 @@ public:
 	CertStore(CertStore&& move) = delete;
 	~CertStore();
 
-	mbedtls_pk_context* getPrivkey() { return &privkey; }
-	mbedtls_x509_crt* getCert() { return &cert; }
+	void loadKey(std::unique_ptr<Keypair>&& pk);
+	void loadCert(const char* filename);
+
+	ByteBuffer signCert(const char* subjectName, mbedtls_pk_context* subjectKey);
+
+	mbedtls_x509_crt* cert() { return &cert_; }
+	Keypair& keypair() { return *keypair_; }
 
 private:
 	LoggerPtr log;
-	mbedtls_pk_context privkey;
-	mbedtls_x509_crt cert;
+	mbedtls_x509_crt cert_;
+	std::unique_ptr<Keypair> keypair_;
 
-	void init_();
-	void loadKey_(mbedtls_ctr_drbg_context* ctr_drbg);
-	void loadCert_(mbedtls_ctr_drbg_context* ctr_drbg);
+	ByteBuffer genCert_(const char* subjectName, const char* issuerName, mbedtls_pk_context* subjectKey, mbedtls_pk_context* issuerKey);
 };
 
 

@@ -9,20 +9,23 @@
 #include <cubeb/cubeb.h>
 
 #include <QtGui/qevent.h>
+#include <QtWidgets/qmessagebox.h>
 
 
-StreamWindow::StreamWindow(const char* addr) : QWidget(),
+StreamWindow::StreamWindow(HostListEntry host) : QWidget(),
 	log(createNamedLogger("StreamWindow")),
 	viewer(new StreamViewerD3D()),
 	boxLayout(this)
 {
 	connect(this, &StreamWindow::showLater, this, &StreamWindow::show);
 	connect(this, &StreamWindow::closeLater, this, &StreamWindow::close);
+	connect(this, &StreamWindow::displayPinLater, this, &StreamWindow::displayPin_);
 	setAttribute(Qt::WA_DeleteOnClose);
 
 	sc.setOnNextPacket([this](const msg::Packet& pkt, uint8_t* extraData) { processNewPacket_(pkt, extraData); });
 	sc.setOnStateChange([this](StreamClient::State newState, std::string_view msg) { processStateChange_(newState, msg); });
-	sc.connect(addr);
+	sc.setOnDisplayPin([this](int pin) { displayPinLater(pin); });
+	sc.connect(host);
 
 	boxLayout.addWidget(viewer);
 	boxLayout.setContentsMargins(0, 0, 0, 0);
@@ -37,6 +40,20 @@ StreamWindow::~StreamWindow() {
 	flagRunAudio.store(false, std::memory_order_release);
 	audioDataCV.notify_all();
 	audioThread.join();
+}
+
+void StreamWindow::displayPin_(int pin) {
+	//TODO: Make message box look better
+	QString pinText = QStringLiteral("%1").arg(pin / 10000, 4, 10, QLatin1Char('0'));
+	pinText.append(' ');
+	pinText.append(QStringLiteral("%1").arg(pin % 10000, 4, 10, QLatin1Char('0')));
+
+	QMessageBox msg;
+	msg.setWindowTitle("Authentication required");
+	msg.setText(QStringLiteral("Enter following pin in the server: ") + pinText);
+	msg.setIcon(QMessageBox::Icon::Information);
+	msg.setStandardButtons(QMessageBox::StandardButton::Ok);
+	msg.exec();
 }
 
 void StreamWindow::processStateChange_(StreamClient::State newState, std::string_view msg) {

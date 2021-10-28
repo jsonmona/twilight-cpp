@@ -30,6 +30,8 @@ public:
 		~Entry();
 
 		bool hasConnected() const;
+		bool hasServerCert() const;
+		bool hasClientCert() const;
 		void updateLastConnected();
 	};
 
@@ -46,6 +48,7 @@ public:
 	std::vector<std::shared_ptr<Entry>> hosts;
 
 private:
+
 	LoggerPtr log;
 };
 

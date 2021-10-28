@@ -4,8 +4,13 @@
 
 #include <cstdint>
 #include <cstring>
+#include <string>
 #include <type_traits>
 #include <algorithm>
+
+
+#define DAYLIGHT_HEX_DIGITS "0123456789ABCDEF"
+
 
 class ByteBuffer {
 public:
@@ -89,6 +94,29 @@ public:
 			reserve(newSize);
 			size_ = newSize;
 		}
+	}
+
+	void shrinkToFit() {
+		if (capacity_ == size_ || ptr == nullptr)
+			return;
+
+		void* newPtr = realloc(ptr, size_);
+		if (newPtr == nullptr)
+			abort();  //FIXME: Use of abort
+
+		ptr = reinterpret_cast<uint8_t*>(newPtr);
+		capacity_ = size_;
+	}
+
+	std::string intoHexString() const {
+		std::string ret;
+		ret.reserve(size_ * 2);
+		for (size_t i = 0; i < size_; i++) {
+			uint8_t val = data()[i];
+			ret.push_back(DAYLIGHT_HEX_DIGITS[val / 16]);
+			ret.push_back(DAYLIGHT_HEX_DIGITS[val % 16]);
+		}
+		return ret;
 	}
 
 	uint8_t& operator[](size_t idx) {

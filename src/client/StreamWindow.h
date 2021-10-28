@@ -6,6 +6,7 @@
 #include "common/ByteBuffer.h"
 #include "common/util.h"
 
+#include "client/HostList.h"
 #include "client/StreamViewerBase.h"
 #include "client/StreamClient.h"
 
@@ -28,12 +29,13 @@ class StreamWindow : public QWidget {
 	Q_OBJECT;
 
 public:
-	explicit StreamWindow(const char* addr);
+	explicit StreamWindow(HostListEntry host);
 	~StreamWindow();
 
 signals:
 	void showLater();
 	void closeLater();
+	void displayPinLater(int pin);
 
 private:
 	LoggerPtr log;
@@ -48,6 +50,8 @@ private:
 	std::mutex audioDataLock;
 	std::condition_variable audioDataCV;
 	std::deque<ByteBuffer> audioData;
+
+	void displayPin_(int pin);
 
 	void processStateChange_(StreamClient::State newState, std::string_view msg);
 	void processNewPacket_(const msg::Packet& pkt, uint8_t* extraData);

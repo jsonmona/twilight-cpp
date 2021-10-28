@@ -3,8 +3,11 @@
 
 
 #include "common/log.h"
+#include "common/CertStore.h"
 
 #include "common/net/NetworkSocket.h"
+
+#include "client/HostList.h"
 
 #include <packet.pb.h>
 
@@ -20,7 +23,8 @@ class StreamClient {
 public:
 	enum class State : int {
 		CONNECTED,
-		DISCONNECTED
+		DISCONNECTED,
+		AUTHENTICATING
 	};
 
 	StreamClient();
@@ -32,19 +36,25 @@ public:
 	template<typename Fn>
 	void setOnStateChange(Fn fn) { onStateChange = std::move(fn); }
 
-	void connect(const char* addr);
+	template<typename Fn>
+	void setOnDisplayPin(Fn fn) { onDisplayPin = std::move(fn); }
+
+	void connect(HostListEntry host);
 	void disconnect();
 
 private:
 	LoggerPtr log;
 
 	NetworkSocket conn;
+	Keypair keypair;
 
 	std::function<void(const msg::Packet&, uint8_t*)> onNextPacket;
 	std::function<void(State, std::string_view msg)> onStateChange;
+	std::function<void(int)> onDisplayPin;
 
 	std::thread recvThread;
 	void _runRecv();
+	bool doAuth_(HostListEntry host);
 };
 
 

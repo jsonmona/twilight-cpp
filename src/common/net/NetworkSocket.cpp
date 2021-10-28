@@ -6,6 +6,7 @@
 #include <mbedtls/error.h>
 
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
+#include <google/protobuf/io/coded_stream.h>
 
 #include <string>
 
@@ -25,68 +26,33 @@ TLS-DHE-RSA-WITH-AES-256-GCM-SHA384";
 
 
 template<typename Fn>
-class SocketInputWrapper : public google::protobuf::io::ZeroCopyInputStream {
+class SocketInputWrapper : public google::protobuf::io::CopyingInputStream {
 public:
 	SocketInputWrapper(mbedtls_ssl_context* ssl_, Fn onError_) :
-		ssl(ssl_), onError(onError_), offset(0), byteCount(0) {}
-	~SocketInputWrapper() = default;
+		ssl(ssl_), onError(onError_) {}
 
-	bool Next(const void** data, int* size) override {
-		if (buf.size() <= offset) {
-			buf.resize(16384);
-			int stat = mbedtls_ssl_read(ssl, buf.data(), buf.size());
-			if (stat < 0) {
-				onError(stat);
-				return false;
-			}
-			else
-				buf.resize(stat);
-			offset = 0;
+	virtual ~SocketInputWrapper() {
+	}
+
+	virtual int Read(void* buf, int size) override {
+		int stat = mbedtls_ssl_read(ssl, reinterpret_cast<uint8_t*>(buf), size);
+		if (stat < 0) {
+			onError(stat);
+			return -1;
 		}
-
-		*data = buf.data() + offset;
-		*size = buf.size() - offset;
-		offset = buf.size();
-		byteCount += *size;
-		return true;
-	}
-
-	void BackUp(int count) override {
-		offset -= count;
-		byteCount -= count;
-	}
-
-	bool Skip(int count) override {
-		int consumed = 0;
-		const void* data;
-		int size;
-		while (consumed < count) {
-			if (!Next(&data, &size))
-				return false;
-			consumed += size;
-		}
-		if (count < consumed)
-			BackUp(consumed - count);
-
-		return true;
-	}
-
-	int64_t ByteCount() const override {
-		return byteCount;
+		return stat;
 	}
 
 private:
 	mbedtls_ssl_context* ssl;
 	Fn onError;
-	size_t offset;
-	int64_t byteCount;
-	ByteBuffer buf;
 };
 
 
 NetworkSocket::NetworkSocket() :
 	log(createNamedLogger("NetworkSocket")),
-	connected(false)
+	connected(false),
+	remoteCert(nullptr), localCert(nullptr), localPrivkey(nullptr)
 {
 	mbedtls_net_init(&ctx);
 	mbedtls_ssl_init(&ssl);
@@ -119,7 +85,8 @@ NetworkSocket::NetworkSocket() :
 
 NetworkSocket::NetworkSocket(mbedtls_net_context initCtx, const mbedtls_ssl_config* ssl_conf) :
 	log(createNamedLogger("NetworkSocket")),
-	connected(true), ctx(initCtx)
+	connected(true), ctx(initCtx),
+	remoteCert(nullptr), localCert(nullptr), localPrivkey(nullptr)
 {
 	mbedtls_ssl_init(&ssl);
 	mbedtls_ssl_config_init(&conf);
@@ -160,7 +127,13 @@ NetworkSocket::~NetworkSocket() {
 bool NetworkSocket::connect(const char* addr, uint16_t port) {
 	int stat;
 	
-	//TODO: Insert own cert and trusted CA here
+	mbedtls_ssl_conf_authmode(&conf, MBEDTLS_SSL_VERIFY_OPTIONAL);
+
+	if(remoteCert != nullptr)
+		mbedtls_ssl_conf_ca_chain(&conf, remoteCert, nullptr);
+
+	if(localCert != nullptr)
+		mbedtls_ssl_conf_own_cert(&conf, localCert, localPrivkey);
 	
 	char portString[8] = {};
 	sprintf(portString, "%d", (int) port);
@@ -182,6 +155,15 @@ bool NetworkSocket::connect(const char* addr, uint16_t port) {
 	log->info("Connected to tls:{}:{}", addr, port);
 
 	return true;
+}
+
+bool NetworkSocket::verifyCert() {
+	uint32_t flags = mbedtls_ssl_get_verify_result(&ssl);
+	if (flags == 0)
+		return true;
+
+	log->info("SSL verification error: {:08x}", flags);
+	return false;
 }
 
 void NetworkSocket::disconnect() {
@@ -253,14 +235,14 @@ bool NetworkSocket::send(const msg::Packet& pkt, const uint8_t* extraData) {
 }
 
 bool NetworkSocket::recv(msg::Packet* pkt, ByteBuffer* extraData) {
+	std::lock_guard lock(recvLock);
+
 	if (!connected.load(std::memory_order_acquire))
 		return false;
 
-	std::lock_guard lock(recvLock);
-
-	if (inputStream == nullptr) {
-		google::protobuf::io::ZeroCopyInputStream* zin = new SocketInputWrapper(&ssl, [this](int errnum) { reportDisconnected(errnum); });
-		zeroCopyInputStream = std::unique_ptr<google::protobuf::io::ZeroCopyInputStream>(zin);
+	if (!inputStream) {
+		auto* siw = new SocketInputWrapper(&ssl, [this](int errnum) { reportDisconnected(errnum); });
+		zeroCopyInputStream = std::make_unique<google::protobuf::io::CopyingInputStreamAdaptor>(siw);
 		inputStream = std::make_unique<google::protobuf::io::CodedInputStream>(zeroCopyInputStream.get());
 	}
 
@@ -276,14 +258,61 @@ bool NetworkSocket::recv(msg::Packet* pkt, ByteBuffer* extraData) {
 
 	int extraDataLen = pkt->extra_data_len();
 
-	if (extraDataLen > 0 && extraData != nullptr) {
-		extraData->resize(extraDataLen);
+	if (extraDataLen > 0) {
+		if (extraData != nullptr) {
+			extraData->resize(extraDataLen);
 
-		if (!inputStream->ReadRaw(extraData->data(), extraDataLen))
-			return false;
+			if (!inputStream->ReadRaw(extraData->data(), extraDataLen))
+				return false;
+		}
+		else {
+			inputStream->Skip(extraDataLen);
+		}
 	}
 
 	return true;
+}
+
+ByteBuffer NetworkSocket::getRemotePubkey() {
+	ByteBuffer arr(8192);
+	int ret;
+
+	/* write pubkey */ {
+		std::scoped_lock lock(sendLock, recvLock);
+		const mbedtls_x509_crt* cert = mbedtls_ssl_get_peer_cert(&ssl);
+		if (cert == nullptr)
+			return ByteBuffer(0);
+
+		mbedtls_pk_context* pk = const_cast<mbedtls_pk_context*>(&cert->pk);
+		ret = mbedtls_pk_write_pubkey_der(pk, arr.data(), arr.size());
+	}
+
+	if (ret > 0) {
+		arr.shiftTowardBegin(arr.size() - ret);
+		arr.resize(ret);
+	}
+	else {
+		log->warn("Failed to serialize remote pubkey: {}", interpretMbedtlsError(ret));
+		arr.resize(0);
+	}
+
+	return arr;
+}
+
+ByteBuffer NetworkSocket::getRemoteCert() {
+	ByteBuffer arr(8192);
+
+	/* write pubkey */ {
+		std::scoped_lock lock(sendLock, recvLock);
+		const mbedtls_x509_crt* cert = mbedtls_ssl_get_peer_cert(&ssl);
+		if (cert == nullptr)
+			return ByteBuffer(0);
+
+		arr.resize(cert->raw.len);
+		memcpy(arr.data(), cert->raw.p, cert->raw.len);
+	}
+
+	return arr;
 }
 
 void NetworkSocket::reportDisconnected(int errnum) {
@@ -291,11 +320,9 @@ void NetworkSocket::reportDisconnected(int errnum) {
 	bool prev = connected.exchange(false, std::memory_order_acq_rel);
 
 	if (prev) {
-		inputStream.reset();
-		zeroCopyInputStream.reset();
-
 		mbedtls_net_free(&ctx);
 		mbedtls_strerror(errnum, buf, 2048);
-		onDisconnected(buf);
+		if(onDisconnected)
+			onDisconnected(buf);
 	}
 }

@@ -46,7 +46,6 @@ private:
 	QPointer<QWidget> streamWindow;
 
 	HostList hostList;
-	bool hostListChanged;
 
 	void reloadItems_();
 };

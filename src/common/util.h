@@ -13,6 +13,9 @@
 std::optional<ByteBuffer> loadEntireFile(const char* path);
 
 
+bool writeByteBuffer(const char* filename, const ByteBuffer& data);
+
+
 template<typename Fn>
 void stringSplit(std::string_view str, char ch, Fn callback) {
 	size_t begin = 0;

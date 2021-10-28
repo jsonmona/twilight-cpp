@@ -19,6 +19,14 @@
 
 
 class StreamServer {
+public:
+	StreamServer();
+	~StreamServer();
+
+	void start();
+	void stop();
+
+private:
 	LoggerPtr log;
 
 	NetworkServer server;
@@ -31,16 +39,8 @@ class StreamServer {
 
 	std::chrono::steady_clock::time_point lastStatReport;
 
-	void _runListen();
-
+	bool doAuth_();
 	void _processOutput(DesktopFrame<ByteBuffer>&& cap);
-
-public:
-	StreamServer();
-	~StreamServer();
-
-	void start();
-	void stop();
 };
 
 

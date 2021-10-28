@@ -12,8 +12,7 @@
 
 
 HubWindow::HubWindow() : QWidget(),
-	log(createNamedLogger("HubWindow")),
-	hostListChanged(false)
+	log(createNamedLogger("HubWindow"))
 {
 	ui.setupUi(this);
 
@@ -33,8 +32,7 @@ HubWindow::~HubWindow() {
 	// Won't work
 	//qApp->setQuitOnLastWindowClosed(false);
 
-	if (hostListChanged)
-		hostList.saveToFile("hosts.toml");
+	hostList.saveToFile("hosts.toml");
 
 	qApp->quit();
 }
@@ -92,7 +90,6 @@ void HubWindow::on_btnAddHost_clicked(bool checked) {
 
 		if (!entry->addr.empty()) {
 			hostList.hosts.push_back(std::move(entry));
-			hostListChanged = true;
 			reloadItems_();
 		}
 	}
@@ -101,7 +98,7 @@ void HubWindow::on_btnAddHost_clicked(bool checked) {
 void HubWindow::connectToEntry(HostListEntry entry) {
 	//TODO: Allow use of URI (so that protocol and port can be specified)
 	
-	streamWindow = new StreamWindow(entry->addr[0].c_str());
+	streamWindow = new StreamWindow(entry);
 
 	QRect screenSize = qApp->primaryScreen()->geometry();
 

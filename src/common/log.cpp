@@ -7,6 +7,7 @@
 #include <spdlog/sinks/base_sink.h>
 #include <spdlog/sinks/msvc_sink.h>
 #include <spdlog/sinks/wincolor_sink.h>
+#include <spdlog/sinks/basic_file_sink.h>
 
 #include <mbedtls/error.h>
 

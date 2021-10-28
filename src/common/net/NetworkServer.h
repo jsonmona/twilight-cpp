@@ -28,6 +28,8 @@ public:
 	void startListen(uint16_t port);
 	void stopListen();
 
+	CertStore& getCert() { return certStore; }
+
 	template<class Fn>
 	void setOnNewConnection(Fn fn) { onNewConnection = std::move(fn); }
 
@@ -37,13 +39,14 @@ private:
 	std::atomic<bool> flagListen;
 	std::thread listenThread;
 
-	CertStore certStore;
 	std::vector<int> allowedCiphersuites;
 
 	mbedtls_net_context ctx;
 	mbedtls_ssl_config ssl;
 	mbedtls_entropy_context entropy;
 	mbedtls_ctr_drbg_context ctr_drbg;
+
+	CertStore certStore;
 
 	std::function<void(std::unique_ptr<NetworkSocket>&&)> onNewConnection;
 };
