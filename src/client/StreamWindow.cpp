@@ -24,7 +24,13 @@ StreamWindow::StreamWindow(HostListEntry host) : QWidget(),
 
 	sc.setOnNextPacket([this](const msg::Packet& pkt, uint8_t* extraData) { processNewPacket_(pkt, extraData); });
 	sc.setOnStateChange([this](StreamClient::State newState, std::string_view msg) { processStateChange_(newState, msg); });
-	sc.setOnDisplayPin([this](int pin) { displayPinLater(pin); });
+	sc.setOnDisplayPin([this](int pin) {
+		std::unique_lock lock(pinBoxLock);
+		flagPinBoxClosed.store(false, std::memory_order_relaxed);
+		displayPinLater(pin);
+		while (!flagPinBoxClosed.load(std::memory_order_relaxed))
+			pinBoxClosedCV.wait(lock);
+	});
 	sc.connect(host);
 
 	boxLayout.addWidget(viewer);
@@ -48,12 +54,17 @@ void StreamWindow::displayPin_(int pin) {
 	pinText.append(' ');
 	pinText.append(QStringLiteral("%1").arg(pin % 10000, 4, 10, QLatin1Char('0')));
 
+	//FIXME: Local event loop
 	QMessageBox msg;
 	msg.setWindowTitle("Authentication required");
 	msg.setText(QStringLiteral("Enter following pin in the server: ") + pinText);
 	msg.setIcon(QMessageBox::Icon::Information);
 	msg.setStandardButtons(QMessageBox::StandardButton::Ok);
 	msg.exec();
+
+	std::lock_guard lock(pinBoxLock);
+	flagPinBoxClosed.store(true, std::memory_order_relaxed);
+	pinBoxClosedCV.notify_all();
 }
 
 void StreamWindow::processStateChange_(StreamClient::State newState, std::string_view msg) {

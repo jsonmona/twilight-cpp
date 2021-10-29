@@ -37,6 +37,9 @@ signals:
 	void closeLater();
 	void displayPinLater(int pin);
 
+private slots:
+	void displayPin_(int pin);
+
 private:
 	LoggerPtr log;
 	StreamClient sc;
@@ -45,13 +48,15 @@ private:
 	StreamViewerBase* viewer;
 
 	std::atomic<bool> flagRunAudio;
+	std::atomic<bool> flagPinBoxClosed;
+
+	std::mutex pinBoxLock;
+	std::condition_variable pinBoxClosedCV;
 
 	std::thread audioThread;
 	std::mutex audioDataLock;
 	std::condition_variable audioDataCV;
 	std::deque<ByteBuffer> audioData;
-
-	void displayPin_(int pin);
 
 	void processStateChange_(StreamClient::State newState, std::string_view msg);
 	void processNewPacket_(const msg::Packet& pkt, uint8_t* extraData);
