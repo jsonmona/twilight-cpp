@@ -10,8 +10,6 @@
 #endif
 
 extern "C" {
-#include <libavutil/avutil.h>
-#include <libavcodec/avcodec.h>
 #include <libswresample/swresample.h>
 #include <libswscale/swscale.h>
 

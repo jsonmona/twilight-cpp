@@ -1,6 +1,7 @@
 # Supress warning for externals
 add_definitions("/w")
 
+
 # cubeb
 
 add_subdirectory(cubeb EXCLUDE_FROM_ALL)
@@ -12,7 +13,11 @@ if(WIN32)
     # Get a prebuilt package from somewhere and name it ffmpeg-windows-prebuilt
     # I'm using one from https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-full-shared.7z
     # Directory structure should look like: bin/*.dll, include/, lib/*.lib
-    set(FFMPEG_LIBS avdevice avformat avcodec swresample swscale avutil)
+
+    # This project depends only on swresample, swscale, avutil
+    # As far as I know, this should avoid any patent-related problem
+
+    set(FFMPEG_LIBS swresample swscale avutil)
     set(FFMPEG_LIBS ${FFMPEG_LIBS} PARENT_SCOPE)
     
     foreach(LIB IN LISTS FFMPEG_LIBS)
@@ -46,6 +51,14 @@ set(ENABLE_PROGRAMS OFF CACHE BOOL "mbedtls enable programs" FORCE)
 set(MBEDTLS_FATAL_WARNINGS OFF CACHE BOOL "mbedtls treat warning as error" FORCE)
 set(ENABLE_TESTING OFF CACHE BOOL "mbedtls build tests" FORCE)
 add_subdirectory(mbedtls EXCLUDE_FROM_ALL)
+
+
+# OpenH264
+
+add_library(openh264 INTERFACE)
+set_target_properties(openh264 PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/
+)
 
 
 # opus

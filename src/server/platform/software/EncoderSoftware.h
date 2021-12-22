@@ -8,31 +8,13 @@
 #include "common/DesktopFrame.h"
 #include "common/StatisticMixer.h"
 
+#include "common/platform/software/OpenH264Loader.h"
 #include "common/platform/software/TextureSoftware.h"
 
 #include <deque>
 
 
 class EncoderSoftware {
-	LoggerPtr log;
-
-	std::function<void(DesktopFrame<ByteBuffer>&&)> onDataAvailable;
-
-	int width, height;
-	AVCodec* encoder = nullptr;
-	AVCodecContext* encoderCtx = nullptr;
-
-	std::atomic<bool> flagRun;
-
-	std::thread runThread;
-	std::mutex dataLock;
-	std::condition_variable dataCV;
-	std::deque<DesktopFrame<TextureSoftware>> dataQueue;
-
-	StatisticMixer statMixer;
-
-	void _run();
-
 public:
 	EncoderSoftware(int _width, int _height);
 	~EncoderSoftware();
@@ -46,6 +28,25 @@ public:
 	StatisticMixer::Stat calcEncoderStat() { return statMixer.calcStat(); }
 
 	void pushData(DesktopFrame<TextureSoftware>&& newData);
+
+private:
+	LoggerPtr log;
+
+	std::function<void(DesktopFrame<ByteBuffer>&&)> onDataAvailable;
+
+	std::shared_ptr<OpenH264Loader> loader;
+	int width, height;
+
+	std::atomic<bool> flagRun;
+
+	std::thread runThread;
+	std::mutex dataLock;
+	std::condition_variable dataCV;
+	std::deque<DesktopFrame<TextureSoftware>> dataQueue;
+
+	StatisticMixer statMixer;
+
+	void run_();
 };
 
 

@@ -24,6 +24,8 @@ set(COMMON_SRC
     ./common/net/NetworkSocket.h
     ./common/net/NetworkSocket.cpp
 
+    ./common/platform/software/OpenH264Loader.h
+    ./common/platform/software/OpenH264Loader.cpp
     ./common/platform/software/ScaleSoftware.h
     ./common/platform/software/ScaleSoftware.cpp
     ./common/platform/software/TextureSoftware.h
@@ -36,6 +38,8 @@ set(COMMON_WINDOWS_SRC
 
     ./common/platform/windows/DeviceManagerD3D.h
     ./common/platform/windows/DeviceManagerD3D.cpp
+    ./common/platform/windows/OpenH264LoaderWin32.h
+    ./common/platform/windows/OpenH264LoaderWin32.cpp
 )
 
 set(CLIENT_SRC
@@ -126,7 +130,7 @@ add_library(common STATIC ${COMMON_SRC} ${COMMON_WINDOWS_SRC})
 target_include_directories(common PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(common PUBLIC
     git-info
-    mbedtls opus spdlog::spdlog toml11
+    mbedtls openh264 opus spdlog::spdlog toml11
     ${FFMPEG_LIBS}
     "winmm.lib"
 )

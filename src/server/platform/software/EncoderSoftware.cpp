@@ -16,166 +16,132 @@ EncoderSoftware::EncoderSoftware(int _width, int _height) :
 }
 
 EncoderSoftware::~EncoderSoftware() {
+	if(runThread.joinable())
+		runThread.join();
 }
 
 void EncoderSoftware::start() {
-	int stat;
+	check_quit(flagRun.load(std::memory_order_acquire), log, "Encoder is already started");
+	if (runThread.joinable())
+		runThread.join();
 
-	encoder = avcodec_find_encoder_by_name("libx264");
-	check_quit(encoder == nullptr, log, "Failed to find libx264");
-
-	encoderCtx = avcodec_alloc_context3(encoder);
-	check_quit(encoderCtx == nullptr, log, "Failed to allocate codec context");
-
-	encoderCtx->bit_rate = 8 * 1000 * 1000;
-	encoderCtx->width = width;
-	encoderCtx->height = height;
-	encoderCtx->time_base = AVRational { 60000, 1001 };
-	encoderCtx->gop_size = 60;
-	encoderCtx->pix_fmt = AV_PIX_FMT_YUV420P;
-	encoderCtx->thread_count = 0;
-	encoderCtx->thread_type = FF_THREAD_SLICE;
-
-	AVDictionary* opts = nullptr;
-	av_dict_set(&opts, "preset", "ultrafast", 0);
-	av_dict_set(&opts, "tune", "zerolatency", 0);
-	av_dict_set(&opts, "x264-params", "keyint=infinite", 0);
-
-	stat = avcodec_open2(encoderCtx, encoder, &opts);
-	check_quit(stat < 0, log, "Failed to open codec");
-
-	if (av_dict_count(opts) > 0) {
-		std::string buf;
-		AVDictionaryEntry* entry = av_dict_get(opts, "", nullptr, AV_DICT_IGNORE_SUFFIX);
-		while (entry != nullptr) {
-			buf += entry->key;
-			buf += "=";
-			buf += entry->value;
-			buf += " ";
-			entry = av_dict_get(opts, "", entry, AV_DICT_IGNORE_SUFFIX);
-		}
-		log->warn("libx264 ignored some options: {}", buf);
-	}
-	av_dict_free(&opts);
-
-	flagRun.store(true, std::memory_order_release);
-	runThread = std::thread([this]() { _run(); });
+	flagRun.store(true, std::memory_order_relaxed);
+	runThread = std::thread([this]() { run_(); });
 }
 
 void EncoderSoftware::stop() {
 	flagRun.store(false, std::memory_order_release);
-	runThread.join();
-
-	avcodec_free_context(&encoderCtx);
 }
 
-void EncoderSoftware::_run() {
-	int stat;
-	AVPacket* pkt = av_packet_alloc();
-	AVFrame* frame = av_frame_alloc();
+void EncoderSoftware::run_() {
+	int err;
 
-	auto timeBegin = std::chrono::steady_clock::now();
+	if (loader == nullptr) {
+		loader = OpenH264Loader::getInstance();
+		loader->prepare();
+		check_quit(!loader->isReady(), log, "Not ready");
+	}
 
-	struct SideData {
-		long long pts;
-		std::chrono::steady_clock::time_point startTime;
-	};
+	ISVCEncoder* encoder = nullptr;
+	err = loader->CreateSVCEncoder(&encoder);
+	check_quit(err != 0, log, "Failed to create encoder instance!");
 
-	long long cnt = 0;
-	DesktopFrame<SideData> prev;
-	std::deque<DesktopFrame<SideData>> extraData;
-	bool lastCursorVisible = false;
-	int lastCursorX, lastCursorY;
+	//TODO: Configure encoder not to skip frame
+	SEncParamBase paramBase = {};
+	paramBase.iUsageType = SCREEN_CONTENT_REAL_TIME;
+	paramBase.fMaxFrameRate = 60;  //TODO: Determine FPS on runtime
+	paramBase.iPicWidth = width;
+	paramBase.iPicHeight = height;
+	paramBase.iTargetBitrate = 7 * 1000 * 1000;
+	paramBase.iRCMode = RC_BITRATE_MODE;
+	
+	err = encoder->Initialize(&paramBase);
+	check_quit(err != 0, log, "Failed to initialize encoder");
+
+	int videoFormat = videoFormatI420;
+	err = encoder->SetOption(ENCODER_OPTION_DATAFORMAT, &videoFormat);
+	check_quit(err != 0, log, "Failed to set dataformat to {}", videoFormat);
 
 	while (true) {
 		if (!flagRun.load(std::memory_order_acquire))
-			avcodec_send_frame(encoderCtx, nullptr);
+			break;
 
-		stat = avcodec_receive_packet(encoderCtx, pkt);
-		if (stat >= 0) {
-			int idx = -1;
-			for (int i = 0; i < extraData.size(); i++) {
-				if (extraData[i].desktop->pts == pkt->pts) {
-					idx = i;
-					break;
-				}
+		DesktopFrame<TextureSoftware> cap;
+
+		/* lock */ {
+			std::unique_lock lock(dataLock);
+			while (dataQueue.empty() && flagRun.load(std::memory_order_relaxed))
+				dataCV.wait(lock);
+
+			if (!flagRun.load(std::memory_order_relaxed))
+				continue;
+
+			if (dataQueue.size() > 15) {
+				log->warn("High number of pending textures ({}) for encoder. Is encoder overloaded?", dataQueue.size());
+				//TODO: notify peer of dropping frames
+				dataQueue.erase(++dataQueue.begin(), dataQueue.end());
 			}
-			check_quit(idx == -1, log, "Failed to find matching extra data for pts");
 
-			DesktopFrame<SideData> now = std::move(extraData[idx]);
-			if (idx == 0)
-				extraData.pop_front();
-			else
-				extraData.erase(extraData.begin() + idx);
+			cap = std::move(dataQueue.front());
+			dataQueue.pop_front();
+		}
+
+		auto startTime = std::chrono::steady_clock::now();
+
+		SFrameBSInfo info = {};
+		SSourcePicture pic = {};
+		pic.iPicWidth = cap.desktop->width;
+		pic.iPicHeight = cap.desktop->height;
+		pic.iColorFormat = videoFormatI420;
+		pic.iStride[0] = cap.desktop->linesize[0];
+		pic.iStride[1] = cap.desktop->linesize[1];
+		pic.iStride[2] = cap.desktop->linesize[2];
+		pic.pData[0] = cap.desktop->data[0];
+		pic.pData[1] = cap.desktop->data[1];
+		pic.pData[2] = cap.desktop->data[2];
+
+		check_quit(pic.pData[1] != pic.pData[0] + (width * height), log, "Requirement #1 unsactifactory");
+		check_quit(pic.pData[2] != pic.pData[1] + (width * height / 4), log, "Requirement #2 unsactifactory");
+
+		err = encoder->EncodeFrame(&pic, &info);
+		check_quit(err != 0, log, "Failed to encode a frame");
+
+		if (info.eFrameType != videoFrameTypeSkip) {
+			ByteBuffer combined;
+			combined.reserve(info.iFrameSizeInBytes);
+
+			for (int i = 0; i < info.iLayerNum; i++) {
+				auto& layerInfo = info.sLayerInfo[i];
+
+				int layerSize = 0;
+				for (int j = 0; j < layerInfo.iNalCount; j++)
+					layerSize += layerInfo.pNalLengthInByte[j];
+
+				combined.append(layerInfo.pBsBuf, layerSize);
+			}
 
 			DesktopFrame<ByteBuffer> enc;
-			enc.desktop = std::make_shared<ByteBuffer>(pkt->buf->size);
-			enc.cursorPos = std::move(now.cursorPos);
-			enc.cursorShape = std::move(now.cursorShape);
-
-			enc.desktop->write(0, pkt->buf->data, pkt->buf->size);
-
-			auto timeDiff = std::chrono::steady_clock::now() - now.desktop->startTime;
-			statMixer.pushValue(std::chrono::duration_cast<std::chrono::duration<float>>(timeDiff).count());
+			enc.desktop = std::make_shared<ByteBuffer>(std::move(combined));
+			enc.cursorPos = std::move(cap.cursorPos);
+			enc.cursorShape = std::move(cap.cursorShape);
 
 			onDataAvailable(std::move(enc));
 		}
-		else if (stat == AVERROR(EAGAIN)) {
-			av_frame_unref(frame);
-
-			DesktopFrame<TextureSoftware> cap;
-
-			/* lock */ {
-				std::unique_lock lock(dataLock);
-				while (dataQueue.empty() && flagRun.load(std::memory_order_relaxed))
-					dataCV.wait(lock);
-
-				if (!flagRun.load(std::memory_order_relaxed))
-					continue;
-
-				if (dataQueue.size() > 50)
-					log->warn("High number of pending textures for encoder ({}). Is encoder overloaded?", dataQueue.size());
-
-				cap = std::move(dataQueue.front());
-				dataQueue.pop_front();
-			}
-
-			check_quit(cap.desktop == nullptr, log, "Texture should've been duplicated by now");
-
-			// Data gets freed when cap is deleted.
-			// This is safe because avcodec_send_frame is suppossed to copy data.
-			// May be improved to use reference counted buffer
-			std::copy(cap.desktop->data, cap.desktop->data + 4, frame->data);
-			std::copy(cap.desktop->linesize, cap.desktop->linesize + 4, frame->linesize);
-			frame->format = AV_PIX_FMT_YUV420P;
-			frame->sample_aspect_ratio = { 1, 1 };
-			frame->height = height;
-			frame->width = width;
-			frame->pts = cnt++;
-
-			DesktopFrame<SideData> now;
-			now.desktop = std::make_shared<SideData>(SideData{ frame->pts, std::chrono::steady_clock::now() });
-			now.cursorPos = std::move(cap.cursorPos);
-			now.cursorShape = std::move(cap.cursorShape);
-			extraData.push_back(now);
-			if (now.cursorPos == nullptr)
-				now.cursorPos = prev.cursorPos;
-
-			prev = std::move(now);
-
-			stat = avcodec_send_frame(encoderCtx, frame);
-			if (stat == AVERROR_EOF)
-				continue;
-			check_quit(stat < 0, log, "Unknown error from avcodec_send_frame ({})", stat);
+		else {
+			//FIXME: What happens to sidedata when the frame is skipped?
+			log->info("Encoder decided to skip a frame");
 		}
-		else if (stat == AVERROR_EOF)
-			break;
-		else
-			error_quit(log, "Unknown error from avcodec_receive_packet ({})", stat);
+
+		auto endTime = std::chrono::steady_clock::now();
+		auto timeDiff = endTime - startTime;
+		statMixer.pushValue(std::chrono::duration_cast<std::chrono::duration<float>>(timeDiff).count());
 	}
 
-	av_packet_free(&pkt);
-	av_frame_free(&frame);
+	err = encoder->Uninitialize();
+	if (err != 0)
+		log->warn("Failed to uninitialize encoder");
+
+	loader->DestroySVCEncoder(encoder);
 }
 
 void EncoderSoftware::pushData(DesktopFrame<TextureSoftware>&& newData) {
