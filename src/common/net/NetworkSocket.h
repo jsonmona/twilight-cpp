@@ -1,80 +1,82 @@
 #ifndef COMMON_NETWORK_SOCKET_H_
 #define COMMON_NETWORK_SOCKET_H_
 
-
-#include "common/log.h"
 #include "common/ByteBuffer.h"
+#include "common/log.h"
 
+#include <mbedtls/ctr_drbg.h>
+#include <mbedtls/entropy.h>
 #include <mbedtls/net_sockets.h>
 #include <mbedtls/ssl.h>
-#include <mbedtls/entropy.h>
-#include <mbedtls/ctr_drbg.h>
 
 #include <packet.pb.h>
 
 #include <atomic>
-#include <thread>
-#include <string>
 #include <functional>
-
+#include <string>
+#include <thread>
 
 class NetworkSocket {
 public:
-	NetworkSocket();
-	NetworkSocket(mbedtls_net_context initCtx, const mbedtls_ssl_config* ssl_conf);
-	NetworkSocket(const NetworkSocket& copy) = delete;
-	NetworkSocket(NetworkSocket&& move) = delete;
+    NetworkSocket();
+    NetworkSocket(mbedtls_net_context initCtx, const mbedtls_ssl_config *ssl_conf);
+    NetworkSocket(const NetworkSocket &copy) = delete;
+    NetworkSocket(NetworkSocket &&move) = delete;
 
-	~NetworkSocket();
+    ~NetworkSocket();
 
-	bool connect(const char* addr, uint16_t port);
-	bool isConnected() const { return connected.load(std::memory_order_relaxed); }
+    bool connect(const char *addr, uint16_t port);
+    bool isConnected() const { return connected.load(std::memory_order_relaxed); }
 
-	bool verifyCert();
+    bool verifyCert();
 
-	void disconnect();
+    void disconnect();
 
-	template<class Fn>
-	void setOnDisconnected(Fn fn) { onDisconnected = std::move(fn); }
+    template <class Fn>
+    void setOnDisconnected(Fn fn) {
+        onDisconnected = std::move(fn);
+    }
 
-	bool send(const msg::Packet& pkt, const uint8_t* extraData);
-	bool send(const msg::Packet& pkt, const ByteBuffer& extraData) { return send(pkt, extraData.data()); }
+    bool send(const msg::Packet &pkt, const uint8_t *extraData);
+    bool send(const msg::Packet &pkt, const ByteBuffer &extraData) { return send(pkt, extraData.data()); }
 
-	bool recv(msg::Packet* pkt, ByteBuffer* extraData);
+    bool recv(msg::Packet *pkt, ByteBuffer *extraData);
 
-	void setRemoteCert(mbedtls_x509_crt* cert) { remoteCert = cert; }
-	void setLocalCert(mbedtls_x509_crt* cert, mbedtls_pk_context* privkey) { localCert = cert; localPrivkey = privkey; }
+    void setRemoteCert(mbedtls_x509_crt *cert) { remoteCert = cert; }
+    void setLocalCert(mbedtls_x509_crt *cert, mbedtls_pk_context *privkey) {
+        localCert = cert;
+        localPrivkey = privkey;
+    }
 
-	ByteBuffer getRemotePubkey();  // in DER format
-	ByteBuffer getRemoteCert();
+    ByteBuffer getRemotePubkey();  // in DER format
+    ByteBuffer getRemoteCert();
 
 private:
-	LoggerPtr log;
+    LoggerPtr log;
 
-	mbedtls_net_context ctx;
-	mbedtls_ssl_context ssl;
-	mbedtls_ssl_config conf;
-	mbedtls_entropy_context entropy;
-	mbedtls_ctr_drbg_context ctr_drbg;
+    mbedtls_net_context ctx;
+    mbedtls_ssl_context ssl;
+    mbedtls_ssl_config conf;
+    mbedtls_entropy_context entropy;
+    mbedtls_ctr_drbg_context ctr_drbg;
 
-	mbedtls_x509_crt* remoteCert;
-	mbedtls_x509_crt* localCert;
-	mbedtls_pk_context* localPrivkey;
+    mbedtls_x509_crt *remoteCert;
+    mbedtls_x509_crt *localCert;
+    mbedtls_pk_context *localPrivkey;
 
-	ByteBuffer sendBuffer;
-	std::unique_ptr<google::protobuf::io::ZeroCopyInputStream> zeroCopyInputStream;
-	std::unique_ptr<google::protobuf::io::CodedInputStream> inputStream;
-	
-	std::vector<int> allowedCiphersuites;
+    ByteBuffer sendBuffer;
+    std::unique_ptr<google::protobuf::io::ZeroCopyInputStream> zeroCopyInputStream;
+    std::unique_ptr<google::protobuf::io::CodedInputStream> inputStream;
 
-	std::atomic<bool> connected;
-	std::mutex sendLock;
-	std::mutex recvLock;
+    std::vector<int> allowedCiphersuites;
 
-	std::function<void(std::string_view msg)> onDisconnected;
+    std::atomic<bool> connected;
+    std::mutex sendLock;
+    std::mutex recvLock;
 
-	void reportDisconnected(int errnum);
+    std::function<void(std::string_view msg)> onDisconnected;
+
+    void reportDisconnected(int errnum);
 };
-
 
 #endif

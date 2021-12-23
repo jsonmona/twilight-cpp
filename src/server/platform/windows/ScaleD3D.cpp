@@ -1,24 +1,17 @@
 #include "ScaleD3D.h"
 
-#include "common/util.h"
 #include "common/platform/windows/ComWrapper.h"
+#include "common/util.h"
 
 #include <cassert>
-#include <vector>
-#include <string>
 #include <limits>
+#include <string>
+#include <vector>
 
-
-static const float quadVertex[] = {
-    -1, -1,
-    -1,  1,
-     1, -1,
-     1,  1
-};
+static const float quadVertex[] = {-1, -1, -1, 1, 1, -1, 1, 1};
 static const UINT quadVertexStride = 2 * sizeof(quadVertex[0]);
 static const UINT quadVertexOffset = 0;
 static const UINT quadVertexCount = 4;
-
 
 class ScaleD3D_AYUV : public ScaleD3D {
     D3D11RenderTargetView rtOutput;
@@ -28,7 +21,8 @@ protected:
     void _convert() override;
 
 public:
-    ScaleD3D_AYUV(int w, int h, bool copyInput) : ScaleD3D(createNamedLogger("ScaleD3D_AYUV"), w, h, ScaleType::AYUV, copyInput) {}
+    ScaleD3D_AYUV(int w, int h, bool copyInput)
+        : ScaleD3D(createNamedLogger("ScaleD3D_AYUV"), w, h, ScaleType::AYUV, copyInput) {}
     void init(const D3D11Device& device, const D3D11DeviceContext& context) override;
 };
 
@@ -42,10 +36,10 @@ protected:
     void _convert() override;
 
 public:
-    ScaleD3D_NV12(int w, int h, bool copyInput) : ScaleD3D(createNamedLogger("ScaleD3D_NV12"), w, h, ScaleType::NV12, copyInput) {}
+    ScaleD3D_NV12(int w, int h, bool copyInput)
+        : ScaleD3D(createNamedLogger("ScaleD3D_NV12"), w, h, ScaleType::NV12, copyInput) {}
     void init(const D3D11Device& device, const D3D11DeviceContext& context) override;
 };
-
 
 std::unique_ptr<ScaleD3D> ScaleD3D::createInstance(int w, int h, ScaleType type, bool copyInput) {
     std::unique_ptr<ScaleD3D> ret;
@@ -60,16 +54,16 @@ std::unique_ptr<ScaleD3D> ScaleD3D::createInstance(int w, int h, ScaleType type,
     return ret;
 }
 
+ScaleD3D::ScaleD3D(LoggerPtr logger, int w, int h, ScaleType type, bool _copyInput)
+    : log(logger),
+      outType(type),
+      outWidth(w),
+      outHeight(h),
+      inFormat(DXGI_FORMAT_UNKNOWN),
+      outFormat(DXGI_FORMAT_UNKNOWN),
+      copyInput(_copyInput) {}
 
-ScaleD3D::ScaleD3D(LoggerPtr logger, int w, int h, ScaleType type, bool _copyInput) :
-    log(logger), outType(type), outWidth(w), outHeight(h),
-    inFormat(DXGI_FORMAT_UNKNOWN), outFormat(DXGI_FORMAT_UNKNOWN),
-    copyInput(_copyInput)
-{
-}
-
-ScaleD3D::~ScaleD3D() {
-}
+ScaleD3D::~ScaleD3D() {}
 
 void ScaleD3D::init(const D3D11Device& device, const D3D11DeviceContext& context) {
     HRESULT hr;
@@ -108,8 +102,7 @@ void ScaleD3D::init(const D3D11Device& device, const D3D11DeviceContext& context
     if (outWidth <= 720) {
         Kb = 0.114f;
         Kr = 0.229f;
-    }
-    else {
+    } else {
         Kb = 0.0722f;
         Kr = 0.2126f;
     }
@@ -121,12 +114,22 @@ void ScaleD3D::init(const D3D11Device& device, const D3D11DeviceContext& context
     Kg = 1 - Kr - Kb;
 
     // RGB -> YPbPr matrix transposed
-    float mat[4][4] = {
-        Kr, -0.5f * Kr / (1 - Kb), 0.5f, 0,
-        Kg, -0.5f * Kg / (1 - Kb), -0.5f * Kg / (1 - Kr), 0,
-        Kb, 0.5f, -0.5f * Kb / (1 - Kr), 0,
-        0, 0, 0, 0
-    };
+    float mat[4][4] = {Kr,
+                       -0.5f * Kr / (1 - Kb),
+                       0.5f,
+                       0,
+                       Kg,
+                       -0.5f * Kg / (1 - Kb),
+                       -0.5f * Kg / (1 - Kr),
+                       0,
+                       Kb,
+                       0.5f,
+                       -0.5f * Kb / (1 - Kr),
+                       0,
+                       0,
+                       0,
+                       0,
+                       0};
 
     D3D11_BUFFER_DESC cbufferDesc = {};
     cbufferDesc.ByteWidth = sizeof(mat);
@@ -148,14 +151,13 @@ void ScaleD3D::init(const D3D11Device& device, const D3D11DeviceContext& context
     samplerDesc.MaxLOD = FLT_MAX;
     device->CreateSamplerState(&samplerDesc, clampSampler.data());
 
-    //FIXME: Unchecked std::optional unwrapping
+    // FIXME: Unchecked std::optional unwrapping
     ByteBuffer vertexBlob = loadEntireFile("rgb2yuv-vs_main.fxc").value();
     hr = device->CreateVertexShader(vertexBlob.data(), vertexBlob.size(), nullptr, vertexShader.data());
     check_quit(FAILED(hr), log, "Failed to create vertex shader");
 
     D3D11_INPUT_ELEMENT_DESC inputLayoutDesc[] = {
-        {"POS", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0}
-    };
+        {"POS", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0}};
     device->CreateInputLayout(inputLayoutDesc, 1, vertexBlob.data(), vertexBlob.size(), inputLayout.data());
 }
 
@@ -209,8 +211,7 @@ void ScaleD3D::pushInput(const D3D11Texture2D& tex) {
 
     if (copyInput) {
         context->CopyResource(inputTex.ptr(), tex.ptr());
-    }
-    else {
+    } else {
         inputTex = tex;
         srInput.release();
     }
@@ -220,7 +221,7 @@ void ScaleD3D::pushInput(const D3D11Texture2D& tex) {
 
 D3D11Texture2D ScaleD3D::popOutput() {
     if (!copyInput && srInput.isInvalid()) {
-        //TODO: Deduplicate code below
+        // TODO: Deduplicate code below
         D3D11_SHADER_RESOURCE_VIEW_DESC srDesc = {};
         srDesc.Format = inFormat;
         srDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
@@ -248,7 +249,6 @@ D3D11Texture2D ScaleD3D::popOutput() {
     return tex;
 }
 
-
 void ScaleD3D_AYUV::init(const D3D11Device& device, const D3D11DeviceContext& context) {
     outFormat = DXGI_FORMAT_AYUV;
     ScaleD3D::init(device, context);
@@ -256,7 +256,7 @@ void ScaleD3D_AYUV::init(const D3D11Device& device, const D3D11DeviceContext& co
     pixelShader.release();
     rtOutput.release();
 
-    //FIXME: Unchecked std::optional unwrapping
+    // FIXME: Unchecked std::optional unwrapping
     ByteBuffer blob = loadEntireFile("rgb2yuv-ps_yuv.fxc").value();
     device->CreatePixelShader(blob.data(), blob.size(), nullptr, pixelShader.data());
 
@@ -268,11 +268,7 @@ void ScaleD3D_AYUV::init(const D3D11Device& device, const D3D11DeviceContext& co
 }
 
 void ScaleD3D_AYUV::_convert() {
-    D3D11_VIEWPORT viewport = {
-        0, 0,
-        (float)(outWidth), (float)(outHeight),
-        0, 1
-    };
+    D3D11_VIEWPORT viewport = {0, 0, (float)(outWidth), (float)(outHeight), 0, 1};
     context->RSSetViewports(1, &viewport);
 
     context->VSSetShader(vertexShader.ptr(), nullptr, 0);
@@ -288,7 +284,6 @@ void ScaleD3D_AYUV::_convert() {
     context->IASetVertexBuffers(0, 1, vertexBuffer.data(), &quadVertexStride, &quadVertexOffset);
     context->Draw(quadVertexCount, 0);
 }
-
 
 void ScaleD3D_NV12::init(const D3D11Device& device, const D3D11DeviceContext& context) {
     outFormat = DXGI_FORMAT_NV12;
@@ -306,7 +301,7 @@ void ScaleD3D_NV12::init(const D3D11Device& device, const D3D11DeviceContext& co
     rtLuma.release();
     rtChroma.release();
 
-    //FIXME: Unchecked std::optional unwrapping
+    // FIXME: Unchecked std::optional unwrapping
     ByteBuffer blob = loadEntireFile("rgb2yuv-ps_y.fxc").value();
     device->CreatePixelShader(blob.data(), blob.size(), nullptr, pixelShaderY.data());
 
@@ -354,11 +349,7 @@ void ScaleD3D_NV12::init(const D3D11Device& device, const D3D11DeviceContext& co
 }
 
 void ScaleD3D_NV12::_convert() {
-    D3D11_VIEWPORT viewport = {
-        0, 0,
-        (float)(outWidth), (float)(outHeight),
-        0, 1
-    };
+    D3D11_VIEWPORT viewport = {0, 0, (float)(outWidth), (float)(outHeight), 0, 1};
     context->RSSetViewports(1, &viewport);
 
     // Render UV component (large)
@@ -381,11 +372,7 @@ void ScaleD3D_NV12::_convert() {
     context->Draw(quadVertexCount, 0);
 
     // render UV component (small)
-    D3D11_VIEWPORT smallViewport = {
-        0, 0,
-        (float)(outWidth / 2), (float)(outHeight / 2),
-        0, 1
-    };
+    D3D11_VIEWPORT smallViewport = {0, 0, (float)(outWidth / 2), (float)(outHeight / 2), 0, 1};
     context->RSSetViewports(1, &smallViewport);
 
     context->PSSetShader(pixelShaderCopy.ptr(), nullptr, 0);

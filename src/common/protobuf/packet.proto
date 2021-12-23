@@ -7,19 +7,19 @@ import "stream.proto";
 import "auth.proto";
 
 message Packet {
-	int32 extra_data_len = 1;
+    int32 extra_data_len = 1;
 
-	oneof msg {
-		DesktopFrame desktop_frame = 2;
-		CursorShape cursor_shape = 3;
-		AudioFrame audio_frame = 4;
+    oneof msg {
+        DesktopFrame desktop_frame = 2;
+        CursorShape cursor_shape = 3;
+        AudioFrame audio_frame = 4;
 
-		ServerPerfReport server_perf_report = 100;
+        ServerPerfReport server_perf_report = 100;
 
-		SignRequest sign_request = 101;
-		ServerNonceNotify server_nonce_notify = 102;
-		ClientNonceNotify client_nonce_notify = 103;
-		ServerPinReady server_pin_ready = 104;
-		SignResponse sign_response = 105;
-	}
+        SignRequest sign_request = 101;
+        ServerNonceNotify server_nonce_notify = 102;
+        ClientNonceNotify client_nonce_notify = 103;
+        ServerPinReady server_pin_ready = 104;
+        SignResponse sign_response = 105;
+    }
 }

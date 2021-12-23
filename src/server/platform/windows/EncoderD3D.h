@@ -1,65 +1,64 @@
 #ifndef SERVER_PLATFORM_WINDOWS_ENCODER_D3D_H_
 #define SERVER_PLATFORM_WINDOWS_ENCODER_D3D_H_
 
-
-#include "common/log.h"
 #include "common/ByteBuffer.h"
 #include "common/DesktopFrame.h"
 #include "common/StatisticMixer.h"
+#include "common/log.h"
 
 #include "common/platform/windows/DeviceManagerD3D.h"
 
 #include <atomic>
-#include <memory>
-#include <vector>
 #include <deque>
 #include <functional>
-
+#include <memory>
+#include <vector>
 
 class EncoderD3D {
-	struct SideData {
-		long long pts;
-		std::chrono::steady_clock::time_point inputTime;
-	};
+    struct SideData {
+        long long pts;
+        std::chrono::steady_clock::time_point inputTime;
+    };
 
-	LoggerPtr log;
+    LoggerPtr log;
 
-	int width, height;
-	long long frameCnt;
+    int width, height;
+    long long frameCnt;
 
-	bool waitingInput;
+    bool waitingInput;
 
-	std::function<void(DesktopFrame<ByteBuffer>&&)> onDataAvailable;
+    std::function<void(DesktopFrame<ByteBuffer>&&)> onDataAvailable;
 
-	std::deque<DesktopFrame<SideData>> extraData;
+    std::deque<DesktopFrame<SideData>> extraData;
 
-	MFDxgiDeviceManager mfDeviceManager;
-	MFTransform encoder;
-	MFMediaEventGenerator eventGen;
-	DWORD inputStreamId, outputStreamId;
-	StatisticMixer statMixer;
+    MFDxgiDeviceManager mfDeviceManager;
+    MFTransform encoder;
+    MFMediaEventGenerator eventGen;
+    DWORD inputStreamId, outputStreamId;
+    StatisticMixer statMixer;
 
-	void init_();
+    void init_();
 
-	void pushEncoderTexture_(const D3D11Texture2D& tex, long long sampleDur, long long sampleTime);
-	ByteBuffer popEncoderData_(long long* sampleTime);
+    void pushEncoderTexture_(const D3D11Texture2D& tex, long long sampleDur, long long sampleTime);
+    ByteBuffer popEncoderData_(long long* sampleTime);
 
 public:
-	EncoderD3D(DeviceManagerD3D _devs, int _width, int _height);
-	~EncoderD3D();
+    EncoderD3D(DeviceManagerD3D _devs, int _width, int _height);
+    ~EncoderD3D();
 
-	template<typename Fn>
-	void setOnDataAvailable(Fn fn) { onDataAvailable = std::move(fn); }
+    template <typename Fn>
+    void setOnDataAvailable(Fn fn) {
+        onDataAvailable = std::move(fn);
+    }
 
-	void start();
-	void stop();
+    void start();
+    void stop();
 
-	void poll();
+    void poll();
 
-	StatisticMixer::Stat calcEncoderStat() { return statMixer.calcStat(); }
+    StatisticMixer::Stat calcEncoderStat() { return statMixer.calcStat(); }
 
-	void pushFrame(DesktopFrame<D3D11Texture2D>&& cap);
+    void pushFrame(DesktopFrame<D3D11Texture2D>&& cap);
 };
-
 
 #endif

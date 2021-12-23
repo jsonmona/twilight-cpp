@@ -4,78 +4,78 @@ option optimize_for = LITE_RUNTIME;
 package msg;
 
 enum CodecType {
-	CODEC_H264 = 0;
+    CODEC_H264 = 0;
 }
 
 // https://docs.microsoft.com/en-us/windows/win32/medfound/10-bit-and-16-bit-yuv-video-formats#preferred-yuv-formats
 enum ColorType {
-	COLOR_NV12 = 0;
-	COLOR_AYUV = 1;
-	COLOR_P010 = 2;
-	COLOR_Y410 = 3;
+    COLOR_NV12 = 0;
+    COLOR_AYUV = 1;
+    COLOR_P010 = 2;
+    COLOR_Y410 = 3;
 }
 
 message RequestStream {
-	CodecType codec_type = 1;
-	ColorType color_type = 2;
-	int32 bitrate = 3;
-	int32 width = 4;
-	int32 height = 5;
+    CodecType codec_type = 1;
+    ColorType color_type = 2;
+    int32 bitrate = 3;
+    int32 width = 4;
+    int32 height = 5;
 }
 
 message RequestStreamAnswer {
-	bool success = 1;
+    bool success = 1;
 
-	CodecType codec_type = 2;
-	ColorType color_type = 3;
-	int32 width = 4;
-	int32 height = 5;
+    CodecType codec_type = 2;
+    ColorType color_type = 3;
+    int32 width = 4;
+    int32 height = 5;
 }
 
 message ServerPerfReport {
-	float capture_min = 1;
-	float capture_avg = 2;
-	float capture_max = 3;
+    float capture_min = 1;
+    float capture_avg = 2;
+    float capture_max = 3;
 
-	float encoder_min = 5;
-	float encoder_avg = 6;
-	float encoder_max = 7;
+    float encoder_min = 5;
+    float encoder_avg = 6;
+    float encoder_max = 7;
 }
 
 // Extra data contains desktom image (encoded)
 message DesktopFrame {
-	bool cursor_visible = 2;
-	int32 cursor_x = 3;
-	int32 cursor_y = 4;
+    bool cursor_visible = 2;
+    int32 cursor_x = 3;
+    int32 cursor_y = 4;
 }
 
 // Extra data contains cursor image (raw RGBA)
 message CursorShape {
-	int32 width = 2;
-	int32 height = 3;
+    int32 width = 2;
+    int32 height = 3;
 
-	float hotspot_x = 4;
-	float hotspot_y = 5;
+    float hotspot_x = 4;
+    float hotspot_y = 5;
 }
 
 // Extra data contains opus audio stream
 message AudioFrame {
-	int32 channels = 1;
+    int32 channels = 1;
 }
 
 message MouseInput {
-	bool is_abs = 1;
+    bool is_abs = 1;
 
-	int32 dx = 2;
-	int32 dy = 3;
+    int32 dx = 2;
+    int32 dy = 3;
 
-	// Primary (left)
-	// Secondary (right)
-	// Auxiliary (mid)
-	// 4th (back), 5th (forward), ...
-	repeated int32 buttons = 6;
+    // Primary (left)
+    // Secondary (right)
+    // Auxiliary (mid)
+    // 4th (back), 5th (forward), ...
+    repeated int32 buttons = 6;
 }
 
 message KeyboardInput {
-	repeated int32 scancodes = 1;
+    repeated int32 scancodes = 1;
 }

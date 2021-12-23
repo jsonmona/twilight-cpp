@@ -1,37 +1,32 @@
 #ifndef COMMON_RING_BUFFER_H_
 #define COMMON_RING_BUFFER_H_
 
-
 #include "common/util.h"
 
-#include <type_traits>
+#include <cassert>
 #include <cstdint>
 #include <cstring>
-#include <cassert>
+#include <type_traits>
 
-
-template<class T, size_t MIN_SIZE>
+template <class T, size_t MIN_SIZE>
 class RingBuffer {
 public:
-    static_assert(std::is_trivial<T>::value, "Ring buffer should only be used with trivial types (If not, just use deque)");
+    static_assert(std::is_trivial<T>::value,
+                  "Ring buffer should only be used with trivial types (If not, just use deque)");
     static_assert(MIN_SIZE > 0, "Must reserve size greater than 0");
     constexpr static size_t SIZE = constexpr_nextPowerOfTwo(MIN_SIZE);
 
     RingBuffer() : readPos_(0), bufferSize_(0) {}
-    RingBuffer(const RingBuffer& copy) = delete;
-    RingBuffer(RingBuffer&& move) = delete;
+    RingBuffer(const RingBuffer &copy) = delete;
+    RingBuffer(RingBuffer &&move) = delete;
     ~RingBuffer() {}
 
-    RingBuffer& operator=(const RingBuffer& copy) = delete;
-    RingBuffer& operator=(RingBuffer&& move) = delete;
+    RingBuffer &operator=(const RingBuffer &copy) = delete;
+    RingBuffer &operator=(RingBuffer &&move) = delete;
 
-    size_t size() const {
-        return bufferSize_;
-    }
+    size_t size() const { return bufferSize_; }
 
-    size_t available() const {
-        return SIZE - bufferSize_;
-    }
+    size_t available() const { return SIZE - bufferSize_; }
 
     void clear() {
         readPos_ = 0;
@@ -50,7 +45,7 @@ public:
         bufferSize_++;
     }
 
-    void write(const T* arr, size_t amount) {
+    void write(const T *arr, size_t amount) {
         assert(bufferSize_ <= SIZE - amount);
         if (amount == 0)
             return;
@@ -62,8 +57,7 @@ public:
             size_t secondWriteAmount = amount - firstWriteAmount;
             memcpy(buffer_ + writePos, arr, firstWriteAmount * sizeof(T));
             memcpy(buffer_, arr + firstWriteAmount, secondWriteAmount * sizeof(T));
-        }
-        else {
+        } else {
             memcpy(buffer_ + writePos, arr, amount * sizeof(T));
         }
         bufferSize_ += amount;
@@ -77,7 +71,7 @@ public:
         return ret;
     }
 
-    void read(T* arr, size_t amount) {
+    void read(T *arr, size_t amount) {
         assert(bufferSize_ >= amount);
         if (amount == 0)
             return;
@@ -88,8 +82,7 @@ public:
             memcpy(arr, buffer_ + readPos_, firstReadAmount * sizeof(T));
             memcpy(arr + firstReadAmount, buffer_, secondReadAmount * sizeof(T));
             readPos_ = secondReadAmount;
-        }
-        else {
+        } else {
             memcpy(arr, buffer_ + readPos_, amount * sizeof(T));
             readPos_ += amount;
         }
@@ -101,6 +94,5 @@ private:
     size_t bufferSize_;
     T buffer_[SIZE];
 };
-
 
 #endif

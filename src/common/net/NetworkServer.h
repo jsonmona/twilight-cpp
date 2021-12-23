@@ -1,55 +1,54 @@
 #ifndef COMMON_NETWORK_SERVER_H_
 #define COMMON_NETWORK_SERVER_H_
 
-
 #include "common/CertStore.h"
 #include "common/log.h"
 
 #include "common/net/NetworkSocket.h"
 
+#include <mbedtls/ctr_drbg.h>
+#include <mbedtls/entropy.h>
 #include <mbedtls/net_sockets.h>
 #include <mbedtls/ssl.h>
-#include <mbedtls/entropy.h>
-#include <mbedtls/ctr_drbg.h>
 
 #include <atomic>
 #include <functional>
 #include <thread>
 
-
 class NetworkServer {
 public:
-	NetworkServer();
-	NetworkServer(const NetworkServer& copy) = delete;
-	NetworkServer(NetworkServer&& move) = delete;
+    NetworkServer();
+    NetworkServer(const NetworkServer &copy) = delete;
+    NetworkServer(NetworkServer &&move) = delete;
 
-	~NetworkServer();
+    ~NetworkServer();
 
-	void startListen(uint16_t port);
-	void stopListen();
+    void startListen(uint16_t port);
+    void stopListen();
 
-	CertStore& getCert() { return certStore; }
+    CertStore &getCert() { return certStore; }
 
-	template<class Fn>
-	void setOnNewConnection(Fn fn) { onNewConnection = std::move(fn); }
+    template <class Fn>
+    void setOnNewConnection(Fn fn) {
+        onNewConnection = std::move(fn);
+    }
 
 private:
-	LoggerPtr log;
+    LoggerPtr log;
 
-	std::atomic<bool> flagListen;
-	std::thread listenThread;
+    std::atomic<bool> flagListen;
+    std::thread listenThread;
 
-	std::vector<int> allowedCiphersuites;
+    std::vector<int> allowedCiphersuites;
 
-	mbedtls_net_context ctx;
-	mbedtls_ssl_config ssl;
-	mbedtls_entropy_context entropy;
-	mbedtls_ctr_drbg_context ctr_drbg;
+    mbedtls_net_context ctx;
+    mbedtls_ssl_config ssl;
+    mbedtls_entropy_context entropy;
+    mbedtls_ctr_drbg_context ctr_drbg;
 
-	CertStore certStore;
+    CertStore certStore;
 
-	std::function<void(std::unique_ptr<NetworkSocket>&&)> onNewConnection;
+    std::function<void(std::unique_ptr<NetworkSocket> &&)> onNewConnection;
 };
-
 
 #endif

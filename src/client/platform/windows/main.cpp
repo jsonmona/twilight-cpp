@@ -1,23 +1,20 @@
+#include <QtCore/qpointer.h>
+#include <packet.pb.h>
+
+#include "QtWidgets/qapplication.h"
+#include "client/HubWindow.h"
 #include "common/log.h"
 #include "common/platform/windows/winheaders.h"
 
-#include "client/HubWindow.h"
-
-#include "QtWidgets/qapplication.h"
-#include <QtCore/qpointer.h>
-
-#include <packet.pb.h>
-
-
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
-	setupLogger();
+    setupLogger();
 
-	GOOGLE_PROTOBUF_VERIFY_VERSION;
+    GOOGLE_PROTOBUF_VERIFY_VERSION;
 
-	QApplication app(__argc, __argv);
+    QApplication app(__argc, __argv);
 
-	QPointer<HubWindow> hub = new HubWindow();
-	hub->showCentered();
+    QPointer<HubWindow> hub = new HubWindow();
+    hub->showCentered();
 
-	return app.exec();
+    return app.exec();
 }

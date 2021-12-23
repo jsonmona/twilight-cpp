@@ -1,130 +1,127 @@
 #include "HubWindow.h"
 
-#include "client/StreamWindow.h"
-
-#include "ui_HubWindowAddHostDialog.h"
-
+#include <QtGui/qevent.h>
+#include <QtGui/qscreen.h>
 #include <QtWidgets/qapplication.h>
 #include <QtWidgets/qdialog.h>
 #include <QtWidgets/qmessagebox.h>
-#include <QtGui/qscreen.h>
-#include <QtGui/qevent.h>
 
+#include "client/StreamWindow.h"
+#include "ui_HubWindowAddHostDialog.h"
 
-HubWindow::HubWindow() : QWidget(),
-	log(createNamedLogger("HubWindow"))
-{
-	ui.setupUi(this);
+HubWindow::HubWindow() : QWidget(), log(createNamedLogger("HubWindow")) {
+    ui.setupUi(this);
 
-	layoutWidget = new QWidget();
-	layout = new FlowLayout(layoutWidget, 10, 7, 7);
-	ui.scrollAreaHosts->setWidget(layoutWidget);
+    layoutWidget = new QWidget();
+    layout = new FlowLayout(layoutWidget, 10, 7, 7);
+    ui.scrollAreaHosts->setWidget(layoutWidget);
 
-	setAttribute(Qt::WA_DeleteOnClose);
+    setAttribute(Qt::WA_DeleteOnClose);
 
-	qApp->setQuitOnLastWindowClosed(false);
+    qApp->setQuitOnLastWindowClosed(false);
 
-	hostList.loadFromFile("hosts.toml");
-	reloadItems_();
+    hostList.loadFromFile("hosts.toml");
+    reloadItems_();
 }
 
 HubWindow::~HubWindow() {
-	// Won't work
-	//qApp->setQuitOnLastWindowClosed(false);
+    // Won't work
+    // qApp->setQuitOnLastWindowClosed(false);
 
-	hostList.saveToFile("hosts.toml");
+    hostList.saveToFile("hosts.toml");
 
-	qApp->quit();
+    qApp->quit();
 }
 
 void HubWindow::showCentered() {
-	adjustSize();
+    adjustSize();
 
-	QRect geo = geometry();
-	QPoint pt;
-	pt.setX(geo.x() + geo.width() / 2);
-	pt.setX(geo.y() + geo.height() / 2);
+    QRect geo = geometry();
+    QPoint pt;
+    pt.setX(geo.x() + geo.width() / 2);
+    pt.setX(geo.y() + geo.height() / 2);
 
-	QScreen* s = qApp->screenAt(pt);
+    QScreen *s = qApp->screenAt(pt);
 
-	const QRect sr = s->availableGeometry();
-	const QRect wr({}, frameSize().boundedTo(sr.size()));
+    const QRect sr = s->availableGeometry();
+    const QRect wr({}, frameSize().boundedTo(sr.size()));
 
-	move(sr.center() - wr.center());
-	show();
+    move(sr.center() - wr.center());
+    show();
 }
 
 QSize HubWindow::sizeHint() const {
-	return QSize{ 1280, 720 };
+    return QSize{1280, 720};
 }
 
 void HubWindow::on_btnAddHost_clicked(bool checked) {
-	QDialog dialog(this);
-	Ui::HubWindowAddHostDialog dialogUi;
+    QDialog dialog(this);
+    Ui::HubWindowAddHostDialog dialogUi;
 
-	dialogUi.setupUi(&dialog);
+    dialogUi.setupUi(&dialog);
 
-	int ret = dialog.exec();
+    int ret = dialog.exec();
 
-	if (ret == QDialog::Accepted) {
-		HostListEntry entry = std::make_shared<HostList::Entry>();
-		entry->nickname = dialogUi.lineEditDisplayName->text().toStdString();
-		entry->addr.push_back(dialogUi.lineEditAddr->text().toStdString());
-		entry->addr.push_back(dialogUi.lineEditAddrFallback->text().toStdString());
+    if (ret == QDialog::Accepted) {
+        HostListEntry entry = std::make_shared<HostList::Entry>();
+        entry->nickname = dialogUi.lineEditDisplayName->text().toStdString();
+        entry->addr.push_back(dialogUi.lineEditAddr->text().toStdString());
+        entry->addr.push_back(dialogUi.lineEditAddrFallback->text().toStdString());
 
-		//TODO: Add more validity checks
+        // TODO: Add more validity checks
 
-		if (entry->nickname.empty())
-			entry->nickname = entry->addr.front();
+        if (entry->nickname.empty())
+            entry->nickname = entry->addr.front();
 
-		if (entry->addr.front().empty())
-			entry->addr.erase(entry->addr.begin());
-		if (entry->addr.back().empty())
-			entry->addr.erase(entry->addr.end() - 1);
+        if (entry->addr.front().empty())
+            entry->addr.erase(entry->addr.begin());
+        if (entry->addr.back().empty())
+            entry->addr.erase(entry->addr.end() - 1);
 
-		if (entry->addr.size() > 1) {
-			//TODO: Remove this when fallback address is supported
-			QMessageBox msg;
-			msg.warning(this, "Warning", "Fallback address is not supported yet", QMessageBox::Ok, QMessageBox::NoButton);
-		}
+        if (entry->addr.size() > 1) {
+            // TODO: Remove this when fallback address is supported
+            QMessageBox msg;
+            msg.warning(this, "Warning", "Fallback address is not supported yet", QMessageBox::Ok,
+                        QMessageBox::NoButton);
+        }
 
-		if (!entry->addr.empty()) {
-			hostList.hosts.push_back(std::move(entry));
-			reloadItems_();
-		}
-	}
+        if (!entry->addr.empty()) {
+            hostList.hosts.push_back(std::move(entry));
+            reloadItems_();
+        }
+    }
 }
 
 void HubWindow::connectToEntry(HostListEntry entry) {
-	//TODO: Allow use of URI (so that protocol and port can be specified)
-	
-	streamWindow = new StreamWindow(entry);
+    // TODO: Allow use of URI (so that protocol and port can be specified)
 
-	QRect screenSize = qApp->primaryScreen()->geometry();
+    streamWindow = new StreamWindow(entry);
 
-	int targetWidth = screenSize.width() * 5 / 6;
-	int targetHeight = screenSize.height() * 5 / 6;
-	streamWindow->setFixedSize(QSize(targetWidth, targetHeight));
+    QRect screenSize = qApp->primaryScreen()->geometry();
 
-	connect(streamWindow.get(), &QObject::destroyed, this, &QWidget::show);
-	hide();
+    int targetWidth = screenSize.width() * 5 / 6;
+    int targetHeight = screenSize.height() * 5 / 6;
+    streamWindow->setFixedSize(QSize(targetWidth, targetHeight));
+
+    connect(streamWindow.get(), &QObject::destroyed, this, &QWidget::show);
+    hide();
 }
 
 void HubWindow::reloadItems_() {
-	for (HubWindowHostItem* now : items) {
-		now->deleteLater();
-		layout->removeWidget(now);
-	}
+    for (HubWindowHostItem *now : items) {
+        now->deleteLater();
+        layout->removeWidget(now);
+    }
 
-	items.clear();
-	items.reserve(hostList.hosts.size());
+    items.clear();
+    items.reserve(hostList.hosts.size());
 
-	for (HostListEntry& now : hostList.hosts) {
-		HubWindowHostItem* item = new HubWindowHostItem();
-		item->setEntry(now);
-		connect(item, &HubWindowHostItem::onClickConnect, this, &HubWindow::connectToEntry);
+    for (HostListEntry &now : hostList.hosts) {
+        HubWindowHostItem *item = new HubWindowHostItem();
+        item->setEntry(now);
+        connect(item, &HubWindowHostItem::onClickConnect, this, &HubWindow::connectToEntry);
 
-		layout->addWidget(item);
-		items.push_back(item);
-	}
+        layout->addWidget(item);
+        items.push_back(item);
+    }
 }

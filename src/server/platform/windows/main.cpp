@@ -5,67 +5,65 @@
 
 #include "server/platform/windows/CaptureD3D.h"
 
-#include <string>
-#include <memory>
-#include <vector>
 #include <algorithm>
-#include <cstdio>
 #include <chrono>
+#include <cstdio>
+#include <memory>
+#include <string>
+#include <vector>
 
-typedef BOOL (WINAPI *FnSetProcessDpiAwarenessContext)(HANDLE);
+typedef BOOL(WINAPI *FnSetProcessDpiAwarenessContext)(HANDLE);
 static const HANDLE dpiAwarenessContextPerMonitorAwareV2 = reinterpret_cast<HANDLE>(0xfffffffffffffffc);
 
-
 static bool setDpiAwareness() {
-	bool success = false;
+    bool success = false;
 
-	HMODULE user32 = LoadLibrary(L"user32.dll");
-	if (user32 != nullptr) {
-		auto fn = (FnSetProcessDpiAwarenessContext)GetProcAddress(user32, "SetProcessDpiAwarenessContext");
-		if (fn != nullptr)
-			success = fn(dpiAwarenessContextPerMonitorAwareV2);
-		FreeLibrary(user32);
-		user32 = nullptr;
-	}
+    HMODULE user32 = LoadLibrary(L"user32.dll");
+    if (user32 != nullptr) {
+        auto fn = (FnSetProcessDpiAwarenessContext)GetProcAddress(user32, "SetProcessDpiAwarenessContext");
+        if (fn != nullptr)
+            success = fn(dpiAwarenessContextPerMonitorAwareV2);
+        FreeLibrary(user32);
+        user32 = nullptr;
+    }
 
-	if (!success)
-		success = SetProcessDPIAware();
+    if (!success)
+        success = SetProcessDPIAware();
 
-	return success;
+    return success;
 }
 
-
 int main() {
-	setupLogger();
+    setupLogger();
 
-	GOOGLE_PROTOBUF_VERIFY_VERSION;
-	HRESULT hr;
+    GOOGLE_PROTOBUF_VERIFY_VERSION;
+    HRESULT hr;
 
-	auto log = createNamedLogger("main");
+    auto log = createNamedLogger("main");
 
-	if (!setDpiAwareness())
-		log->warn("Unable to set dpi awareness");
+    if (!setDpiAwareness())
+        log->warn("Unable to set dpi awareness");
 
-	hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
-	check_quit(FAILED(hr), log, "Failed to initialize COM");
+    hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    check_quit(FAILED(hr), log, "Failed to initialize COM");
 
-	hr = MFStartup(MF_VERSION, MFSTARTUP_LITE);
-	check_quit(FAILED(hr), log, "Failed to start MediaFoundation");
+    hr = MFStartup(MF_VERSION, MFSTARTUP_LITE);
+    check_quit(FAILED(hr), log, "Failed to start MediaFoundation");
 
-	StreamServer stream;
+    StreamServer stream;
 
-	log->info("Starting daylight streaming server...");
+    log->info("Starting daylight streaming server...");
 
-	stream.start();
-	Sleep(3600 * 1000);
+    stream.start();
+    Sleep(3600 * 1000);
 
-	log->info("Stopping daylight streaming server...");
-	stream.stop();
+    log->info("Stopping daylight streaming server...");
+    stream.stop();
 
-	MFShutdown();
-	return 0;
+    MFShutdown();
+    return 0;
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
-	return main();
+    return main();
 }

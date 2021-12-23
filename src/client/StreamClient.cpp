@@ -1,30 +1,22 @@
 #include "StreamClient.h"
 
-#include "common/util.h"
-
-#include <mbedtls/sha512.h>
-#include <mbedtls/sha256.h>
-
-#include <packet.pb.h>
 #include <auth.pb.h>
+#include <mbedtls/sha256.h>
+#include <mbedtls/sha512.h>
+#include <packet.pb.h>
 
+#include "common/util.h"
 
 constexpr uint16_t SERVICE_PORT = 6495;
 constexpr int32_t AUTH_PROTOCOL_VERSION = 1;
 
-
-StreamClient::StreamClient() :
-	log(createNamedLogger("StreamClient"))
-{
-    conn.setOnDisconnected([this](std::string_view msg) {
-        onStateChange(State::DISCONNECTED, msg);
-    });
+StreamClient::StreamClient() : log(createNamedLogger("StreamClient")) {
+    conn.setOnDisconnected([this](std::string_view msg) { onStateChange(State::DISCONNECTED, msg); });
 
     keypair.loadOrGenerate("privkey.der");
 }
 
-StreamClient::~StreamClient() {
-}
+StreamClient::~StreamClient() {}
 
 void StreamClient::connect(HostListEntry host) {
     if (host->hasClientCert()) {
@@ -33,7 +25,8 @@ void StreamClient::connect(HostListEntry host) {
         if (host->hasServerCert()) {
             int ret;
             uint32_t flags;
-            ret = mbedtls_x509_crt_verify(&host->clientCert, &host->serverCert, nullptr, nullptr, &flags, nullptr, nullptr);
+            ret = mbedtls_x509_crt_verify(&host->clientCert, &host->serverCert, nullptr, nullptr, &flags, nullptr,
+                                          nullptr);
             if (ret < 0)
                 removeCert = true;
         }
@@ -57,13 +50,12 @@ void StreamClient::connect(HostListEntry host) {
             if (needsAuth || !conn.verifyCert()) {
                 onStateChange(State::AUTHENTICATING, "");
                 if (!doAuth_(host))
-                    onStateChange(State::DISCONNECTED, "Auth failed"); //TODO: Find a way to localize this
+                    onStateChange(State::DISCONNECTED, "Auth failed");  // TODO: Find a way to localize this
             }
             onStateChange(State::CONNECTED, "");
             _runRecv();
-        }
-        else
-            onStateChange(State::DISCONNECTED, "Unable to connect"); //TODO: Pass message from OS
+        } else
+            onStateChange(State::DISCONNECTED, "Unable to connect");  // TODO: Pass message from OS
     });
 }
 
@@ -89,9 +81,8 @@ void StreamClient::_runRecv() {
 }
 
 // Returns negative on error (mbedtls error code)
-static int computePin(const ByteBuffer& serverPubkey, const ByteBuffer& clientPubkey,
-    const ByteBuffer& serverNonce, const ByteBuffer& clientNonce) {
-
+static int computePin(const ByteBuffer &serverPubkey, const ByteBuffer &clientPubkey, const ByteBuffer &serverNonce,
+                      const ByteBuffer &clientNonce) {
     static_assert(std::numeric_limits<int>::max() > 99999999, "Int is too small to compute pin!");
 
     int ret;
@@ -108,10 +99,9 @@ static int computePin(const ByteBuffer& serverPubkey, const ByteBuffer& clientPu
     if (ret < 0)
         return ret;
 
-    uint64_t value = (uint64_t) hash[0] | (uint64_t) hash[1] << 8 |
-        (uint64_t) hash[2] << 16 | (uint64_t) hash[3] << 24 |
-        (uint64_t) hash[4] << 32 | (uint64_t) hash[5] << 40 |
-        (uint64_t) hash[6] << 48 | (uint64_t) hash[7] << 56;
+    uint64_t value = (uint64_t)hash[0] | (uint64_t)hash[1] << 8 | (uint64_t)hash[2] << 16 | (uint64_t)hash[3] << 24 |
+                     (uint64_t)hash[4] << 32 | (uint64_t)hash[5] << 40 | (uint64_t)hash[6] << 48 |
+                     (uint64_t)hash[7] << 56;
 
     int output = 0;
     for (int i = 0; i < 8; i++) {
@@ -190,14 +180,14 @@ bool StreamClient::doAuth_(HostListEntry host) {
         return false;
 
     log->info("Pin: {}", pin);
-    if(onDisplayPin)
+    if (onDisplayPin)
         onDisplayPin(pin);
 
     status = conn.recv(&pkt, &payload);
     if (!status || pkt.msg_case() != msg::Packet::kSignResponse)
         return false;
 
-    auto* signResponse = pkt.mutable_sign_response();
+    auto *signResponse = pkt.mutable_sign_response();
     if (signResponse->status() != msg::SignResponse_AuthStatus_SUCCESS)
         return false;
 

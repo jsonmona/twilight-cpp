@@ -1,7 +1,6 @@
 #ifndef COMMON_PLATFORM_WINDOWS_WINHEADERS_H_
 #define COMMON_PLATFORM_WINDOWS_WINHEADERS_H_
 
-
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -19,16 +18,15 @@
 
 #include <dxgi1_5.h>
 
-#include <mfapi.h>
-#include <mftransform.h>
-#include <mferror.h>
-#include <icodecapi.h>
 #include <codecapi.h>
+#include <icodecapi.h>
+#include <mfapi.h>
+#include <mferror.h>
+#include <mftransform.h>
 #include <propvarutil.h>
 
-#include <timeapi.h>
-#include <mmdeviceapi.h>
 #include <audioclient.h>
-
+#include <mmdeviceapi.h>
+#include <timeapi.h>
 
 #endif

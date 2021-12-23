@@ -1,54 +1,49 @@
 #ifndef CLIENT_HUB_WINDOW_H_
 #define CLIENT_HUB_WINDOW_H_
 
-
-#include "ui_HubWindow.h"
-
-#include "common/CertStore.h"
-#include "common/log.h"
-
-#include "client/FlowLayout.h"
-#include "client/HostList.h"
-#include "client/HubWindowHostItem.h"
-
-#include <QtWidgets/qwidget.h>
-#include <QtWidgets/qpushbutton.h>
+#include <QtCore/qpointer.h>
 #include <QtWidgets/qboxlayout.h>
 #include <QtWidgets/qlineedit.h>
-#include <QtCore/qpointer.h>
+#include <QtWidgets/qpushbutton.h>
+#include <QtWidgets/qwidget.h>
 
 #include <atomic>
 #include <vector>
 
+#include "client/FlowLayout.h"
+#include "client/HostList.h"
+#include "client/HubWindowHostItem.h"
+#include "common/CertStore.h"
+#include "common/log.h"
+#include "ui_HubWindow.h"
 
 class HubWindow : public QWidget {
-	Q_OBJECT;
+    Q_OBJECT;
 
 public:
-	HubWindow();
-	virtual ~HubWindow();
+    HubWindow();
+    virtual ~HubWindow();
 
-	void showCentered();
+    void showCentered();
 
-	QSize sizeHint() const override;
+    QSize sizeHint() const override;
 
 private slots:
-	void connectToEntry(HostListEntry entry);
-	void on_btnAddHost_clicked(bool checked);
+    void connectToEntry(HostListEntry entry);
+    void on_btnAddHost_clicked(bool checked);
 
 private:
-	LoggerPtr log;
+    LoggerPtr log;
 
-	Ui::HubWindow ui;
-	QWidget* layoutWidget;
-	FlowLayout* layout;
-	std::vector<HubWindowHostItem*> items;
-	QPointer<QWidget> streamWindow;
+    Ui::HubWindow ui;
+    QWidget *layoutWidget;
+    FlowLayout *layout;
+    std::vector<HubWindowHostItem *> items;
+    QPointer<QWidget> streamWindow;
 
-	HostList hostList;
+    HostList hostList;
 
-	void reloadItems_();
+    void reloadItems_();
 };
-
 
 #endif

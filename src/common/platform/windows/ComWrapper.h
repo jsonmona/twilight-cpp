@@ -1,134 +1,110 @@
 #ifndef COMMON_PLATFORM_WINDOWS_COM_WRAPPER_H_
 #define COMMON_PLATFORM_WINDOWS_COM_WRAPPER_H_
 
-
 #include "winheaders.h"
 
-#include <memory>
 #include <cassert>
+#include <memory>
 #include <type_traits>
 
-
-template<class T>
+template <class T>
 class ComWrapper {
-	T* obj;
-	
-	template<class U>
-	friend class ComWrapper;
+    T *obj;
 
-	// Automatically converted to either T** or void**
-	// With additional safeguard for memory leak (only on debug build)
-	struct DoublePtrProxy {
-		ComWrapper<T>* parent;
+    template <class U>
+    friend class ComWrapper;
+
+    // Automatically converted to either T** or void**
+    // With additional safeguard for memory leak (only on debug build)
+    struct DoublePtrProxy {
+        ComWrapper<T> *parent;
 #ifndef NDEBUG
-		T* prev;
+        T *prev;
 #endif
 
-		DoublePtrProxy(ComWrapper<T>* _parent) : parent(_parent) {
+        DoublePtrProxy(ComWrapper<T> *_parent) : parent(_parent) {
 #ifndef NDEBUG
-			prev = parent->obj;
+            prev = parent->obj;
 #endif
-		}
-		operator T** () {
-			return &parent->obj;
-		}
-		operator void** () {
-			return (void**) &parent->obj;
-		}
-		~DoublePtrProxy() {
+        }
+        operator T **() { return &parent->obj; }
+        operator void **() { return (void **)&parent->obj; }
+        ~DoublePtrProxy() {
 #ifndef NDEBUG
-			if (prev != nullptr && prev != parent->obj)
-				abort();  // Using abort() since this only triggers in debug builds.
+            if (prev != nullptr && prev != parent->obj)
+                abort();  // Using abort() since this only triggers in debug builds.
 #endif
-		}
-	};
+        }
+    };
 
 public:
-	~ComWrapper() {
-		static_assert(std::is_convertible<T*, IUnknown*>::value, "T must be subclass of IUnknown");
-		if (obj != nullptr)
-			obj->Release();
-	}
+    ~ComWrapper() {
+        static_assert(std::is_convertible<T *, IUnknown *>::value, "T must be subclass of IUnknown");
+        if (obj != nullptr)
+            obj->Release();
+    }
 
-	ComWrapper() : obj(nullptr) {}
-	explicit ComWrapper(T* ptr) : obj(ptr) {}
-	ComWrapper(const ComWrapper& copy) : obj(copy.obj) {
-		if(obj != nullptr)
-			obj->AddRef();
-	}
-	ComWrapper(ComWrapper&& move) noexcept : obj(move.obj) {
-		move.obj = nullptr;
-	}
-	ComWrapper<T>& operator=(const ComWrapper<T>& copy) {
-		release();
-		obj = copy.obj;
-		if(obj != nullptr)
-			obj->AddRef();
-		return *this;
-	}
-	ComWrapper<T>& operator=(ComWrapper<T>&& move) noexcept {
-		release();
-		obj = move.obj;
-		move.obj = nullptr;
-		return *this;
-	}
-	ComWrapper<T>& operator=(T* rawPtr) {
-		release();
-		obj = rawPtr;
-		return *this;
-	}
+    ComWrapper() : obj(nullptr) {}
+    explicit ComWrapper(T *ptr) : obj(ptr) {}
+    ComWrapper(const ComWrapper &copy) : obj(copy.obj) {
+        if (obj != nullptr)
+            obj->AddRef();
+    }
+    ComWrapper(ComWrapper &&move) noexcept : obj(move.obj) { move.obj = nullptr; }
+    ComWrapper<T> &operator=(const ComWrapper<T> &copy) {
+        release();
+        obj = copy.obj;
+        if (obj != nullptr)
+            obj->AddRef();
+        return *this;
+    }
+    ComWrapper<T> &operator=(ComWrapper<T> &&move) noexcept {
+        release();
+        obj = move.obj;
+        move.obj = nullptr;
+        return *this;
+    }
+    ComWrapper<T> &operator=(T *rawPtr) {
+        release();
+        obj = rawPtr;
+        return *this;
+    }
 
-	void release() {
-		if (obj != nullptr) {
-			obj->Release();
-			obj = nullptr;
-		}
-	}
+    void release() {
+        if (obj != nullptr) {
+            obj->Release();
+            obj = nullptr;
+        }
+    }
 
-	DoublePtrProxy data() {
-		return DoublePtrProxy(this);
-	}
+    DoublePtrProxy data() { return DoublePtrProxy(this); }
 
-	T* operator->() const {
-		return obj;
-	}
-	T* ptr() const {
-		return obj;
-	}
-	T* detach() {
-		T* ret = obj;
-		obj = nullptr;
-		return ret;
-	}
-	GUID guid() const {
-		return __uuidof(T);
-	}
+    T *operator->() const { return obj; }
+    T *ptr() const { return obj; }
+    T *detach() {
+        T *ret = obj;
+        obj = nullptr;
+        return ret;
+    }
+    GUID guid() const { return __uuidof(T); }
 
-	bool operator==(IUnknown* x) const {
-		return obj == x;
-	}
-	bool isValid() const {
-		return obj != nullptr;
-	}
-	bool isInvalid() const {
-		return !isValid();
-	}
+    bool operator==(IUnknown *x) const { return obj == x; }
+    bool isValid() const { return obj != nullptr; }
+    bool isInvalid() const { return !isValid(); }
 
-	template<class U>
-	ComWrapper<U> castTo() const {
-		static_assert(std::is_convertible<U*, IUnknown*>::value, "Template argument should be COM type");
+    template <class U>
+    ComWrapper<U> castTo() const {
+        static_assert(std::is_convertible<U *, IUnknown *>::value, "Template argument should be COM type");
 
-		if (obj != nullptr) {
-			ComWrapper<U> ret;
-			obj->QueryInterface(__uuidof(ret.obj), (void**)&ret.obj);
-			return ret;
-		}
-		else {
-			return ComWrapper<U>();
-		}
-	}
+        if (obj != nullptr) {
+            ComWrapper<U> ret;
+            obj->QueryInterface(__uuidof(ret.obj), (void **)&ret.obj);
+            return ret;
+        } else {
+            return ComWrapper<U>();
+        }
+    }
 };
-
 
 using DxgiFactory5 = ComWrapper<IDXGIFactory5>;
 using DxgiAdapter1 = ComWrapper<IDXGIAdapter1>;
@@ -159,6 +135,5 @@ using MFMediaEventGenerator = ComWrapper<IMFMediaEventGenerator>;
 using MFMediaEvent = ComWrapper<IMFMediaEvent>;
 using MFMediaBuffer = ComWrapper<IMFMediaBuffer>;
 using MFSample = ComWrapper<IMFSample>;
-
 
 #endif

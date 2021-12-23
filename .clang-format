@@ -1,0 +1,26 @@
+---
+BasedOnStyle: Google
+IndentWidth: 4
+ColumnLimit: 120
+---
+
+---
+Language: Cpp
+Standard: Cpp11
+UseTab: Never
+AccessModifierOffset: -4
+IndentCaseLabels: false
+
+IncludeBlocks: Preserve
+
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortBlocksOnASingleLine: Empty
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine: Inline
+AllowShortLoopsOnASingleLine: false
+---
+
+---
+Language: Proto
+---
