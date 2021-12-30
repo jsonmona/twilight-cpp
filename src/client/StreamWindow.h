@@ -1,5 +1,5 @@
-#ifndef CLIENT_STREAM_WINDOW_H_
-#define CLIENT_STREAM_WINDOW_H_
+#ifndef TWILIGHT_CLIENT_STREAMWINDOW_H
+#define TWILIGHT_CLIENT_STREAMWINDOW_H
 
 #include <QtWidgets/qboxlayout.h>
 #include <QtWidgets/qwidget.h>

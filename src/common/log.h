@@ -1,5 +1,5 @@
-#ifndef COMMON_LOG_H_
-#define COMMON_LOG_H_
+#ifndef TWILIGHT_COMMON_LOG_H
+#define TWILIGHT_COMMON_LOG_H
 
 #ifdef _MSC_VER
 #pragma warning(push)

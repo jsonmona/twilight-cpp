@@ -1,5 +1,5 @@
-if(DAYLIGHT_D3D_DEBUG)
-    add_definitions("-DDAYLIGHT_D3D_DEBUG")
+if(TWILIGHT_D3D_DEBUG)
+    add_definitions("-DTWILIGHT_D3D_DEBUG")
 endif()
 
 set(COMMON_SRC
@@ -105,21 +105,21 @@ find_package(Git)
 if(Git_FOUND)
     execute_process(COMMAND "${GIT_EXECUTABLE}" describe --match=NeVeRmAtCh --always --abbrev=40 --dirty
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-            OUTPUT_VARIABLE DAYLIGHT_GIT_COMMIT
+            OUTPUT_VARIABLE TWILIGHT_GIT_COMMIT
             ENCODING AUTO
             TIMEOUT 10
             ERROR_QUIET OUTPUT_STRIP_TRAILING_WHITESPACE)
     execute_process(COMMAND
             "${GIT_EXECUTABLE}" log -1 --format=%ad --date=unix
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-            OUTPUT_VARIABLE DAYLIGHT_GIT_DATE
+            OUTPUT_VARIABLE TWILIGHT_GIT_DATE
             ENCODING AUTO
             TIMEOUT 10
             ERROR_QUIET OUTPUT_STRIP_TRAILING_WHITESPACE)
     configure_file(./common/version.cpp.in ./version.cpp @ONLY)
     add_library(git-info STATIC ./common/version.h "${CMAKE_CURRENT_BINARY_DIR}/version.cpp")
     target_include_directories(git-info PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
-    target_compile_definitions(git-info PRIVATE DAYLIGHT_HAS_GIT_INFO)
+    target_compile_definitions(git-info PRIVATE TWILIGHT_HAS_GIT_INFO)
 else()
     message(WARNING "Git executable not found. Version info will be missing.")
     configure_file(./common/version.cpp.in ./version.cpp COPYONLY)
@@ -137,9 +137,9 @@ target_link_libraries(common PUBLIC
 
 add_executable(server ${SERVER_SRC} ${SERVER_WINDOWS_SRC})
 target_link_libraries(server PUBLIC
-	common
-	"dxgi.lib" "d3d11.lib"
-	"mfuuid.lib" "mfplat.lib"
+    common
+    "dxgi.lib" "d3d11.lib"
+    "mfuuid.lib" "mfplat.lib"
 )
 set_target_properties(server
     PROPERTIES
@@ -147,12 +147,12 @@ set_target_properties(server
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/server"
 )
 
-if(DAYLIGHT_BUILD_GUI)
+if(TWILIGHT_BUILD_GUI)
     add_executable(client WIN32 ${CLIENT_SRC} ${CLIENT_WINDOWS_SRC})
     target_link_libraries(client PUBLIC
-	    common imgui cubeb
+        common imgui cubeb
         Qt6::Widgets Qt6::OpenGLWidgets
-	    "dxgi.lib" "d3d11.lib"
+        "dxgi.lib" "d3d11.lib"
     )
     set_target_properties(client
         PROPERTIES
@@ -190,12 +190,12 @@ target_link_libraries(common PUBLIC protobuf_gen)
 
 add_custom_command(TARGET server POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:libprotobuf-lite>" "${CMAKE_BINARY_DIR}/bin/server"
-	VERBATIM
+    VERBATIM
 )
-if(DAYLIGHT_BUILD_GUI)
+if(TWILIGHT_BUILD_GUI)
     add_custom_command(TARGET client POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:libprotobuf-lite>" "${CMAKE_BINARY_DIR}/bin/client"
-	    VERBATIM
+        VERBATIM
     )
 endif()
 
@@ -235,14 +235,14 @@ if(WIN32)
 
     add_dependencies(server fxc)
 
-    if(DAYLIGHT_BUILD_GUI)
+    if(TWILIGHT_BUILD_GUI)
         add_dependencies(client fxc)
     endif()
 endif()
 
 
 # Copy Qt libraries
-if(WIN32 AND DAYLIGHT_BUILD_GUI)
+if(WIN32 AND TWILIGHT_BUILD_GUI)
     find_program(WINDEPLOYQT windeployqt DOC "Qt windows deployment tool")
 
     if(WINDEPLOYQT)

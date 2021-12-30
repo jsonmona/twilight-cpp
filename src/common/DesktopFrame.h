@@ -1,5 +1,5 @@
-#ifndef COMMON_VIDEO_FRAME_H_
-#define COMMON_VIDEO_FRAME_H_
+#ifndef TWILIGHT_COMMON_DESKTOPFRAME_H
+#define TWILIGHT_COMMON_DESKTOPFRAME_H
 
 #include <cstdint>
 #include <memory>

@@ -8,8 +8,8 @@
 **
 ****************************************************************************/
 
-#ifndef CLIENT_FLOW_LAYOUT_H_
-#define CLIENT_FLOW_LAYOUT_H_
+#ifndef TWILIGHT_CLIENT_FLOWLAYOUT_H
+#define TWILIGHT_CLIENT_FLOWLAYOUT_H
 
 #include <QtCore/QRect>
 #include <QtWidgets/QLayout>

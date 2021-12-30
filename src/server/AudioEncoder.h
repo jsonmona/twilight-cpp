@@ -1,5 +1,5 @@
-#ifndef SERVER_AUDIO_ENCODER_H_
-#define SERVER_AUDIO_ENCODER_H_
+#ifndef TWILIGHT_SERVER_AUDIOENCODER_H
+#define TWILIGHT_SERVER_AUDIOENCODER_H
 
 #include "common/ByteBuffer.h"
 #include "common/ffmpeg-headers.h"

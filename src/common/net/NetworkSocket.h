@@ -1,5 +1,5 @@
-#ifndef COMMON_NETWORK_SOCKET_H_
-#define COMMON_NETWORK_SOCKET_H_
+#ifndef TWILIGHT_COMMON_NET_NETWORKSOCKET_H
+#define TWILIGHT_COMMON_NET_NETWORKSOCKET_H
 
 #include "common/ByteBuffer.h"
 #include "common/log.h"

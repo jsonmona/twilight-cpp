@@ -1,5 +1,5 @@
-#ifndef CLIENT_STREAM_VIEWER_H_
-#define CLIENT_STREAM_VIEWER_H_
+#ifndef TWILIGHT_CLIENT_STREAMVIEWERBASE_H
+#define TWILIGHT_CLIENT_STREAMVIEWERBASE_H
 
 #include <QtWidgets/qwidget.h>
 #include <packet.pb.h>

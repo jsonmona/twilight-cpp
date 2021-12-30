@@ -1,5 +1,5 @@
-#ifndef COMMON_STATISTIC_MIXER_H_
-#define COMMON_STATISTIC_MIXER_H_
+#ifndef TWILIGHT_COMMON_STATISTICMIXER_H
+#define TWILIGHT_COMMON_STATISTICMIXER_H
 
 #include <cstdint>
 #include <vector>

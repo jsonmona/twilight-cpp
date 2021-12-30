@@ -1,5 +1,5 @@
-#ifndef COMMON_VERSION_H_
-#define COMMON_VERSION_H_
+#ifndef TWILIGHT_COMMON_VERSION_H
+#define TWILIGHT_COMMON_VERSION_H
 
 
 extern const char GIT_COMMIT[];

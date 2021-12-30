@@ -1,5 +1,5 @@
-#ifndef COMMON_CERT_STORE_H_
-#define COMMON_CERT_STORE_H_
+#ifndef TWILIGHT_COMMON_CERTSTORE_H
+#define TWILIGHT_COMMON_CERTSTORE_H
 
 #include "common/ByteBuffer.h"
 #include "common/Keypair.h"

@@ -1,5 +1,5 @@
-#ifndef COMMON_BYTE_VECTOR_H_
-#define COMMON_BYTE_VECTOR_H_
+#ifndef TWILIGHT_COMMON_BYTEBUFFER_H
+#define TWILIGHT_COMMON_BYTEBUFFER_H
 
 #include <algorithm>
 #include <cstdint>

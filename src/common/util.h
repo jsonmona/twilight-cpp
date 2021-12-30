@@ -1,5 +1,5 @@
-#ifndef COMMON_UTIL_H_
-#define COMMON_UTIL_H_
+#ifndef TWILIGHT_COMMON_UTIL_H
+#define TWILIGHT_COMMON_UTIL_H
 
 #include <atomic>
 #include <optional>

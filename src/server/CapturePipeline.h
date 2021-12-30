@@ -1,5 +1,5 @@
-#ifndef SERVER_CAPTURE_PIPELINE_H_
-#define SERVER_CAPTURE_PIPELINE_H_
+#ifndef TWILIGHT_SERVER_CAPTUREPIPELINE_H
+#define TWILIGHT_SERVER_CAPTUREPIPELINE_H
 
 #include "common/ByteBuffer.h"
 #include "common/DesktopFrame.h"

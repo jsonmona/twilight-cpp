@@ -1,9 +1,9 @@
 #include "common/version.h"
 
-#ifdef DAYLIGHT_HAS_GIT_INFO
+#ifdef TWILIGHT_HAS_GIT_INFO
 
-const char GIT_COMMIT[] = "@DAYLIGHT_GIT_COMMIT@";
-const long long GIT_DATE = @DAYLIGHT_GIT_DATE@ll;
+const char GIT_COMMIT[] = "@TWILIGHT_GIT_COMMIT@";
+const long long GIT_DATE = @TWILIGHT_GIT_DATE@ll;
 
 #else
 

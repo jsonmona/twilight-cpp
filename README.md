@@ -1,5 +1,4 @@
-## Daylight Desktop Streaming Project
-
+## Twilight Remote Desktop
 This project aims to build a open source remote desktop suitable for any uses including gaming.
 
 This project is currently in pre-alpha, so no prebuilt binaries are provided.
@@ -8,10 +7,10 @@ This project is currently in pre-alpha, so no prebuilt binaries are provided.
 Before you read this section, take a look at the last modified date of this file (README.md).
 This section might be out-of-date as this project is changing rather quickly.
 
-Now it can stream desktop with audio over internet using TLS+TCP.
-The data is encrypted and it tries to prevent MITM (Man-in-the-Middle) using PIN authentication.
-It uses an idea borrowed from Bluetooth pairing mechaism, but I'm not sure how secure it is.
-Remote control mechanism is comming soon!
+Currently it only covers one scenario: Windows host + Windows client.
+When that works quite well, I'll start working on Android client.
+
+Now it can stream desktop with audio over internet using TLS.
 
 Streaming in localhost lags by 6 frames (100 ms) on average.
 I'm investigating why, but I'm not sure yet.
@@ -30,6 +29,22 @@ Currently only Windows 10 with MSVC is tested and supported.
 More platforms will be supported later.
 
 Please consult CMakeLists.txt on root directory for build options.
+
+### Security
+I'm no security expert, so if anyone knows it is insecure, please open an issue.
+
+If client has a certificate signed by server, it can connect without any manual authentication.
+Otherwise, server will sign a certificate if client can complete a manual authentication.
+
+Manual authentication works like this:
+1. Pin is derived by hashing server's certificate pubkey, client's certificate pubkey, server's nonce, client's nonce concatenated.
+1. Then the pin is calculated on the both side.
+1. Client will display the pin, and server will prompt to enter the pin.
+1. If the pin entered matches the calculated one, the manual authentication successes.
+1. Server signs a certificate and sends it to client.
+
+I'm planning to change it not sign a certificate, but rather record client's pubkey into server's registry.
+That way, server can list allowed client list and revoke freely.
 
 ### License
 

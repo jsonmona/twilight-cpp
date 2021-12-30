@@ -1,5 +1,5 @@
-#ifndef COMMON_KEYPAIR_H_
-#define COMMON_KEYPAIR_H_
+#ifndef TWILIGHT_COMMON_KEYPAIR_H
+#define TWILIGHT_COMMON_KEYPAIR_H
 
 #include "common/ByteBuffer.h"
 #include "common/log.h"

@@ -1,5 +1,5 @@
-#ifndef COMMON_NETWORK_SERVER_H_
-#define COMMON_NETWORK_SERVER_H_
+#ifndef TWILIGHT_COMMON_NET_NETWORKSERVER_H
+#define TWILIGHT_COMMON_NET_NETWORKSERVER_H
 
 #include "common/CertStore.h"
 #include "common/log.h"

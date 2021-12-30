@@ -1,5 +1,5 @@
-#ifndef DAYLIGHT_CLIENT_HOST_LIST_H_
-#define DAYLIGHT_CLIENT_HOST_LIST_H_
+#ifndef TWILIGHT_CLIENT_HOSTLIST_H
+#define TWILIGHT_CLIENT_HOSTLIST_H
 
 #include <mbedtls/pk.h>
 #include <mbedtls/x509_crt.h>

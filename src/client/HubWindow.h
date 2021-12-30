@@ -1,5 +1,5 @@
-#ifndef CLIENT_HUB_WINDOW_H_
-#define CLIENT_HUB_WINDOW_H_
+#ifndef TWILIGHT_CLIENT_HUBWINDOW_H
+#define TWILIGHT_CLIENT_HUBWINDOW_H
 
 #include <QtCore/qpointer.h>
 #include <QtWidgets/qboxlayout.h>

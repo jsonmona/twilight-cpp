@@ -1,5 +1,5 @@
-#ifndef COMMON_RING_BUFFER_H_
-#define COMMON_RING_BUFFER_H_
+#ifndef TWILIGHT_COMMON_RINGBUFFER_H
+#define TWILIGHT_COMMON_RINGBUFFER_H
 
 #include "common/util.h"
 
