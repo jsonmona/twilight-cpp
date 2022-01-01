@@ -14,7 +14,8 @@ PREFIX = 'TWILIGHT_'
 PATTERNS = [ '**/*.h' ]
 
 REGEX_GUARD = re.compile(r'^#ifndef ([^ ]+)\r?\n#define \1$', re.M)
-REGEX_ENDIF = re.compile(f'^#endif', re.M)
+REGEX_ENDIF = re.compile(r'^#endif', re.M)
+REGEX_NOT_IDENTIFIER = re.compile(r'[^_a-zA-Z0-9]')
 
 EXPECTS_NONE = 0
 EXPECTS_COMMENT_START = 1
@@ -88,6 +89,7 @@ def process_file(path, fix=False):
     if expected[0] == '_':
         expected = expected[1:]
     expected = expected.replace('.', '_')
+    expected = REGEX_NOT_IDENTIFIER.sub('', expected)
     expected = PREFIX + expected
 
     guard = guards[0].group(1).strip()
