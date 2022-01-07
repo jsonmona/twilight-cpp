@@ -250,7 +250,7 @@ bool StreamServer::doAuth_() {
     status = clientPubkeyCtx.parsePubkey(clientPubkey);
     check_quit(!status, log, "Failed to parse client pubkey");
 
-    std::string subjectName = "O=daylight,OU=";
+    std::string subjectName = "O=twilight,OU=";
     subjectName += "hash";
     subjectName += ",CN=";
     subjectName += clientHostname;  // TODO: Validate hostname

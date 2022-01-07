@@ -36,8 +36,8 @@ void CertStore::loadCert(const char *filename) {
     }
 
     if (genCert) {
-        // Example: O=daylight,OU=<hash>,CN=<hostname>
-        std::string subjectName = "O=daylight,OU=";
+        // Example: O=twilight,OU=<hash>,CN=<hostname>
+        std::string subjectName = "O=twilight,OU=";
         subjectName += keypair_->fingerprintSHA256().intoHexString();
         subjectName += ",CN=";
         subjectName += "hostname";
@@ -84,7 +84,7 @@ ByteBuffer CertStore::genCert_(const char *subjectName, const char *issuerName, 
     mbedtls_ctr_drbg_init(&ctr_drbg);
     mbedtls_x509write_crt_init(&ctx);
 
-    const char *pers = "daylight-certgen";
+    const char *pers = "twilight-certgen";
     const unsigned char *persPtr = reinterpret_cast<const unsigned char *>(pers);
     ret = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy, persPtr, strlen(pers));
 

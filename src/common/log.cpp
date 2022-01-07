@@ -41,13 +41,13 @@ private:
 LoggerPtr getGlobalLogger() {
     static std::mutex createLoggerLock;
 
-    LoggerPtr ptr = spdlog::get("daylight");
+    LoggerPtr ptr = spdlog::get("twilight");
     if (ptr != nullptr)
         return ptr;
 
     std::lock_guard lock(createLoggerLock);
 
-    ptr = spdlog::get("daylight");
+    ptr = spdlog::get("twilight");
     if (ptr != nullptr)
         return ptr;
 
@@ -56,7 +56,7 @@ LoggerPtr getGlobalLogger() {
     sinks.emplace_back(std::make_shared<spdlog::sinks::msvc_sink_mt>());
     sinks.emplace_back(std::make_shared<spdlog::sinks::wincolor_stdout_sink_mt>(spdlog::color_mode::automatic));
 
-    ptr = std::make_shared<spdlog::logger>("daylight", sinks.begin(), sinks.end());
+    ptr = std::make_shared<spdlog::logger>("twilight", sinks.begin(), sinks.end());
     spdlog::register_logger(ptr);
     spdlog::set_default_logger(ptr);
 
@@ -66,7 +66,7 @@ LoggerPtr getGlobalLogger() {
 LoggerPtr createNamedLogger(const std::string &tag) {
     static std::mutex createLoggerLock;
 
-    std::string name = "daylight::" + tag;
+    std::string name = "twilight::" + tag;
 
     LoggerPtr ptr = spdlog::get(name);
     if (ptr != nullptr)

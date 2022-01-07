@@ -52,12 +52,12 @@ int main() {
 
     StreamServer stream;
 
-    log->info("Starting daylight streaming server...");
+    log->info("Starting twilight remote desktop server...");
 
     stream.start();
     Sleep(3600 * 1000);
 
-    log->info("Stopping daylight streaming server...");
+    log->info("Stopping twilight remote desktop server...");
     stream.stop();
 
     MFShutdown();

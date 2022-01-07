@@ -149,7 +149,7 @@ void StreamWindow::runAudio_() {
     self->log = log;
 
     cubeb *cubebCtx = nullptr;
-    stat = cubeb_init(&cubebCtx, "Daylight client", nullptr);
+    stat = cubeb_init(&cubebCtx, "Twilight Remote Desktop Client", nullptr);
     check_quit(stat != CUBEB_OK, log, "Failed to intialize cubeb");
 
     cubeb_stream_params outParam = {};

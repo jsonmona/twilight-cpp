@@ -7,8 +7,6 @@
 #include <string>
 #include <type_traits>
 
-#define DAYLIGHT_HEX_DIGITS "0123456789ABCDEF"
-
 class ByteBuffer {
 public:
     template <class T>
@@ -96,12 +94,13 @@ public:
     }
 
     std::string intoHexString() const {
+        static constexpr char DIGITS[] = "0123456789ABCDEF";
         std::string ret;
         ret.reserve(size_ * 2);
         for (size_t i = 0; i < size_; i++) {
             uint8_t val = data()[i];
-            ret.push_back(DAYLIGHT_HEX_DIGITS[val / 16]);
-            ret.push_back(DAYLIGHT_HEX_DIGITS[val % 16]);
+            ret.push_back(DIGITS[val / 16]);
+            ret.push_back(DIGITS[val % 16]);
         }
         return ret;
     }

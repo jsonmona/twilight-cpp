@@ -30,7 +30,7 @@ void Keypair::loadOrGenerate(const char *filename) {
         mbedtls_entropy_init(&entropy);
         mbedtls_ctr_drbg_init(&ctr_drbg);
 
-        const char *pers = "daylight-keygen";
+        const char *pers = "twilight-keygen";
         const unsigned char *persPtr = reinterpret_cast<const unsigned char *>(pers);
         ret = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy, persPtr, strlen(pers));
 

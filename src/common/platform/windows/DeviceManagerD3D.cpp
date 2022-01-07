@@ -56,7 +56,7 @@ DeviceManagerD3D::DeviceManagerD3D() : log(createNamedLogger("DeviceManagerD3D")
     HRESULT hr;
 
     UINT flags = 0;
-#if !defined(NDEBUG) && defined(DAYLIGHT_D3D_DEBUG)
+#if !defined(NDEBUG) && defined(TWILIGHT_D3D_DEBUG)
     flags |= DXGI_CREATE_FACTORY_DEBUG;
 #endif
     hr = CreateDXGIFactory2(flags, dxgiFactory.guid(), (void **)dxgiFactory.data());
@@ -75,7 +75,7 @@ DeviceManagerD3D::DeviceManagerD3D() : log(createNamedLogger("DeviceManagerD3D")
     log->info("Selected DXGI output: {}", intoUTF8(outputDesc.DeviceName));
 
     UINT flag = D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_VIDEO_SUPPORT;
-#if !defined(NDEBUG) && defined(DAYLIGHT_D3D_DEBUG)
+#if !defined(NDEBUG) && defined(TWILIGHT_D3D_DEBUG)
     flag |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
 
