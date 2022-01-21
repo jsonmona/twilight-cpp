@@ -15,35 +15,8 @@
 #include <vector>
 
 class EncoderD3D {
-    struct SideData {
-        long long pts;
-        std::chrono::steady_clock::time_point inputTime;
-    };
-
-    LoggerPtr log;
-
-    int width, height;
-    long long frameCnt;
-
-    bool waitingInput;
-
-    std::function<void(DesktopFrame<ByteBuffer>&&)> onDataAvailable;
-
-    std::deque<DesktopFrame<SideData>> extraData;
-
-    MFDxgiDeviceManager mfDeviceManager;
-    MFTransform encoder;
-    MFMediaEventGenerator eventGen;
-    DWORD inputStreamId, outputStreamId;
-    StatisticMixer statMixer;
-
-    void init_();
-
-    void pushEncoderTexture_(const D3D11Texture2D& tex, long long sampleDur, long long sampleTime);
-    ByteBuffer popEncoderData_(long long* sampleTime);
-
 public:
-    EncoderD3D(DeviceManagerD3D _devs, int _width, int _height);
+    explicit EncoderD3D(DeviceManagerD3D _devs);
     ~EncoderD3D();
 
     template <typename Fn>
@@ -59,6 +32,35 @@ public:
     StatisticMixer::Stat calcEncoderStat() { return statMixer.calcStat(); }
 
     void pushFrame(DesktopFrame<D3D11Texture2D>&& cap);
+
+private:
+    struct SideData {
+        long long pts;
+        std::chrono::steady_clock::time_point inputTime;
+    };
+
+    LoggerPtr log;
+
+    int width, height;
+    long long frameCnt;
+
+    bool waitingInput;
+    bool initialized;
+
+    std::function<void(DesktopFrame<ByteBuffer>&&)> onDataAvailable;
+
+    std::deque<DesktopFrame<SideData>> extraData;
+
+    MFDxgiDeviceManager mfDeviceManager;
+    MFTransform encoder;
+    MFMediaEventGenerator eventGen;
+    DWORD inputStreamId, outputStreamId;
+    StatisticMixer statMixer;
+
+    void init_();
+
+    void pushEncoderTexture_(const D3D11Texture2D& tex, long long sampleDur, long long sampleTime);
+    ByteBuffer popEncoderData_(long long* sampleTime);
 };
 
 #endif

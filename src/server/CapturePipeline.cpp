@@ -10,9 +10,9 @@ std::unique_ptr<CapturePipeline> CapturePipeline::createInstance() {
 
     DeviceManagerD3D devs;
     if (devs.isVideoSupported())
-        ptr = std::make_unique<CapturePipelineD3D>(devs, 1920, 1080, ScaleType::NV12);
+        ptr = std::make_unique<CapturePipelineD3D>(devs, ScaleType::NV12);
     else
-        ptr = std::make_unique<CapturePipelineD3DSoft>(devs, 1280, 720, ScaleType::NV12);
+        ptr = std::make_unique<CapturePipelineD3DSoft>(devs, ScaleType::NV12);
 
     return ptr;
 }

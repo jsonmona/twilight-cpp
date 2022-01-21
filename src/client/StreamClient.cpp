@@ -1,56 +1,39 @@
 #include "StreamClient.h"
 
+#include "common/util.h"
+#include "common/version.h"
+
 #include <auth.pb.h>
-#include <mbedtls/sha256.h>
-#include <mbedtls/sha512.h>
 #include <packet.pb.h>
 
-#include "common/util.h"
+#include <mbedtls/sha512.h>
 
 constexpr uint16_t SERVICE_PORT = 6495;
-constexpr int32_t AUTH_PROTOCOL_VERSION = 1;
+constexpr int32_t PROTOCOL_VERSION = 1;
 
 StreamClient::StreamClient() : log(createNamedLogger("StreamClient")) {
     conn.setOnDisconnected([this](std::string_view msg) { onStateChange(State::DISCONNECTED, msg); });
 
-    keypair.loadOrGenerate("privkey.der");
+    std::unique_ptr<Keypair> keypair = std::make_unique<Keypair>();
+    keypair->loadOrGenerate("privkey.der");
+    cert.loadKey(std::move(keypair));
+    cert.loadCert("cert.der");
 }
 
 StreamClient::~StreamClient() {}
 
 void StreamClient::connect(HostListEntry host) {
-    if (host->hasClientCert()) {
-        bool removeCert = !host->hasServerCert();
+    bool needsAuth = !host->certHash.isValid();
+    host->updateLastConnected();
 
-        if (host->hasServerCert()) {
-            int ret;
-            uint32_t flags;
-            ret = mbedtls_x509_crt_verify(&host->clientCert, &host->serverCert, nullptr, nullptr, &flags, nullptr,
-                                          nullptr);
-            if (ret < 0)
-                removeCert = true;
-        }
-
-        if (removeCert) {
-            mbedtls_x509_crt_free(&host->clientCert);
-            mbedtls_x509_crt_init(&host->clientCert);
-        }
-    }
-
-    bool needsAuth = !host->hasClientCert();
-
-    if (host->hasServerCert())
-        conn.setRemoteCert(&host->serverCert);
-
-    if (host->hasClientCert())
-        conn.setLocalCert(&host->clientCert, keypair.pk());
+    conn.setExpectedRemoteCert(host->certHash);
+    conn.setLocalCert(cert.cert(), cert.keypair().pk());
 
     recvThread = std::thread([this, host, needsAuth]() {
         if (conn.connect(host->addr[0].c_str(), SERVICE_PORT)) {
-            if (needsAuth || !conn.verifyCert()) {
-                onStateChange(State::AUTHENTICATING, "");
-                if (!doAuth_(host))
-                    onStateChange(State::DISCONNECTED, "Auth failed");  // TODO: Find a way to localize this
+            if (!doIntro_(host, needsAuth || !conn.verifyCert())) {
+                onStateChange(State::DISCONNECTED, "Auth failed");  // TODO: Find a way to localize this
+                return;
             }
             onStateChange(State::CONNECTED, "");
             _runRecv();
@@ -81,7 +64,7 @@ void StreamClient::_runRecv() {
 }
 
 // Returns negative on error (mbedtls error code)
-static int computePin(const ByteBuffer &serverPubkey, const ByteBuffer &clientPubkey, const ByteBuffer &serverNonce,
+static int computePin(const ByteBuffer &serverCert, const ByteBuffer &clientCert, const ByteBuffer &serverNonce,
                       const ByteBuffer &clientNonce) {
     static_assert(std::numeric_limits<int>::max() > 99999999, "Int is too small to compute pin!");
 
@@ -89,13 +72,13 @@ static int computePin(const ByteBuffer &serverPubkey, const ByteBuffer &clientPu
     ByteBuffer payload;
     ByteBuffer hash(64);
 
-    payload.reserve(serverPubkey.size() + clientPubkey.size() + serverNonce.size() + clientNonce.size());
-    payload.append(serverPubkey);
-    payload.append(clientPubkey);
+    payload.reserve(serverCert.size() + clientCert.size() + serverNonce.size() + clientNonce.size());
+    payload.append(serverCert);
+    payload.append(clientCert);
     payload.append(serverNonce);
     payload.append(clientNonce);
 
-    ret = mbedtls_sha256_ret(payload.data(), payload.size(), hash.data(), 0);
+    ret = mbedtls_sha512_ret(payload.data(), payload.size(), hash.data(), 0);
     if (ret < 0)
         return ret;
 
@@ -103,22 +86,120 @@ static int computePin(const ByteBuffer &serverPubkey, const ByteBuffer &clientPu
                      (uint64_t)hash[4] << 32 | (uint64_t)hash[5] << 40 | (uint64_t)hash[6] << 48 |
                      (uint64_t)hash[7] << 56;
 
-    int output = 0;
-    for (int i = 0; i < 8; i++) {
-        output *= 10;
-        output += value % 10;
-        value /= 10;
-    }
-
-    return output;
+    return value % 100000000;
 }
 
-bool StreamClient::doAuth_(HostListEntry host) {
+bool StreamClient::doIntro_(const HostListEntry &host, bool forceAuth) {
+    msg::Packet pkt;
+
+    /* ClientIntro */ {
+        pkt.set_extra_data_len(0);
+        auto *now = pkt.mutable_client_intro();
+        now->set_protocol_version(PROTOCOL_VERSION);
+        *now->mutable_commit_name() = GIT_COMMIT;
+
+        if (!conn.send(pkt, nullptr))
+            return false;
+    }
+
+    bool authRequired = forceAuth;
+
+    if (!conn.recv(&pkt, nullptr))
+        return false;
+
+    check_quit(pkt.msg_case() != msg::Packet::kServerIntro, log, "Expected ServerIntro, received {}", pkt.msg_case());
+    auto &serverIntro = pkt.server_intro();
+    if (serverIntro.status() != msg::ServerIntro_Status_OK) {
+        switch (serverIntro.status()) {
+        case msg::ServerIntro_Status_VERSION_MISMATCH:
+            error_quit(log, "Protocol version mismatch: local={} remote={}", PROTOCOL_VERSION,
+                       serverIntro.protocol_version());
+            break;
+        case msg::ServerIntro_Status_AUTH_REQUIRED:
+            authRequired = true;
+            break;
+        default:
+            error_quit(log, "ServerIntro returned with unknown error: {}", serverIntro.status());
+            break;
+        }
+    }
+
+    log->info("Greeted by server version {} ({})", serverIntro.protocol_version(), serverIntro.commit_name());
+    if (authRequired) {
+        log->info("Auth required...");
+
+        if (!doAuth_(host)) {
+            log->warn("Failed to authenticate");
+            return false;
+        }
+    }
+
+    /* QueryHostCapsRequest */ {
+        auto *req = pkt.mutable_query_host_caps_request();
+        req->set_codec(msg::Codec::H264_BASELINE);
+
+        if (!conn.send(pkt, nullptr))
+            return false;
+    }
+
+    if (!conn.recv(&pkt, nullptr))
+        return false;
+    check_quit(pkt.msg_case() != msg::Packet::kQueryHostCapsResponse, log,
+               "Expected QueryHostCapsResponse, received {}", pkt.msg_case());
+
+    auto &hostcaps = pkt.query_host_caps_response();
+    if (hostcaps.status() != msg::QueryHostCapsResponse_Status_OK)
+        error_quit(log, "Failed to query host caps");
+
+    int nativeHeight = hostcaps.native_height();
+    int nativeWidth = hostcaps.native_width();
+    int nativeFpsDen = hostcaps.native_fps_den();
+    int nativeFpsNum = hostcaps.native_fps_num();
+
+    /* ConfigureStreamRequest */ {
+        auto *req = pkt.mutable_configure_stream_request();
+        req->set_codec(msg::Codec::H264_BASELINE);
+        req->set_width(nativeWidth);
+        req->set_height(nativeHeight);
+        req->set_fps_den(nativeFpsDen);
+        req->set_fps_num(nativeFpsNum);
+
+        if (!conn.send(pkt, nullptr))
+            return false;
+    }
+
+    if (!conn.recv(&pkt, nullptr))
+        return false;
+
+    check_quit(pkt.msg_case() != msg::Packet::kConfigureStreamResponse, log,
+               "Expected ConfigureStreamResponse, received {}", pkt.msg_case());
+    auto &configureStreamResponse = pkt.configure_stream_response();
+
+    if (configureStreamResponse.status() != msg::ConfigureStreamResponse_Status_OK) {
+        switch (configureStreamResponse.status()) {
+        case msg::ConfigureStreamResponse_Status_UNSUPPORTED_CODEC:
+            error_quit(log, "Failed to configure stream due to unsupported codec");
+            break;
+        default:
+            error_quit(log, "Failed to configure stream due to an unknown error");
+            break;
+        }
+    }
+
+    pkt.mutable_start_stream_request();
+    if (!conn.send(pkt, nullptr))
+        return false;
+
+    return true;
+}
+
+bool StreamClient::doAuth_(const HostListEntry &host) {
     bool status;
     int ret;
     msg::Packet pkt;
 
-    ByteBuffer nonce(16), serverNonce;
+    ByteBuffer nonce(32), serverNonce;
+    ByteBuffer serverPartialHash;
 
     mbedtls_entropy_context entropy;
     mbedtls_ctr_drbg_context ctr_drbg;
@@ -133,34 +214,37 @@ bool StreamClient::doAuth_(HostListEntry host) {
     mbedtls_ctr_drbg_free(&ctr_drbg);
     mbedtls_entropy_free(&entropy);
 
-    ByteBuffer serverPubkey = conn.getRemotePubkey();
-    ByteBuffer clientPubkey = keypair.pubkey();
+    ByteBuffer serverCert = conn.getRemoteCert();
+    ByteBuffer clientCert = cert.der();
 
     ByteBuffer nonceHashData;
-    nonceHashData.reserve(serverPubkey.size() + clientPubkey.size() + nonce.size());
-    nonceHashData.append(serverPubkey);
-    nonceHashData.append(clientPubkey);
+    nonceHashData.reserve(serverCert.size() + clientCert.size() + nonce.size());
+    nonceHashData.append(serverCert);
+    nonceHashData.append(clientCert);
     nonceHashData.append(nonce);
 
     ByteBuffer payload;
-    payload.reserve(std::min<size_t>(64, 48 + clientPubkey.size()));
+    payload.reserve(64);
     ret = mbedtls_sha512_ret(nonceHashData.data(), nonceHashData.size(), payload.data(), 1);
     check_quit(ret < 0, log, "Failed to calculate nonce hash: {}", interpretMbedtlsError(ret));
 
     // Truncate to SHA-384
     payload.resize(48);
-    payload.append(clientPubkey);
 
-    auto signReq = pkt.mutable_sign_request();
-    *signReq->mutable_hostname() = "CLIENT-TESTING";
-    signReq->set_auth_protocol_version(AUTH_PROTOCOL_VERSION);
+    auto signReq = pkt.mutable_auth_request();
+    signReq->set_client_nonce_len(nonce.size());
+    *signReq->mutable_hostname() = "localhost";
     pkt.set_extra_data_len(payload.size());
     status = conn.send(pkt, payload);
     if (!status)
         return false;
 
-    status = conn.recv(&pkt, &serverNonce);
-    if (!status || pkt.msg_case() != msg::Packet::kServerNonceNotify)
+    status = conn.recv(&pkt, &serverPartialHash);
+    if (!status || pkt.msg_case() != msg::Packet::kServerPartialHashNotify)
+        return false;
+
+    int serverNonceLen = pkt.server_partial_hash_notify().server_nonce_len();
+    if (serverNonceLen < 16)
         return false;
 
     pkt.mutable_client_nonce_notify();
@@ -169,42 +253,30 @@ bool StreamClient::doAuth_(HostListEntry host) {
     if (!status)
         return false;
 
-    int pin = computePin(serverPubkey, clientPubkey, serverNonce, nonce);
+    status = conn.recv(&pkt, &serverNonce);
+    if (!status || pkt.msg_case() != msg::Packet::kServerNonceNotify)
+        return false;
+
+    int pin = computePin(serverCert, clientCert, serverNonce, nonce);
     if (pin < 0) {
         log->error("Failed to compute pin: {}", interpretMbedtlsError(pin));
         return false;
     }
-
-    status = conn.recv(&pkt, nullptr);
-    if (!status || pkt.msg_case() != msg::Packet::kServerPinReady)
-        return false;
 
     log->info("Pin: {}", pin);
     if (onDisplayPin)
         onDisplayPin(pin);
 
     status = conn.recv(&pkt, &payload);
-    if (!status || pkt.msg_case() != msg::Packet::kSignResponse)
+    if (!status || pkt.msg_case() != msg::Packet::kAuthResponse)
         return false;
 
-    auto *signResponse = pkt.mutable_sign_response();
-    if (signResponse->status() != msg::SignResponse_AuthStatus_SUCCESS)
+    auto *signResponse = pkt.mutable_auth_response();
+    if (signResponse->status() != msg::AuthResponse_Status_OK)
         return false;
 
-    ByteBuffer serverCert = conn.getRemoteCert();
-    ret = mbedtls_x509_crt_parse(&host->serverCert, serverCert.data(), serverCert.size());
-    if (ret < 0) {
-        log->error("Failed to parse server certificate: {}", interpretMbedtlsError(ret));
-        return ret;
-    }
+    host->certHash = CertHash::digest(CertHash::HashType::SHA256, serverCert);
 
-    ret = mbedtls_x509_crt_parse(&host->clientCert, payload.data(), payload.size());
-    if (ret < 0) {
-        log->error("Failed to parse received certificate: {}", interpretMbedtlsError(ret));
-        return false;
-    }
-
-    log->info("Successfully received certificate");
-
+    log->info("Auth successful");
     return true;
 }

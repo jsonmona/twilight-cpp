@@ -12,6 +12,11 @@ std::optional<ByteBuffer> loadEntireFile(const char *path);
 
 bool writeByteBuffer(const char *filename, const ByteBuffer &data);
 
+ByteBuffer hashBytesSHA256(const ByteBuffer &raw);
+
+// Returns true if equals
+bool secureMemcmp(const void *a, const void *b, size_t bytes);
+
 template <typename Fn>
 void stringSplit(std::string_view str, char ch, Fn callback) {
     size_t begin = 0;

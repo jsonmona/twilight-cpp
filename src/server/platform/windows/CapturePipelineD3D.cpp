@@ -1,12 +1,7 @@
 #include "CapturePipelineD3D.h"
 
-CapturePipelineD3D::CapturePipelineD3D(DeviceManagerD3D _devs, int w, int h, ScaleType type)
-    : log(createNamedLogger("CapturePipelineD3D")),
-      capture(_devs),
-      scale(ScaleD3D::createInstance(w, h, type, false)),
-      encoder(_devs, w, h) {
-    scale->init(_devs.device, _devs.context);
-}
+CapturePipelineD3D::CapturePipelineD3D(DeviceManagerD3D devs_, ScaleType type)
+    : log(createNamedLogger("CapturePipelineD3D")), devs(devs_), scaleType(type), capture(devs_), encoder(devs_) {}
 
 CapturePipelineD3D::~CapturePipelineD3D() {
     if (runThread.joinable())
@@ -21,19 +16,33 @@ void CapturePipelineD3D::start() {
         runThread.join();
 
     encoder.start();
-    capture.start(60);
+    capture.start();
 
     flagRun.store(true, std::memory_order_release);
     runThread = std::thread([this]() { run_(); });
 }
 
 void CapturePipelineD3D::stop() {
-    flagRun.store(false, std::memory_order_release);
+    flagRun.exchange(false, std::memory_order_release);
     // runThread.join();
-    // Can't join here because runThread may be the one calling stop; I don't like it
+    // FIXME: Can't join here because runThread may be the one calling stop; I don't like it
 
     capture.stop();
     encoder.stop();
+}
+
+void CapturePipelineD3D::getNativeMode(int* width, int* height, Rational* framerate) {
+    capture.getCurrentMode(width, height, framerate);
+}
+
+void CapturePipelineD3D::setMode(int width, int height, Rational framerate) {
+    capture.setFramerate(framerate);
+    scale = ScaleD3D::createInstance(width, height, scaleType, false);
+    scale->init(devs.device, devs.context);
+
+    // FIXME: Ugly code
+    encoder.~EncoderD3D();
+    new (&encoder) EncoderD3D(devs);
 }
 
 void CapturePipelineD3D::run_() {

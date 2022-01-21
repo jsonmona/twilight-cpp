@@ -7,8 +7,7 @@
 
 using namespace std::chrono_literals;
 
-EncoderSoftware::EncoderSoftware(int _width, int _height)
-    : log(createNamedLogger("EncoderSoftware")), width(_width), height(_height), statMixer(120) {}
+EncoderSoftware::EncoderSoftware() : log(createNamedLogger("EncoderSoftware")), width(-1), height(-1), statMixer(120) {}
 
 EncoderSoftware::~EncoderSoftware() {
     if (runThread.joinable())
@@ -26,6 +25,11 @@ void EncoderSoftware::start() {
 
 void EncoderSoftware::stop() {
     flagRun.store(false, std::memory_order_release);
+}
+
+void EncoderSoftware::setResolution(int width, int height) {
+    this->width = width;
+    this->height = height;
 }
 
 void EncoderSoftware::run_() {

@@ -22,15 +22,14 @@ static AVPixelFormat scale2avpixfmt(ScaleType type) {
     }
 }
 
-CapturePipelineD3DSoft::CapturePipelineD3DSoft(DeviceManagerD3D _devs, int w, int h, ScaleType type)
+CapturePipelineD3DSoft::CapturePipelineD3DSoft(DeviceManagerD3D devs_, ScaleType type)
     : log(createNamedLogger("CapturePipelineD3DSoft")),
-      capture(_devs),
+      scaleType(type),
+      capture(devs_),
       scale(),
-      encoder(w, h),
-      device(_devs.device),
-      context(_devs.context) {
-    scale.setOutputFormat(w, h, scale2avpixfmt(type));
-}
+      encoder(),
+      device(devs_.device),
+      context(devs_.context) {}
 
 CapturePipelineD3DSoft::~CapturePipelineD3DSoft() {}
 
@@ -40,7 +39,7 @@ void CapturePipelineD3DSoft::start() {
     capture.setOnNextFrame([this](DesktopFrame<D3D11Texture2D>&& cap) { captureNextFrame_(std::move(cap)); });
     encoder.setDataAvailableCallback(writeOutput);
 
-    capture.start(60);
+    capture.start();
     encoder.start();
 
     flagRun.store(true, std::memory_order_release);
@@ -53,6 +52,19 @@ void CapturePipelineD3DSoft::stop() {
 
     encoder.stop();
     capture.stop();
+}
+
+void CapturePipelineD3DSoft::getNativeMode(int* width, int* height, Rational* framerate) {
+    capture.getCurrentMode(width, height, framerate);
+}
+
+void CapturePipelineD3DSoft::setMode(int width, int height, Rational framerate) {
+    capture.setFramerate(framerate);
+    scale.setOutputFormat(width, height, scale2avpixfmt(scaleType));
+
+    // FIXME: Ugly code
+    encoder.~EncoderSoftware();
+    new (&encoder) EncoderSoftware();
 }
 
 void CapturePipelineD3DSoft::run_() {

@@ -44,7 +44,7 @@ private:
     LoggerPtr log;
 
     NetworkSocket conn;
-    Keypair keypair;
+    CertStore cert;
 
     std::function<void(const msg::Packet &, uint8_t *)> onNextPacket;
     std::function<void(State, std::string_view msg)> onStateChange;
@@ -52,7 +52,8 @@ private:
 
     std::thread recvThread;
     void _runRecv();
-    bool doAuth_(HostListEntry host);
+    bool doIntro_(const HostListEntry &host, bool forceAuth);
+    bool doAuth_(const HostListEntry &host);
 };
 
 #endif

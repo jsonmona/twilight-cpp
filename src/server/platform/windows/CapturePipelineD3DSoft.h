@@ -15,7 +15,23 @@
 #include <thread>
 
 class CapturePipelineD3DSoft : public CapturePipeline {
+public:
+    CapturePipelineD3DSoft(DeviceManagerD3D devs_, ScaleType type);
+    ~CapturePipelineD3DSoft() override;
+
+    void start() override;
+    void stop() override;
+
+    void getNativeMode(int* width, int* height, Rational* framerate) override;
+
+    void setMode(int width, int height, Rational framerate) override;
+
+    StatisticMixer::Stat calcCaptureStat() override { return capture.calcCaptureStat(); }
+    StatisticMixer::Stat calcEncoderStat() override { return encoder.calcEncoderStat(); }
+
+private:
     LoggerPtr log;
+    ScaleType scaleType;
 
     CaptureD3D capture;
     ScaleSoftware scale;
@@ -34,16 +50,6 @@ class CapturePipelineD3DSoft : public CapturePipeline {
     void run_();
     D3D11_TEXTURE2D_DESC copyToStageTex_(const D3D11Texture2D& tex);
     void captureNextFrame_(DesktopFrame<D3D11Texture2D>&& cap);
-
-public:
-    CapturePipelineD3DSoft(DeviceManagerD3D _devs, int w, int h, ScaleType type);
-    ~CapturePipelineD3DSoft() override;
-
-    void start() override;
-    void stop() override;
-
-    StatisticMixer::Stat calcCaptureStat() override { return capture.calcCaptureStat(); }
-    StatisticMixer::Stat calcEncoderStat() override { return encoder.calcEncoderStat(); }
 };
 
 #endif

@@ -1,5 +1,7 @@
 #include "util.h"
 
+#include <mbedtls/sha256.h>
+
 #include <cstdio>
 
 std::optional<ByteBuffer> loadEntireFile(const char *path) {
@@ -54,4 +56,23 @@ bool writeByteBuffer(const char *filename, const ByteBuffer &data) {
     fclose(f);
 
     return offset == data.size();
+}
+
+bool secureMemcmp(const void *a, const void *b, size_t bytes) {
+    const volatile unsigned char *pa = reinterpret_cast<const volatile unsigned char *>(a);
+    const volatile unsigned char *pb = reinterpret_cast<const volatile unsigned char *>(b);
+
+    unsigned char x = 0;
+    for (size_t i = 0; i < bytes; i++)
+        x |= pa[i] ^ pb[i];
+
+    return x == 0;
+}
+
+ByteBuffer hashBytesSHA256(const ByteBuffer &raw) {
+    ByteBuffer ret(32);
+    int status = mbedtls_sha256_ret(raw.data(), raw.size(), ret.data(), 0);
+    if (status != 0)
+        abort();  // Unlikely to happen
+    return ret;
 }

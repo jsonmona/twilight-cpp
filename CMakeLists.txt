@@ -9,6 +9,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(TWILIGHT_BUILD_GUI "Build GUI targets" ON)
 option(TWILIGHT_D3D_DEBUG "Create dxgi objects in debug mode (Only applied to debug build)" ON)
+option(TWILIGHT_WRITE_SSLKEYLOG "Make server write SSL Keylog file (insecure)" OFF)
 
 set(TWILIGHT_QT6_PATH "" CACHE PATH "Path to Qt6 (example: C:/Qt/6.1.1/msvc2019_64)")
 

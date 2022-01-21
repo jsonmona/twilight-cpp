@@ -4,39 +4,43 @@ option optimize_for = LITE_RUNTIME;
 package msg;
 
 
-// extra_data contains SHA384([server pubkey DER, client pubkey DER, client nonce].concat) and client pubkey DER concated
-// Server may response with SignResponse where status=VERSION_MISMATCH_ERROR
-message SignRequest {
-    int32 auth_protocol_version = 1;
-    string hostname = 2;
+// extra_data contains SHA384([server cert DER, client cert DER, client nonce].concat)
+message AuthRequest {
+    string hostname = 1;
+    int32 client_nonce_len = 2;
 }
 
-// extra_data contains server nonce (16 bytes)
-message ServerNonceNotify {
+// extra_data contains SHA384([server cert DER, client cert DER, server nonce].concat)
+message ServerPartialHashNotify {
+    int32 server_nonce_len = 1;
 }
 
-// extra_data contains client nonce (16 bytes)
+// extra_data contains client nonce
 // Server should check client nonce using the partial hash
 message ClientNonceNotify {
 }
 
+// extra_data contains server nonce
+// Client should check server nonce using the partial hash
+// Server should display pin enter dialog before sending this message
 // Client should display PIN after receiving this message
-// PIN: Take most significant uint64le of SHA256([server pubkey DER, client pubkey DER, server nonce, client nonce].concat)
+// Both server and client can compute PIN after this packet
+// If there were a MITM attack, the PIN would differ because certificate is different
+// PIN: Take most significant uint64le of SHA512([server cert DER, client cert DER, server nonce, client nonce].concat)
 //      Then convert it to decimal and take 8 least significant digits
 //      ex) 1234 5678
-message ServerPinReady {
+message ServerNonceNotify {
 }
 
-// extra_data may contain signed certificate in DER format
-message SignResponse {
-    enum AuthStatus {
-        SUCCESS = 0;
-        UNKNOWN_ERROR = 1;
-        PIN_ERROR = 2;
-        PUBKEY_ERROR = 3;
-        VERSION_MISMATCH_ERROR = 4;
+message AuthResponse {
+    enum Status {
+        UNKNOWN_ERROR = 0;
+        OK = 1;
+        INCORRECT_PIN = 2;
+        NONCE_TOO_SHORT = 3;
+        NO_CERT = 4;
     }
 
-    AuthStatus status = 1;
+    Status status = 1;
     string error_msg = 2;
 }

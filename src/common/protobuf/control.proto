@@ -1,0 +1,89 @@
+syntax = "proto3";
+
+option optimize_for = LITE_RUNTIME;
+package msg;
+
+
+enum Codec {
+    INVALID = 0;
+    H264_BASELINE = 1;
+}
+
+message ClientIntro {
+    int32 protocol_version = 1;
+    string commit_name = 2;
+}
+
+message ServerIntro {
+    enum Status {
+        UNKNOWN = 0;
+        OK = 1;
+        VERSION_MISMATCH = 2;
+        AUTH_REQUIRED = 3;
+    }
+
+    int32 protocol_version = 1;
+    string commit_name = 2;
+    Status status = 3;
+}
+
+message QueryHostCapsRequest {
+    Codec codec = 1;
+}
+
+message QueryHostCapsResponse {
+    enum Status {
+        UNKNOWN = 0;
+        OK = 1;
+        UNSUPPORTED_CODEC = 2;
+    }
+
+    Status status = 1;
+    Codec codec = 2;
+    int32 native_width = 3;
+    int32 native_height = 4;
+    int32 native_fps_num = 5;
+    int32 native_fps_den = 6;
+    int32 max_width = 7;
+    int32 max_height = 8;
+    int32 max_fps_num = 9;
+    int32 max_fps_den = 10;
+}
+
+message ConfigureStreamRequest {
+    Codec codec = 1;
+    int32 width = 2;
+    int32 height = 3;
+    int32 fps_num = 4;
+    int32 fps_den = 5;
+}
+
+message ConfigureStreamResponse {
+    enum Status {
+        UNKNOWN = 0;
+        OK = 1;
+        UNSUPPORTED_CODEC = 2;
+        ALREADY_STREAMING = 3;
+    }
+
+    Status status = 1;
+}
+
+message StartStreamRequest {
+}
+
+message StartStreamResponse {
+    enum Status {
+        UNKNOWN = 0;
+        OK = 1;
+        INAVLID_CONFIGURATION = 2;
+    }
+
+    Status status = 1;
+}
+
+message StopStreamRequest {
+}
+
+message StopStreamResponse {
+}

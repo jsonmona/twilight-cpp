@@ -14,7 +14,7 @@
 
 class EncoderSoftware {
 public:
-    EncoderSoftware(int _width, int _height);
+    EncoderSoftware();
     ~EncoderSoftware();
 
     template <typename Fn>
@@ -24,6 +24,8 @@ public:
 
     void start();
     void stop();
+
+    void setResolution(int width, int height);
 
     StatisticMixer::Stat calcEncoderStat() { return statMixer.calcStat(); }
 

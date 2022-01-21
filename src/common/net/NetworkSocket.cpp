@@ -46,11 +46,7 @@ private:
 };
 
 NetworkSocket::NetworkSocket()
-    : log(createNamedLogger("NetworkSocket")),
-      connected(false),
-      remoteCert(nullptr),
-      localCert(nullptr),
-      localPrivkey(nullptr) {
+    : log(createNamedLogger("NetworkSocket")), connected(false), localCert(nullptr), localPrivkey(nullptr) {
     mbedtls_net_init(&ctx);
     mbedtls_ssl_init(&ssl);
     mbedtls_ssl_config_init(&conf);
@@ -85,7 +81,6 @@ NetworkSocket::NetworkSocket(mbedtls_net_context initCtx, const mbedtls_ssl_conf
     : log(createNamedLogger("NetworkSocket")),
       connected(true),
       ctx(initCtx),
-      remoteCert(nullptr),
       localCert(nullptr),
       localPrivkey(nullptr) {
     mbedtls_ssl_init(&ssl);
@@ -128,9 +123,7 @@ bool NetworkSocket::connect(const char *addr, uint16_t port) {
     int stat;
 
     mbedtls_ssl_conf_authmode(&conf, MBEDTLS_SSL_VERIFY_OPTIONAL);
-
-    if (remoteCert != nullptr)
-        mbedtls_ssl_conf_ca_chain(&conf, remoteCert, nullptr);
+    mbedtls_ssl_conf_cert_req_ca_list(&conf, MBEDTLS_SSL_CERT_REQ_CA_LIST_DISABLED);
 
     if (localCert != nullptr)
         mbedtls_ssl_conf_own_cert(&conf, localCert, localPrivkey);
@@ -159,9 +152,27 @@ bool NetworkSocket::connect(const char *addr, uint16_t port) {
 
 bool NetworkSocket::verifyCert() {
     uint32_t flags = mbedtls_ssl_get_verify_result(&ssl);
+
+    // unlikely
     if (flags == 0)
         return true;
 
+    // Untrusted certificate
+    if ((flags & (~MBEDTLS_X509_BADCERT_NOT_TRUSTED)) == 0) {
+        ByteBuffer cert = getRemoteCert();
+        for (CertHash &hash : expectedRemoteCerts) {
+            if (hash.compare(cert))
+                return true;
+        }
+        return false;
+    }
+
+    if ((flags & MBEDTLS_X509_BADCERT_MISSING) != 0) {
+        // No certificate received
+        return false;
+    }
+
+    // TODO: It might be a good idea to return something different when faced with unknwon error
     log->info("SSL verification error: {:08x}", flags);
     return false;
 }
@@ -237,16 +248,23 @@ bool NetworkSocket::send(const msg::Packet &pkt, const uint8_t *extraData) {
 bool NetworkSocket::recv(msg::Packet *pkt, ByteBuffer *extraData) {
     std::lock_guard lock(recvLock);
 
-    if (!connected.load(std::memory_order_acquire))
-        return false;
-
     if (!inputStream) {
+        if (!connected.load(std::memory_order_acquire))
+            return false;
+
         auto *siw = new SocketInputWrapper(&ssl, [this](int errnum) { reportDisconnected(errnum); });
         zeroCopyInputStream = std::make_unique<google::protobuf::io::CopyingInputStreamAdaptor>(siw);
         inputStream = std::make_unique<google::protobuf::io::CodedInputStream>(zeroCopyInputStream.get());
     }
 
-    auto limit = inputStream->ReadLengthAndPushLimit();
+    if (!connected.load(std::memory_order_acquire))
+        return false;
+
+    int msgLen;
+    if (!inputStream->ReadVarintSizeAsInt(&msgLen))
+        return false;
+
+    auto limit = inputStream->PushLimit(msgLen);
 
     if (!pkt->ParseFromCodedStream(inputStream.get()))
         return false;
@@ -270,6 +288,15 @@ bool NetworkSocket::recv(msg::Packet *pkt, ByteBuffer *extraData) {
     }
 
     return true;
+}
+
+void NetworkSocket::setExpectedRemoteCert(CertHash hash) {
+    expectedRemoteCerts.clear();
+    expectedRemoteCerts.push_back(std::move(hash));
+}
+
+void NetworkSocket::setExpectedRemoteCert(std::vector<CertHash> &&hashList) {
+    expectedRemoteCerts = std::move(hashList);
 }
 
 ByteBuffer NetworkSocket::getRemotePubkey() {

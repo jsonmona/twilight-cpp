@@ -1,8 +1,9 @@
 #ifndef TWILIGHT_CLIENT_HOSTLIST_H
 #define TWILIGHT_CLIENT_HOSTLIST_H
 
+#include "common/CertHash.h"
+
 #include <mbedtls/pk.h>
-#include <mbedtls/x509_crt.h>
 
 #include <chrono>
 #include <memory>
@@ -18,8 +19,7 @@ public:
         std::string nickname;                                 //< Display name
         std::vector<std::string> addr;                        //< Addresses in preference order
         std::chrono::system_clock::time_point lastConnected;  //< Last connected time
-        mbedtls_x509_crt serverCert;                          //< Server's self-signed certificate (CA)
-        mbedtls_x509_crt clientCert;                          //< A certificate issued by server
+        CertHash certHash;                                    //< Hash of server certificate
 
         Entry();
         Entry(const Entry &copy) = delete;
@@ -27,8 +27,6 @@ public:
         ~Entry();
 
         bool hasConnected() const;
-        bool hasServerCert() const;
-        bool hasClientCert() const;
         void updateLastConnected();
     };
 

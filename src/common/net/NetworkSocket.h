@@ -2,6 +2,7 @@
 #define TWILIGHT_COMMON_NET_NETWORKSOCKET_H
 
 #include "common/ByteBuffer.h"
+#include "common/CertHash.h"
 #include "common/log.h"
 
 #include <mbedtls/ctr_drbg.h>
@@ -42,7 +43,9 @@ public:
 
     bool recv(msg::Packet *pkt, ByteBuffer *extraData);
 
-    void setRemoteCert(mbedtls_x509_crt *cert) { remoteCert = cert; }
+    void setExpectedRemoteCert(CertHash hash);
+    void setExpectedRemoteCert(std::vector<CertHash> &&hashList);
+
     void setLocalCert(mbedtls_x509_crt *cert, mbedtls_pk_context *privkey) {
         localCert = cert;
         localPrivkey = privkey;
@@ -60,7 +63,6 @@ private:
     mbedtls_entropy_context entropy;
     mbedtls_ctr_drbg_context ctr_drbg;
 
-    mbedtls_x509_crt *remoteCert;
     mbedtls_x509_crt *localCert;
     mbedtls_pk_context *localPrivkey;
 
@@ -69,6 +71,7 @@ private:
     std::unique_ptr<google::protobuf::io::CodedInputStream> inputStream;
 
     std::vector<int> allowedCiphersuites;
+    std::vector<CertHash> expectedRemoteCerts;
 
     std::atomic<bool> connected;
     std::mutex sendLock;

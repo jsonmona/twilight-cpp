@@ -2,6 +2,7 @@
 
 #include "common/util.h"
 
+#include <mbedtls/asn1.h>
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/entropy.h>
 #include <mbedtls/sha256.h>
@@ -23,7 +24,7 @@ void Keypair::loadOrGenerate(const char *filename) {
 
     ret = mbedtls_pk_parse_keyfile(&ctx, filename, nullptr);
     if (ret < 0) {
-        log->info("Generating EC keypair... (Reason: {})", interpretMbedtlsError(ret));
+        log->info("Generating keypair... (Reason: {})", interpretMbedtlsError(ret));
 
         mbedtls_entropy_context entropy;
         mbedtls_ctr_drbg_context ctr_drbg;
@@ -34,21 +35,28 @@ void Keypair::loadOrGenerate(const char *filename) {
         const unsigned char *persPtr = reinterpret_cast<const unsigned char *>(pers);
         ret = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy, persPtr, strlen(pers));
 
-        const mbedtls_pk_info_t *info = mbedtls_pk_info_from_type(MBEDTLS_PK_ECKEY);
+        const mbedtls_pk_info_t *info = mbedtls_pk_info_from_type(MBEDTLS_PK_RSA);
         ret = mbedtls_pk_setup(&ctx, info);
         check_quit(ret < 0, log, "Failed to setup pk: {}", interpretMbedtlsError(ret));
 
-        ret = mbedtls_ecp_gen_key(MBEDTLS_ECP_DP_SECP256R1, mbedtls_pk_ec(ctx), mbedtls_ctr_drbg_random, &ctr_drbg);
-        check_quit(ret < 0, log, "Failed to generate secp256r1 key: {}", interpretMbedtlsError(ret));
+        ret = mbedtls_rsa_gen_key(mbedtls_pk_rsa(ctx), mbedtls_ctr_drbg_random, &ctr_drbg, 2048, 65537);
+        check_quit(ret < 0, log, "Failed to generate RSA keypair: {}", interpretMbedtlsError(ret));
 
         mbedtls_ctr_drbg_free(&ctr_drbg);
         mbedtls_entropy_free(&entropy);
 
         ByteBuffer der;
-        der.resize(2048);
+        der.resize(512);
 
-        ret = mbedtls_pk_write_key_der(&ctx, der.data(), der.size());
-        check_quit(ret < 0, log, "Failed to serialize pk: {}", interpretMbedtlsError(ret));
+        while (true) {
+            ret = mbedtls_pk_write_key_der(&ctx, der.data(), der.size());
+            if (ret == MBEDTLS_ERR_ASN1_BUF_TOO_SMALL) {
+                der.resize(der.size() * 2);
+                continue;
+            }
+            check_quit(ret < 0, log, "Failed to serialize pk: {}", interpretMbedtlsError(ret));
+            break;
+        }
 
         der.shiftTowardBegin(der.size() - ret);
         der.resize(ret);
@@ -83,12 +91,20 @@ bool Keypair::parsePubkey(const ByteBuffer &key) {
 
 ByteBuffer Keypair::privkey() const {
     ByteBuffer data;
-    data.resize(16384);
+    data.resize(512);
 
     mbedtls_pk_context *ptr = const_cast<mbedtls_pk_context *>(&ctx);
+    int ret;
 
-    int ret = mbedtls_pk_write_key_der(ptr, data.data(), data.size());
-    check_quit(ret < 0, log, "Failed to serialize privkey: {}", interpretMbedtlsError(ret));
+    while (true) {
+        ret = mbedtls_pk_write_key_der(ptr, data.data(), data.size());
+        if (ret == MBEDTLS_ERR_ASN1_BUF_TOO_SMALL) {
+            data.resize(data.size() * 2);
+            continue;
+        }
+        check_quit(ret < 0, log, "Failed to serialize privkey: {}", interpretMbedtlsError(ret));
+        break;
+    }
 
     data.shiftTowardBegin(data.size() - ret);
     data.resize(ret);
@@ -99,12 +115,20 @@ ByteBuffer Keypair::privkey() const {
 
 ByteBuffer Keypair::pubkey() const {
     ByteBuffer data;
-    data.resize(16384);
+    data.resize(512);
 
     mbedtls_pk_context *ptr = const_cast<mbedtls_pk_context *>(&ctx);
+    int ret;
 
-    int ret = mbedtls_pk_write_pubkey_der(ptr, data.data(), data.size());
-    check_quit(ret < 0, log, "Failed to serialize pubkey: {}", interpretMbedtlsError(ret));
+    while (true) {
+        ret = mbedtls_pk_write_pubkey_der(ptr, data.data(), data.size());
+        if (ret == MBEDTLS_ERR_ASN1_BUF_TOO_SMALL) {
+            data.resize(data.size() * 2);
+            continue;
+        }
+        check_quit(ret < 0, log, "Failed to serialize pubkey: {}", interpretMbedtlsError(ret));
+        break;
+    }
 
     data.shiftTowardBegin(data.size() - ret);
     data.resize(ret);

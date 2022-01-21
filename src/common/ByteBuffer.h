@@ -7,6 +7,8 @@
 #include <string>
 #include <type_traits>
 
+#include <mbedtls/base64.h>
+
 class ByteBuffer {
 public:
     template <class T>
@@ -44,12 +46,13 @@ public:
 
     ~ByteBuffer() { free(ptr); }
 
-    ByteBuffer clone() {
+    ByteBuffer clone() const {
         ByteBuffer ret;
         if (size() != 0) {
             ret.resize(size());
             memcpy(ret.data(), data(), size());
         }
+        return ret;
     }
 
     void reserve(size_t newCapacity) {
@@ -94,14 +97,27 @@ public:
     }
 
     std::string intoHexString() const {
-        static constexpr char DIGITS[] = "0123456789ABCDEF";
+        static constexpr char HEX_DIGITS[] = "0123456789ABCDEF";
         std::string ret;
         ret.reserve(size_ * 2);
         for (size_t i = 0; i < size_; i++) {
             uint8_t val = data()[i];
-            ret.push_back(DIGITS[val / 16]);
-            ret.push_back(DIGITS[val % 16]);
+            ret.push_back(HEX_DIGITS[val / 16]);
+            ret.push_back(HEX_DIGITS[val % 16]);
         }
+        return ret;
+    }
+
+    std::string intoBase64String() const {
+        size_t olen = 4 * ((size_ + 2) / 3);
+        std::string ret;
+        ret.reserve(olen + 1);
+        ret.resize(olen);
+
+        int status = mbedtls_base64_encode(reinterpret_cast<uint8_t *>(ret.data()), olen + 1, &olen, data(), size_);
+        if (status != 0 || ret.size() != olen)
+            abort();  // FIXME: Use of abort
+
         return ret;
     }
 
@@ -121,7 +137,7 @@ public:
             memmove(ptr + amount, ptr, size() - amount);
     }
 
-    void write(size_t dstOffset, void *src, size_t length) {
+    void write(size_t dstOffset, const void *src, size_t length) {
         size_t newSize = std::max(size_, dstOffset + length);
         reserve(newSize);
         memcpy(ptr + dstOffset, src, length);
@@ -135,7 +151,7 @@ public:
         size_ = newSize;
     }
 
-    void append(void *src, size_t length) {
+    void append(const void *src, size_t length) {
         reserve(size_ + length);
         memcpy(ptr + size_, src, length);
         size_ += length;

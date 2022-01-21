@@ -2,6 +2,7 @@
 #define TWILIGHT_SERVER_PLATFORM_WINDOWS_CAPTURED3D_H
 
 #include "common/DesktopFrame.h"
+#include "common/Rational.h"
 #include "common/StatisticMixer.h"
 #include "common/log.h"
 
@@ -18,7 +19,6 @@
 class CaptureD3D {
     LoggerPtr log;
 
-    int fps;
     bool frameAcquired;
     bool firstFrameSent;
     bool desktopTexDirty;
@@ -49,10 +49,13 @@ public:
     CaptureD3D(DeviceManagerD3D _devs);
     ~CaptureD3D();
 
-    void start(int fps);
+    void start();
     void stop();
 
     void poll();
+
+    void setFramerate(Rational framerate);
+    void getCurrentMode(int* width, int* height, Rational* framerate);
 
     StatisticMixer::Stat calcCaptureStat() { return statMixer.calcStat(); }
 

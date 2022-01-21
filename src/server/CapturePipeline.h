@@ -3,6 +3,7 @@
 
 #include "common/ByteBuffer.h"
 #include "common/DesktopFrame.h"
+#include "common/Rational.h"
 #include "common/StatisticMixer.h"
 
 #include <packet.pb.h>
@@ -10,6 +11,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <utility>
 #include <vector>
 
 class CapturePipeline {
@@ -34,6 +36,10 @@ public:
 
     virtual void start() = 0;
     virtual void stop() = 0;
+
+    virtual void getNativeMode(int* width, int* height, Rational* framerate) = 0;
+
+    virtual void setMode(int width, int height, Rational framerate) = 0;
 
     virtual StatisticMixer::Stat calcCaptureStat() = 0;
     virtual StatisticMixer::Stat calcEncoderStat() = 0;

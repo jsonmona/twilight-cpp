@@ -2,18 +2,26 @@ if(TWILIGHT_D3D_DEBUG)
     add_definitions("-DTWILIGHT_D3D_DEBUG")
 endif()
 
+if(TWILIGHT_WRITE_SSLKEYLOG)
+    add_definitions("-DTWILIGHT_WRITE_SSLKEYLOG")
+endif()
+
 set(COMMON_SRC
     ./common/ByteBuffer.h
     ./common/DesktopFrame.h
     ./common/ffmpeg-headers.h
     ./common/RingBuffer.h
     
+    ./common/CertHash.h
+    ./common/CertHash.cpp
     ./common/CertStore.h
     ./common/CertStore.cpp
     ./common/Keypair.h
     ./common/Keypair.cpp
     ./common/log.h
     ./common/log.cpp
+    ./common/Rational.h
+    ./common/Rational.cpp
     ./common/StatisticMixer.h
     ./common/StatisticMixer.cpp
     ./common/util.h
@@ -77,6 +85,10 @@ set(SERVER_SRC
     ./server/AudioEncoder.cpp
     ./server/CapturePipeline.h
     ./server/CapturePipeline.cpp
+    ./server/Connection.h
+    ./server/Connection.cpp
+    ./server/KnownClients.h
+    ./server/KnownClients.cpp
     ./server/StreamServer.h
     ./server/StreamServer.cpp
 
@@ -181,6 +193,7 @@ macro(FN_GEN_PB FILE)
 endmacro()
 
 fn_gen_pb(auth)
+fn_gen_pb(control)
 fn_gen_pb(packet)
 fn_gen_pb(stream)
 add_library(protobuf_gen STATIC ${PB_GENERATED_FILES})

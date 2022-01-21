@@ -26,6 +26,8 @@ public:
     mbedtls_x509_crt *cert() { return &cert_; }
     Keypair &keypair() { return *keypair_; }
 
+    ByteBuffer der();
+
 private:
     LoggerPtr log;
     mbedtls_x509_crt cert_;

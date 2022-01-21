@@ -3,35 +3,6 @@ syntax = "proto3";
 option optimize_for = LITE_RUNTIME;
 package msg;
 
-enum CodecType {
-    CODEC_H264 = 0;
-}
-
-// https://docs.microsoft.com/en-us/windows/win32/medfound/10-bit-and-16-bit-yuv-video-formats#preferred-yuv-formats
-enum ColorType {
-    COLOR_NV12 = 0;
-    COLOR_AYUV = 1;
-    COLOR_P010 = 2;
-    COLOR_Y410 = 3;
-}
-
-message RequestStream {
-    CodecType codec_type = 1;
-    ColorType color_type = 2;
-    int32 bitrate = 3;
-    int32 width = 4;
-    int32 height = 5;
-}
-
-message RequestStreamAnswer {
-    bool success = 1;
-
-    CodecType codec_type = 2;
-    ColorType color_type = 3;
-    int32 width = 4;
-    int32 height = 5;
-}
-
 message ServerPerfReport {
     float capture_min = 1;
     float capture_avg = 2;
@@ -61,6 +32,8 @@ message CursorShape {
 // Extra data contains opus audio stream
 message AudioFrame {
     int32 channels = 1;
+
+    bool is_first_packet = 2;
 }
 
 message MouseInput {

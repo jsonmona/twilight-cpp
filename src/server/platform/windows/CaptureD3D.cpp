@@ -31,20 +31,16 @@ CaptureD3D::CaptureD3D(DeviceManagerD3D _devs)
 
 CaptureD3D::~CaptureD3D() {}
 
-void CaptureD3D::start(int fps) {
-    HRESULT hr;
-
-    check_quit(outputDuplication.isValid(), log, "Started without stopping");
-
+void CaptureD3D::start() {
     timeBeginPeriod(2);
 
-    this->fps = fps;
     firstFrameSent = false;
 
     // TODO: Add timeout
     while (!openDuplication_())
         Sleep(1);
 
+    check_quit(frameInterval <= 0, log, "Framerate not set before start() is called");
     lastPresentTime = getPerformanceCounter() - frameInterval;
 }
 
@@ -67,7 +63,7 @@ void CaptureD3D::poll() {
     long long nowTime = getPerformanceCounter();
     if (lastPresentTime + frameInterval <= nowTime) {
         statMixer.pushValue(static_cast<float>(nowTime - lastPresentTime) / perfCounterFreq);
-        lastPresentTime += frameInterval;
+        lastPresentTime = nowTime;
 
         DesktopFrame<D3D11Texture2D> nextFrame;
         if (desktopTexDirty)
@@ -77,6 +73,23 @@ void CaptureD3D::poll() {
 
         onNextFrame(std::move(nextFrame));
     }
+}
+
+void CaptureD3D::setFramerate(Rational framerate) {
+    frameInterval = framerate.inv().imul(perfCounterFreq);  // perfCounterFreq / framerate
+}
+
+void CaptureD3D::getCurrentMode(int* width, int* height, Rational* framerate) {
+    // TODO: Add timeout (or make it async?)
+    while (!openDuplication_())
+        Sleep(1);
+
+    DXGI_OUTDUPL_DESC desc;
+    outputDuplication->GetDesc(&desc);
+
+    *width = desc.ModeDesc.Width;
+    *height = desc.ModeDesc.Height;
+    *framerate = Rational(desc.ModeDesc.RefreshRate.Numerator, desc.ModeDesc.RefreshRate.Denominator);
 }
 
 bool CaptureD3D::tryReleaseFrame_() {
@@ -110,8 +123,6 @@ bool CaptureD3D::openDuplication_() {
     if (SUCCEEDED(hr)) {
         DXGI_OUTDUPL_DESC desc;
         outputDuplication->GetDesc(&desc);
-        frameInterval = perfCounterFreq / fps;
-        // TODO: Align FPS to actual monitor refresh rate (e.g. 59.94 hz or 60.052 hz)
 
         D3D11_TEXTURE2D_DESC texDesc = {};
         texDesc.Width = desc.ModeDesc.Width;

@@ -18,7 +18,6 @@ void CertStore::loadKey(std::unique_ptr<Keypair> &&pk) {
 }
 
 void CertStore::loadCert(const char *filename) {
-    bool genCert = false;
     int ret;
 
     check_quit(keypair_ == nullptr, log, "Unable to generate certificate from an empty keypair!");
@@ -32,15 +31,15 @@ void CertStore::loadCert(const char *filename) {
     }
     if (ret < 0) {
         log->info("Generating certificate... (Reason: {})", interpretMbedtlsError(ret));
-        genCert = true;
-    }
 
-    if (genCert) {
+        mbedtls_x509_crt_free(&cert_);
+        mbedtls_x509_crt_init(&cert_);
+
         // Example: O=twilight,OU=<hash>,CN=<hostname>
         std::string subjectName = "O=twilight,OU=";
         subjectName += keypair_->fingerprintSHA256().intoHexString();
         subjectName += ",CN=";
-        subjectName += "hostname";
+        subjectName += "localhost";
 
         ByteBuffer der = genCert_(subjectName.c_str(), subjectName.c_str(), keypair_->pk(), keypair_->pk());
 
@@ -69,6 +68,12 @@ ByteBuffer CertStore::signCert(const char *subjectName, mbedtls_pk_context *subj
     }
 
     return genCert_(subjectName, issuerName.data_char(), subjectKey, keypair_->pk());
+}
+
+ByteBuffer CertStore::der() {
+    ByteBuffer ret;
+    ret.append(cert_.raw.p, cert_.raw.len);
+    return ret;
 }
 
 ByteBuffer CertStore::genCert_(const char *subjectName, const char *issuerName, mbedtls_pk_context *subjectKey,
@@ -119,15 +124,22 @@ ByteBuffer CertStore::genCert_(const char *subjectName, const char *issuerName, 
     check_quit(ret < 0, log, "Failed to set validity: {}", interpretMbedtlsError(ret));
 
     if (isSelfsign)
-        ret = mbedtls_x509write_crt_set_basic_constraints(&ctx, 1, -1);
+        ret = mbedtls_x509write_crt_set_basic_constraints(&ctx, 1, 2);
     else
         ret = mbedtls_x509write_crt_set_basic_constraints(&ctx, 0, -1);
     check_quit(ret < 0, log, "Failed to set basic constraints: {}", interpretMbedtlsError(ret));
 
     ByteBuffer der;
-    der.resize(2048);
-    ret = mbedtls_x509write_crt_der(&ctx, der.data(), der.size(), mbedtls_ctr_drbg_random, &ctr_drbg);
-    check_quit(ret < 0, log, "Failed to serialize X.509 certificate: {}", interpretMbedtlsError(ret));
+    der.resize(512);
+    while (true) {
+        ret = mbedtls_x509write_crt_der(&ctx, der.data(), der.size(), mbedtls_ctr_drbg_random, &ctr_drbg);
+        if (ret == MBEDTLS_ERR_ASN1_BUF_TOO_SMALL) {
+            der.resize(der.size() * 2);
+            continue;
+        }
+        check_quit(ret < 0, log, "Failed to serialize X.509 certificate: {}", interpretMbedtlsError(ret));
+        break;
+    }
 
     mbedtls_x509write_crt_free(&ctx);
     mbedtls_ctr_drbg_free(&ctr_drbg);

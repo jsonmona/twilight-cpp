@@ -3,7 +3,7 @@
 #include <chrono>
 #include <deque>
 
-static std::string intoUTF8(const std::wstring_view& wideStr) {
+static std::string intoUTF8(std::wstring_view wideStr) {
     static_assert(sizeof(wchar_t) == sizeof(WCHAR), "Expects wchar_t == WCHAR (from winnt)");
 
     std::string ret;
@@ -103,11 +103,11 @@ static MFTransform getVideoEncoder(const MFDxgiDeviceManager& deviceManager, con
     return transform;
 }
 
-EncoderD3D::EncoderD3D(DeviceManagerD3D _devs, int _width, int _height)
+EncoderD3D::EncoderD3D(DeviceManagerD3D _devs)
     : log(createNamedLogger("EncoderD3D")),
-      width(_width),
-      height(_height),
       statMixer(120),
+      width(-1),
+      height(-1),
       mfDeviceManager(_devs.mfDeviceManager) {
     check_quit(!_devs.isVideoSupported(), log, "D3D does not support video");
 }
@@ -116,15 +116,12 @@ EncoderD3D::~EncoderD3D() {}
 
 void EncoderD3D::start() {
     frameCnt = 0;
-
-    init_();
-
-    eventGen = encoder.castTo<IMFMediaEventGenerator>();
-
-    encoder->ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, inputStreamId);
+    initialized = false;
 }
 
 void EncoderD3D::stop() {
+    initialized = false;
+
     encoder->ProcessMessage(MFT_MESSAGE_NOTIFY_END_OF_STREAM, inputStreamId);
     encoder->ProcessMessage(MFT_MESSAGE_COMMAND_DRAIN, 0);
 }
@@ -140,10 +137,6 @@ void EncoderD3D::init_() {
 
     // TODO: Lines with check_quit commented out means my test machine did not accept those properties.
     //      Check what E_INVALIDARG means, and if we could remove those lines
-
-    InitVariantFromUInt32((1920u << 16) | 1080u, &value);
-    hr = codec->SetValue(&CODECAPI_AVEncVideoDisplayDimension, &value);
-    // check_quit(FAILED(hr), log, "Failed to set video dimension");
 
     InitVariantFromUInt32(eAVEncVideoSourceScan_Progressive, &value);
     hr = codec->SetValue(&CODECAPI_AVEncVideoForceSourceScanType, &value);
@@ -179,8 +172,8 @@ void EncoderD3D::init_() {
     if (hr == E_NOTIMPL) {
         inputStreamId = 0;
         outputStreamId = 0;
-    }
-    check_quit(FAILED(hr), log, "Failed to duplicate output");
+    } else
+        check_quit(FAILED(hr), log, "Failed to duplicate output");
 
     if (inputStreamCnt < 1 || outputStreamCnt < 1)
         error_quit(log, "Adding stream manually is not implemented");
@@ -238,7 +231,7 @@ void EncoderD3D::init_() {
 void EncoderD3D::poll() {
     HRESULT hr;
 
-    if (waitingInput)
+    if (waitingInput || !initialized)
         return;
 
     MFMediaEvent ev;
@@ -293,10 +286,27 @@ void EncoderD3D::poll() {
 
 void EncoderD3D::pushFrame(DesktopFrame<D3D11Texture2D>&& cap) {
     if (!waitingInput) {
-        log->info("Frame dropped by encoder");
-        return;
+        poll();
+        if (!waitingInput) {
+            log->info("Frame dropped by encoder");
+            return;
+        }
     }
     waitingInput = false;
+
+    // FIXME: Does not accept changing resolution after first call
+    if (!initialized) {
+        initialized = true;
+
+        D3D11_TEXTURE2D_DESC desc = {};
+        cap.desktop->ptr()->GetDesc(&desc);
+        width = desc.Width;
+        height = desc.Height;
+
+        init_();
+        encoder->ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, inputStreamId);
+        eventGen = encoder.castTo<IMFMediaEventGenerator>();
+    }
 
     // FIXME: Assuming 60fps
     const long long MFTime = 10000000;  // 100-ns to sec (used by MediaFoundation)

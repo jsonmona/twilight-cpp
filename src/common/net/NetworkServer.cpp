@@ -2,6 +2,9 @@
 
 #include "common/util.h"
 
+#include <mbedtls/ssl.h>
+#include <mbedtls/ssl_internal.h>
+
 #include <string>
 
 // Mozilla Intermediate SSL but prefers chacha20 over AES
@@ -16,6 +19,26 @@ TLS-ECDHE-RSA-WITH-AES-256-GCM-SHA384:\
 TLS-DHE-RSA-WITH-CHACHA20-POLY1305-SHA256:\
 TLS-DHE-RSA-WITH-AES-128-GCM-SHA256:\
 TLS-DHE-RSA-WITH-AES-256-GCM-SHA384";
+
+#define TWILIGHT_WRITE_SSLKEYLOG
+
+#ifdef TWILIGHT_WRITE_SSLKEYLOG
+static int exportKeysCb(void *p_expkey, const unsigned char *ms, const unsigned char *kb, size_t maclen, size_t keylen,
+                        size_t ivlen, const unsigned char client_random[32], const unsigned char server_random[32],
+                        mbedtls_tls_prf_types tls_prf_type) {
+    ByteBuffer clientRandom;
+    clientRandom.append(client_random, 32);
+
+    ByteBuffer masterKey;
+    masterKey.append(ms, 48);
+
+    FILE *f = fopen("sslkey.log", "ab");
+    fprintf(f, "CLIENT_RANDOM %s %s\n", clientRandom.intoHexString().c_str(), masterKey.intoHexString().c_str());
+    fclose(f);
+
+    return 0;
+}
+#endif
 
 NetworkServer::NetworkServer() : log(createNamedLogger("NetworkServer")) {
     mbedtls_net_init(&ctx);
@@ -40,16 +63,21 @@ NetworkServer::NetworkServer() : log(createNamedLogger("NetworkServer")) {
     allowedCiphersuites.shrink_to_fit();
 
     int stat;
-    // TODO: Add personalization string
-    stat = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy, nullptr, 0);
+    const char *pers = "twilight-server";
+    stat = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy, reinterpret_cast<const uint8_t *>(pers),
+                                 strlen(pers));
     check_quit(stat < 0, log, "Failed to seed ctr_drbg: {}", interpretMbedtlsError(stat));
 
     mbedtls_ssl_config_defaults(&ssl, MBEDTLS_SSL_IS_SERVER, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT);
     mbedtls_ssl_conf_authmode(&ssl, MBEDTLS_SSL_VERIFY_OPTIONAL);
-    mbedtls_ssl_conf_ca_chain(&ssl, certStore.cert(), nullptr);
+    mbedtls_ssl_conf_cert_req_ca_list(&ssl, MBEDTLS_SSL_CERT_REQ_CA_LIST_DISABLED);
+    mbedtls_ssl_conf_ca_chain(&ssl, nullptr, nullptr);
     mbedtls_ssl_conf_rng(&ssl, mbedtls_ctr_drbg_random, &ctr_drbg);
     mbedtls_ssl_conf_ciphersuites(&ssl, allowedCiphersuites.data());
     mbedtls_ssl_conf_min_version(&ssl, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);
+#ifdef TWILIGHT_WRITE_SSLKEYLOG
+    mbedtls_ssl_conf_export_keys_ext_cb(&ssl, exportKeysCb, nullptr);
+#endif
     // TODO: Setup session cache
 
     stat = mbedtls_ssl_conf_own_cert(&ssl, certStore.cert(), certStore.keypair().pk());
