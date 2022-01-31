@@ -36,6 +36,12 @@ StreamServer::StreamServer()
                 if (!erased)
                     break;
             }
+
+            if (connections.empty() && streaming) {
+                streaming = false;
+                audioEncoder.stop();
+                capture->stop();
+            }
         }
     });
 
@@ -85,11 +91,6 @@ void StreamServer::onDisconnected(Connection* conn) {
 
     deleteReq.push_back(conn);
     deleteReqCV.notify_one();
-
-    if (connections.empty() && streaming) {
-        audioEncoder.stop();
-        capture->stop();
-    }
 }
 
 void StreamServer::configureStream(Connection* conn, int width, int height, Rational framerate) {

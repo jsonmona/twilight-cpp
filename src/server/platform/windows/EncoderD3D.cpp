@@ -117,6 +117,7 @@ EncoderD3D::~EncoderD3D() {}
 void EncoderD3D::start() {
     frameCnt = 0;
     initialized = false;
+    waitingInput = true;
 }
 
 void EncoderD3D::stop() {
@@ -218,9 +219,10 @@ void EncoderD3D::init_() {
                 }
             }
 
-            if (chosenType != 0) {
+            if (chosenType != -1) {
                 hr = encoder->SetInputType(inputStreamId, mediaType.ptr(), 0);
                 check_quit(FAILED(hr), log, "Failed to set input type");
+                break;
             }
         }
     }
@@ -234,53 +236,55 @@ void EncoderD3D::poll() {
     if (waitingInput || !initialized)
         return;
 
-    MFMediaEvent ev;
+    while (true) {
+        MFMediaEvent ev;
 
-    hr = eventGen->GetEvent(MF_EVENT_FLAG_NO_WAIT, ev.data());
-    if (hr == MF_E_SHUTDOWN || hr == MF_E_NO_EVENTS_AVAILABLE)
-        return;
-    check_quit(FAILED(hr), log, "Failed to get next event ({})", hr);
+        hr = eventGen->GetEvent(MF_EVENT_FLAG_NO_WAIT, ev.data());
+        if (hr == MF_E_SHUTDOWN || hr == MF_E_NO_EVENTS_AVAILABLE)
+            break;
+        check_quit(FAILED(hr), log, "Failed to get next event ({})", hr);
 
-    MediaEventType evType;
-    ev->GetType(&evType);
+        MediaEventType evType;
+        ev->GetType(&evType);
 
-    if (evType == METransformDrainComplete) {
-        return;
-    } else if (evType == METransformNeedInput) {
-        waitingInput = true;
-    } else if (evType == METransformHaveOutput) {
-        int idx = -1;
+        if (evType == METransformDrainComplete) {
+            continue;
+        } else if (evType == METransformNeedInput) {
+            waitingInput = true;
+        } else if (evType == METransformHaveOutput) {
+            int idx = -1;
 
-        long long sampleTime;
-        DesktopFrame<SideData> now;
-        DesktopFrame<ByteBuffer> enc;
+            long long sampleTime;
+            DesktopFrame<SideData> now;
+            DesktopFrame<ByteBuffer> enc;
 
-        enc.desktop = std::make_shared<ByteBuffer>(popEncoderData_(&sampleTime));
-        for (int i = 0; i < extraData.size(); i++) {
-            if (extraData[i].desktop->pts == sampleTime) {
-                now = std::move(extraData[i]);
-                idx = i;
-                break;
+            enc.desktop = std::make_shared<ByteBuffer>(popEncoderData_(&sampleTime));
+            for (int i = 0; i < extraData.size(); i++) {
+                if (extraData[i].desktop->pts == sampleTime) {
+                    now = std::move(extraData[i]);
+                    idx = i;
+                    break;
+                }
             }
+
+            check_quit(idx == -1, log, "Failed to find matching ExtraData (size={}, sampleTime={})", extraData.size(),
+                       sampleTime);
+
+            // TODO: Measure if this *optimization* is worth it
+            if (idx == 0)
+                extraData.pop_front();
+            else
+                extraData.erase(extraData.begin() + idx);
+
+            auto timeTaken = std::chrono::steady_clock::now() - now.desktop->inputTime;
+            statMixer.pushValue(std::chrono::duration_cast<std::chrono::duration<float>>(timeTaken).count());
+
+            enc.cursorPos = std::move(now.cursorPos);
+            enc.cursorShape = std::move(now.cursorShape);
+            onDataAvailable(std::move(enc));
+        } else {
+            log->warn("Ignoring unknown MediaEventType {}", static_cast<DWORD>(evType));
         }
-
-        check_quit(idx == -1, log, "Failed to find matching ExtraData (size={}, sampleTime={})", extraData.size(),
-                   sampleTime);
-
-        // TODO: Measure if this *optimization* is worth it
-        if (idx == 0)
-            extraData.pop_front();
-        else
-            extraData.erase(extraData.begin() + idx);
-
-        auto timeTaken = std::chrono::steady_clock::now() - now.desktop->inputTime;
-        statMixer.pushValue(std::chrono::duration_cast<std::chrono::duration<float>>(timeTaken).count());
-
-        enc.cursorPos = std::move(now.cursorPos);
-        enc.cursorShape = std::move(now.cursorShape);
-        onDataAvailable(std::move(enc));
-    } else {
-        log->warn("Ignoring unknown MediaEventType {}", static_cast<DWORD>(evType));
     }
 }
 
