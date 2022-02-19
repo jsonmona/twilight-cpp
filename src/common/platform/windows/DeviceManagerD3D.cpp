@@ -71,8 +71,12 @@ DeviceManagerD3D::DeviceManagerD3D() : log(createNamedLogger("DeviceManagerD3D")
     DXGI_OUTPUT_DESC outputDesc;
     output->GetDesc(&outputDesc);
 
+    DISPLAY_DEVICE dispDev = {};
+    dispDev.cb = sizeof(dispDev);
+    EnumDisplayDevices(outputDesc.DeviceName, 0, &dispDev, 0);
+
     log->info("Selected DXGI adapter: {}", intoUTF8(adapterDesc.Description));
-    log->info("Selected DXGI output: {}", intoUTF8(outputDesc.DeviceName));
+    log->info("Selected DXGI output: {} ({})", intoUTF8(dispDev.DeviceString), intoUTF8(outputDesc.DeviceName));
 
     UINT flag = D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_VIDEO_SUPPORT;
 #if !defined(NDEBUG) && defined(TWILIGHT_D3D_DEBUG)
