@@ -7,7 +7,7 @@ const long long GIT_DATE = @TWILIGHT_GIT_DATE@ll;
 
 #else
 
-const char[] GIT_COMMIT = "unknown";
+const char GIT_COMMIT[] = "unknown";
 const long long GIT_DATE = 0ll;
 
 #endif

@@ -136,6 +136,7 @@ else()
     message(WARNING "Git executable not found. Version info will be missing.")
     configure_file(./common/version.cpp.in ./version.cpp COPYONLY)
     add_library(git-info STATIC ./common/version.h "${CMAKE_CURRENT_BINARY_DIR}/version.cpp")
+    target_include_directories(git-info PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 endif()
 
 add_library(common STATIC ${COMMON_SRC} ${COMMON_WINDOWS_SRC})
