@@ -70,6 +70,16 @@ public:
         return *this;
     }
 
+    template<typename U>
+    bool operator==(const ComWrapper<U> &other) const {
+        return castTo<IUnknown>().obj == other.castTo<IUnknown>().obj;
+    }
+
+    template <typename U>
+    bool operator!=(const ComWrapper<U> &other) const {
+        return !(*this == other);
+    }
+
     void release() {
         if (obj != nullptr) {
             obj->Release();
