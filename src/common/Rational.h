@@ -4,7 +4,7 @@
 class Rational {
 public:
     Rational();
-    Rational(int den, int num);
+    Rational(int num, int den);
     Rational(const Rational& copy) = default;
     Rational(Rational&& move) noexcept = default;
 
