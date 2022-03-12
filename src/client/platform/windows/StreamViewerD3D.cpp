@@ -44,8 +44,7 @@ void StreamViewerD3D::processDesktopFrame(const msg::Packet &pkt, uint8_t *extra
         Sleep(1);
 
     DesktopFrame<ByteBuffer> now;
-    now.desktop = std::make_shared<ByteBuffer>(pkt.extra_data_len());
-    now.desktop->write(0, extraData, pkt.extra_data_len());
+    now.desktop.write(0, extraData, pkt.extra_data_len());
 
     now.cursorPos = std::make_shared<CursorPos>();
     now.cursorPos->visible = pkt.desktop_frame().cursor_visible();
@@ -234,18 +233,18 @@ void StreamViewerD3D::_renderLoop() {
     while (flagRunRender.load(std::memory_order_acquire)) {
         DesktopFrame<TextureSoftware> frame = decoder->popData();
 
-        if (frame.desktop) {
+        if (!frame.desktop.isEmpty()) {
             desktopLoaded = true;
 
             D3D11_MAPPED_SUBRESOURCE mapInfo;
             context->Map(desktopTex.ptr(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapInfo);
 
             uint8_t *dstPtr = reinterpret_cast<uint8_t *>(mapInfo.pData);
-            uint8_t *srcPtr = frame.desktop->data[0];
+            uint8_t *srcPtr = frame.desktop.data[0];
 
-            if (mapInfo.RowPitch != frame.desktop->linesize[0]) {
+            if (mapInfo.RowPitch != frame.desktop.linesize[0]) {
                 for (int i = 0; i < height; i++)
-                    memcpy(dstPtr + (i * mapInfo.RowPitch), srcPtr + (i * frame.desktop->linesize[0]), width * 4);
+                    memcpy(dstPtr + (i * mapInfo.RowPitch), srcPtr + (i * frame.desktop.linesize[0]), width * 4);
             } else {
                 // Fast path
                 memcpy(dstPtr, srcPtr, height * mapInfo.RowPitch);

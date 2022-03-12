@@ -82,3 +82,7 @@ TextureSoftware TextureSoftware::clone() const {
 
     return tex;
 }
+
+bool TextureSoftware::isEmpty() const {
+    return width < 0 || height < 0;
+}

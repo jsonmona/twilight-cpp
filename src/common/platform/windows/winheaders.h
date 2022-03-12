@@ -13,6 +13,7 @@
 #include <ws2tcpip.h>
 
 #include <d3d11.h>
+#include <d3d11_1.h>
 #include <d3d9types.h>
 #include <d3dcompiler.h>
 

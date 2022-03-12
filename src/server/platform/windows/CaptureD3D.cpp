@@ -1,47 +1,65 @@
 #include "CaptureD3D.h"
 
+#include "CaptureWin32.h"
+
 #include "common/platform/windows/winheaders.h"
 
 #include <cassert>
 #include <deque>
 #include <utility>
 
-static long long getPerformanceFreqency() {
-    static_assert(sizeof(LARGE_INTEGER::QuadPart) == sizeof(long long), "long long must be compatible with QuadPart");
-
-    LARGE_INTEGER a;
-    QueryPerformanceFrequency(&a);
-    return a.QuadPart;
-}
-
-static long long getPerformanceCounter() {
-    LARGE_INTEGER a;
-    QueryPerformanceCounter(&a);
-    return a.QuadPart;
-}
-
-CaptureD3D::CaptureD3D(DeviceManagerD3D _devs)
+CaptureD3D::CaptureD3D()
     : log(createNamedLogger("CaptureD3D")),
-      output(_devs.output),
-      device(_devs.device),
-      context(_devs.context),
-      statMixer(120) {
-    perfCounterFreq = getPerformanceFreqency();
+      frameAcquired(false),
+      sentFirstFrame(false), supportsMapping(false) {}
+
+CaptureD3D::~CaptureD3D() {
 }
 
-CaptureD3D::~CaptureD3D() {}
+bool CaptureD3D::init(DxgiHelper dxgiHelper_) {
+    dxgiHelper = std::move(dxgiHelper_);
 
-void CaptureD3D::start() {
-    timeBeginPeriod(2);
+    output.release();
+    device.release();
+    context.release();
+    outputDuplication.release();
 
-    firstFrameSent = false;
+    frameAcquired = false;
+    sentFirstFrame = false;
+    supportsMapping = false;
 
-    // TODO: Add timeout
-    while (!openDuplication_())
-        Sleep(1);
+    return true;
+}
 
-    check_quit(frameInterval <= 0, log, "Framerate not set before start() is called");
-    lastPresentTime = getPerformanceCounter() - frameInterval;
+bool CaptureD3D::open(DxgiOutput output_) {
+    output = output_.castTo<IDXGIOutput5>();
+    if (output.isInvalid())
+        return false;
+
+    device = dxgiHelper.createDevice(dxgiHelper.getAdapterFromOutput(output), false);
+    check_quit(device.isInvalid(), log, "Failed to create D3D device from output");
+
+    context.release();
+    device->GetImmediateContext(context.data());
+    check_quit(context.isInvalid(), log, "Failed to get immediate context");
+
+    auto oldTime = std::chrono::steady_clock::now();
+    while (!openDuplication_()) {
+        if (std::chrono::steady_clock::now() - oldTime > std::chrono::milliseconds(5000)) {
+            log->warn("Failed to open duplication before timeout");
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool CaptureD3D::start() {
+    timeBeginPeriod(1);
+
+    sentFirstFrame = false;
+
+    return true;
 }
 
 void CaptureD3D::stop() {
@@ -54,32 +72,12 @@ void CaptureD3D::stop() {
 
     outputDuplication.release();
 
-    timeEndPeriod(2);
-}
-
-void CaptureD3D::poll() {
-    captureFrame_();
-
-    long long nowTime = getPerformanceCounter();
-    if (lastPresentTime + frameInterval <= nowTime) {
-        statMixer.pushValue(static_cast<float>(nowTime - lastPresentTime) / perfCounterFreq);
-        lastPresentTime = nowTime;
-
-        DesktopFrame<D3D11Texture2D> nextFrame;
-        if (desktopTexDirty)
-            nextFrame.desktop = std::make_shared<D3D11Texture2D>(nextDesktop);
-        nextFrame.cursorPos = std::move(nextCursorPos);
-        nextFrame.cursorShape = std::move(nextCursorShape);
-
-        onNextFrame(std::move(nextFrame));
-    }
-}
-
-void CaptureD3D::setFramerate(Rational framerate) {
-    frameInterval = framerate.inv().imul(perfCounterFreq);  // perfCounterFreq / framerate
+    timeEndPeriod(1);
 }
 
 void CaptureD3D::getCurrentMode(int* width, int* height, Rational* framerate) {
+    check_quit(output.isInvalid(), log, "Queried current mode before open");
+
     // TODO: Add timeout (or make it async?)
     while (!openDuplication_())
         Sleep(1);
@@ -87,9 +85,124 @@ void CaptureD3D::getCurrentMode(int* width, int* height, Rational* framerate) {
     DXGI_OUTDUPL_DESC desc;
     outputDuplication->GetDesc(&desc);
 
-    *width = desc.ModeDesc.Width;
-    *height = desc.ModeDesc.Height;
-    *framerate = Rational(desc.ModeDesc.RefreshRate.Numerator, desc.ModeDesc.RefreshRate.Denominator);
+    if (width)
+        *width = desc.ModeDesc.Width;
+    if (height)
+        *height = desc.ModeDesc.Height;
+    if (framerate)
+        *framerate = Rational(desc.ModeDesc.RefreshRate.Numerator, desc.ModeDesc.RefreshRate.Denominator);
+}
+
+DesktopFrame<TextureSoftware> CaptureD3D::readSoftware() {
+    HRESULT hr;
+    DesktopFrame<D3D11Texture2D> frame = readD3D();
+    TextureSoftware tex;
+
+    //TODO: Cache staging texture
+    if (frame.desktop.isValid()) {
+        D3D11Texture2D staging;
+
+        D3D11_TEXTURE2D_DESC oldDesc = {};
+        D3D11_TEXTURE2D_DESC desc = {};
+
+        frame.desktop->GetDesc(&oldDesc);
+        desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+        desc.Width = oldDesc.Width;
+        desc.Height = oldDesc.Height;
+        desc.Usage = D3D11_USAGE_STAGING;
+        desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+        desc.ArraySize = 1;
+        desc.SampleDesc.Count = 1;
+        desc.MipLevels = 1;
+
+        hr = device->CreateTexture2D(&desc, nullptr, staging.data());
+        check_quit(FAILED(hr), log, "Failed to create staging texture");
+
+        context->CopyResource(staging.ptr(), frame.desktop.ptr());
+
+        D3D11_MAPPED_SUBRESOURCE mapInfo;
+        hr = context->Map(staging.ptr(), 0, D3D11_MAP_READ, 0, &mapInfo);
+        check_quit(FAILED(hr), log, "Failed to map staging texture");
+
+        void* data[4] = {mapInfo.pData, nullptr, nullptr, nullptr};
+        int linesize[4] = {mapInfo.RowPitch, 0, 0, 0};
+        tex = TextureSoftware::reference(reinterpret_cast<uint8_t**>(data), linesize, oldDesc.Width,
+                                          oldDesc.Height, AV_PIX_FMT_BGRA)
+                   .clone();
+
+        context->Unmap(staging.ptr(), 0);
+    }
+
+    return frame.getOtherType<TextureSoftware>(std::move(tex));
+}
+
+DesktopFrame<D3D11Texture2D> CaptureD3D::readD3D() {
+    HRESULT hr;
+    DesktopFrame<D3D11Texture2D> frame;
+
+    // Access denied (secure desktop, etc.)
+    // TODO: Show black screen instead of last image
+    if (outputDuplication.isInvalid() && !openDuplication_())
+        return frame;
+
+    if (!tryReleaseFrame_())
+        return frame;
+
+    DxgiResource desktopResource;
+    DXGI_OUTDUPL_FRAME_INFO frameInfo;
+    hr = outputDuplication->AcquireNextFrame(150, &frameInfo, desktopResource.data());
+
+    if (SUCCEEDED(hr)) {
+        frameAcquired = true;
+
+        if (frameInfo.LastPresentTime.QuadPart != 0 || !sentFirstFrame) {
+            sentFirstFrame = true;
+            frame.desktop = desktopResource.castTo<ID3D11Texture2D>();
+        }
+
+        if (frameInfo.LastMouseUpdateTime.QuadPart != 0) {
+            frame.cursorPos = std::make_shared<CursorPos>();
+
+            frame.cursorPos->visible = frameInfo.PointerPosition.Visible;
+            if (frameInfo.PointerPosition.Visible) {
+                frame.cursorPos->x = frameInfo.PointerPosition.Position.x;
+                frame.cursorPos->y = frameInfo.PointerPosition.Position.y;
+            }
+        }
+
+        if (frameInfo.PointerShapeBufferSize != 0) {
+            frame.cursorShape = std::make_shared<CursorShape>();
+
+            UINT bufferSize = frameInfo.PointerShapeBufferSize;
+            std::vector<uint8_t> buffer(bufferSize);
+
+            DXGI_OUTDUPL_POINTER_SHAPE_INFO cursorInfo;
+            hr = outputDuplication->GetFramePointerShape(bufferSize, buffer.data(), &bufferSize, &cursorInfo);
+            check_quit(FAILED(hr), log, "Failed to fetch frame pointer shape");
+
+            frame.cursorShape->hotspotX = cursorInfo.HotSpot.x;
+            frame.cursorShape->hotspotY = cursorInfo.HotSpot.y;
+            parseCursor_(frame.cursorShape.get(), cursorInfo, buffer);
+        }
+
+            /*
+            if (rgbTex.isValid()) {
+                hr = targetMutex->AcquireSync(0, INFINITE);
+                check_quit(FAILED(hr), log, "Failed to acquire mutex for shared texture");
+
+                context->CopyResource(targetTex.ptr(), rgbTex.ptr());
+
+                hr = targetMutex->ReleaseSync(0);
+                check_quit(FAILED(hr), log, "Failed to release mutex for shared texture");
+            }*/
+    } else if (hr == DXGI_ERROR_WAIT_TIMEOUT) {
+        // ignore
+    } else if (hr == DXGI_ERROR_ACCESS_LOST)
+        outputDuplication.release();
+    else
+        error_quit(log, "Failed to acquire next frame ({})", hr);
+
+    return frame;
 }
 
 bool CaptureD3D::tryReleaseFrame_() {
@@ -113,95 +226,26 @@ bool CaptureD3D::tryReleaseFrame_() {
 bool CaptureD3D::openDuplication_() {
     HRESULT hr;
 
-    if (outputDuplication.isValid())
-        outputDuplication.release();
+    outputDuplication.release();
 
     frameAcquired = false;
+    sentFirstFrame = false;
+    supportsMapping = false;
 
-    DXGI_FORMAT supportedFormats[] = {DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM};
-    hr = output->DuplicateOutput1(device.ptr(), 0, 2, supportedFormats, outputDuplication.data());
-    if (SUCCEEDED(hr)) {
-        DXGI_OUTDUPL_DESC desc;
-        outputDuplication->GetDesc(&desc);
+    DXGI_FORMAT supportedFormats[] = {DXGI_FORMAT_B8G8R8A8_UNORM};
+    size_t supportedFormatsLen = sizeof(supportedFormats) / sizeof(DXGI_FORMAT);
 
-        D3D11_TEXTURE2D_DESC texDesc = {};
-        texDesc.Width = desc.ModeDesc.Width;
-        texDesc.Height = desc.ModeDesc.Height;
-        texDesc.Format = desc.ModeDesc.Format;
-        texDesc.MipLevels = 1;
-        texDesc.ArraySize = 1;
-        texDesc.SampleDesc.Count = 1;
-        texDesc.Usage = D3D11_USAGE_DEFAULT;
-        texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-
-        nextDesktop.release();
-        hr = device->CreateTexture2D(&texDesc, nullptr, nextDesktop.data());
-        check_quit(FAILED(hr), log, "Failed to staging texture");
-    } else if (hr == E_ACCESSDENIED) {
-        Sleep(1);
+    hr = output->DuplicateOutput1(device.ptr(), 0, supportedFormatsLen, supportedFormats, outputDuplication.data());
+    if (hr == E_ACCESSDENIED)
         return false;
-    } else
-        check_quit(FAILED(hr), log, "Failed to duplicate output ({:#x})", hr);
+    else if (FAILED(hr))
+        error_quit(log, "Failed to duplicate output ({:#x})", hr);
 
+    DXGI_OUTDUPL_DESC desc = {};
+    outputDuplication->GetDesc(&desc);
+
+    supportsMapping = desc.DesktopImageInSystemMemory;
     return true;
-}
-
-void CaptureD3D::captureFrame_() {
-    HRESULT hr;
-
-    // Access denied (secure desktop, etc.)
-    // TODO: Show black screen instead of last image
-    if (outputDuplication.isInvalid() && !openDuplication_())
-        return;
-
-    if (!tryReleaseFrame_())
-        return;
-
-    DxgiResource desktopResource;
-    DXGI_OUTDUPL_FRAME_INFO frameInfo;
-    hr = outputDuplication->AcquireNextFrame(0, &frameInfo, desktopResource.data());
-    if (SUCCEEDED(hr)) {
-        frameAcquired = true;
-
-        if (frameInfo.LastPresentTime.QuadPart != 0 || !firstFrameSent) {
-            firstFrameSent = true;
-            desktopTexDirty = true;
-            D3D11Texture2D rgbTex = desktopResource.castTo<ID3D11Texture2D>();
-            context->CopyResource(nextDesktop.ptr(), rgbTex.ptr());
-        }
-
-        if (frameInfo.LastMouseUpdateTime.QuadPart != 0) {
-            if (!nextCursorPos)
-                nextCursorPos = std::make_shared<CursorPos>();
-
-            nextCursorPos->visible = frameInfo.PointerPosition.Visible;
-            if (frameInfo.PointerPosition.Visible) {
-                nextCursorPos->x = frameInfo.PointerPosition.Position.x;
-                nextCursorPos->y = frameInfo.PointerPosition.Position.y;
-            }
-        }
-
-        if (frameInfo.PointerShapeBufferSize != 0) {
-            if (!nextCursorShape)
-                nextCursorShape = std::make_shared<CursorShape>();
-
-            UINT bufferSize = frameInfo.PointerShapeBufferSize;
-            std::vector<uint8_t> buffer(bufferSize);
-
-            DXGI_OUTDUPL_POINTER_SHAPE_INFO cursorInfo;
-            hr = outputDuplication->GetFramePointerShape(bufferSize, buffer.data(), &bufferSize, &cursorInfo);
-            check_quit(FAILED(hr), log, "Failed to fetch frame pointer shape");
-
-            nextCursorShape->hotspotX = cursorInfo.HotSpot.x;
-            nextCursorShape->hotspotY = cursorInfo.HotSpot.y;
-            parseCursor_(nextCursorShape.get(), cursorInfo, buffer);
-        }
-    } else if (hr == DXGI_ERROR_WAIT_TIMEOUT) {
-        // ignore
-    } else if (hr == DXGI_ERROR_ACCESS_LOST)
-        openDuplication_();
-    else
-        error_quit(log, "Failed to acquire next frame ({})", hr);
 }
 
 void CaptureD3D::parseCursor_(CursorShape* cursorShape, const DXGI_OUTDUPL_POINTER_SHAPE_INFO& cursorInfo,

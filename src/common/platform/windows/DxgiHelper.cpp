@@ -1,29 +1,4 @@
-#include "DeviceManagerD3D.h"
-
-static void getMainAdapterWithOutput(const DxgiFactory5 &factory, DxgiAdapter1 *outAdapter, DxgiOutput5 *outOutput) {
-    HRESULT hr;
-
-    for (UINT i = 0; i < UINT_MAX; i++) {
-        outAdapter->release();
-        hr = factory->EnumAdapters1(i, outAdapter->data());
-        if (FAILED(hr))
-            break;
-
-        for (UINT j = 0; j < UINT_MAX; j++) {
-            DxgiOutput output;
-            hr = (*outAdapter)->EnumOutputs(j, output.data());
-            if (FAILED(hr))
-                break;
-
-            *outOutput = output.castTo<IDXGIOutput5>();
-            if (outOutput->isValid())
-                return;
-        }
-    }
-
-    outAdapter->release();
-    outOutput->release();
-}
+#include "DxgiHelper.h"
 
 static std::string intoUTF8(const std::wstring_view &wideStr) {
     static_assert(sizeof(wchar_t) == sizeof(WCHAR), "Expects wchar_t == WCHAR (from winnt)");
@@ -52,19 +27,58 @@ static std::string intoUTF8(const std::wstring_view &wideStr) {
     }
 }
 
-DeviceManagerD3D::DeviceManagerD3D() : log(createNamedLogger("DeviceManagerD3D")) {
+static std::string intoString(const GUID &guid) {
+    OLECHAR buf[64];
+    int len = StringFromGUID2(guid, buf, 64);
+    if (len <= 0)
+        return "<error>";
+    return intoUTF8(std::wstring_view(buf, len - 1));
+}
+
+DxgiHelper::DxgiHelper() : log(createNamedLogger("DxgiHelper")) {
     HRESULT hr;
 
     UINT flags = 0;
 #if !defined(NDEBUG) && defined(TWILIGHT_D3D_DEBUG)
     flags |= DXGI_CREATE_FACTORY_DEBUG;
 #endif
-    hr = CreateDXGIFactory2(flags, dxgiFactory.guid(), (void **)dxgiFactory.data());
+
+    hr = CreateDXGIFactory2(flags, factory.guid(), (void **)factory.data());
     check_quit(FAILED(hr), log, "Failed to create DXGI factory 5");
+}
 
-    getMainAdapterWithOutput(dxgiFactory, &adapter, &output);
-    check_quit(adapter.isInvalid(), log, "Failed to find main adapter and output");
+DxgiHelper::~DxgiHelper() {}
 
+std::vector<DxgiOutput5> DxgiHelper::findAllOutput() {
+    HRESULT hr;
+    std::vector<DxgiOutput5> ret;
+
+    for (UINT i = 0; i < UINT_MAX; i++) {
+        DxgiAdapter1 adapter;
+        hr = factory->EnumAdapters1(i, adapter.data());
+        if (FAILED(hr))
+            break;
+
+        for (UINT j = 0; j < UINT_MAX; j++) {
+            DxgiOutput output;
+            hr = adapter->EnumOutputs(j, output.data());
+            if (FAILED(hr))
+                break;
+
+            DxgiOutput5 output5 = output.castTo<IDXGIOutput5>();
+            if (output5.isValid())
+                ret.push_back(std::move(output5));
+        }
+    }
+
+    return ret;
+}
+
+D3D11Device DxgiHelper::createDevice(const DxgiAdapter1 &adapter, bool requireVideo) {
+    HRESULT hr;
+    D3D11Device device;
+
+    /*
     DXGI_ADAPTER_DESC1 adapterDesc;
     adapter->GetDesc1(&adapterDesc);
 
@@ -77,34 +91,52 @@ DeviceManagerD3D::DeviceManagerD3D() : log(createNamedLogger("DeviceManagerD3D")
 
     log->info("Selected DXGI adapter: {}", intoUTF8(adapterDesc.Description));
     log->info("Selected DXGI output: {} ({})", intoUTF8(dispDev.DeviceString), intoUTF8(outputDesc.DeviceName));
+    */
 
-    UINT flag = D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_VIDEO_SUPPORT;
+    UINT flag = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+
+    if (requireVideo)
+        flag |= D3D11_CREATE_DEVICE_VIDEO_SUPPORT;
+
 #if !defined(NDEBUG) && defined(TWILIGHT_D3D_DEBUG)
     flag |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
 
     D3D_FEATURE_LEVEL featureLevels[] = {D3D_FEATURE_LEVEL_10_0};
     hr = D3D11CreateDevice(adapter.ptr(), D3D_DRIVER_TYPE_UNKNOWN, nullptr, flag, featureLevels, 1, D3D11_SDK_VERSION,
-                           device.data(), nullptr, context.data());
+                           device.data(), nullptr, nullptr);
+
     if (FAILED(hr)) {
-        flag &= ~D3D11_CREATE_DEVICE_VIDEO_SUPPORT;
+        DXGI_ADAPTER_DESC1 desc;
+        adapter->GetDesc1(&desc);
 
-        hr = D3D11CreateDevice(adapter.ptr(), D3D_DRIVER_TYPE_UNKNOWN, nullptr, flag, featureLevels, 1,
-                               D3D11_SDK_VERSION, device.data(), nullptr, context.data());
-        check_quit(FAILED(hr), log, "Unable to create D3D11 device ({:#x})", hr);
-    } else {
-        hasVideoSupport = true;
+        log->warn("Failed to create D3D device for {} (requireVideo={})", intoUTF8(desc.Description), requireVideo);
+        device.release();
+        return device;
+    }
 
+    /*
         hr = MFCreateDXGIDeviceManager(&mfDeviceManagerResetToken, mfDeviceManager.data());
         check_quit(FAILED(hr), log, "Failed to create Media Foundation DXGI device manager");
 
         hr = mfDeviceManager->ResetDevice(device.ptr(), mfDeviceManagerResetToken);
         check_quit(FAILED(hr), log, "Failed to reset device");
-    }
+    */
 
-    device.castTo<ID3D10Multithread>()->SetMultithreadProtected(true);
+    if (requireVideo)
+        device.castTo<ID3D10Multithread>()->SetMultithreadProtected(true);
+
+    return device;
 }
 
-bool DeviceManagerD3D::isVideoSupported() {
-    return hasVideoSupport;
+DxgiAdapter1 DxgiHelper::getAdapterFromOutput(const DxgiOutput5& output) {
+    HRESULT hr;
+    DxgiAdapter1 adapter;
+    
+    hr = output->GetParent(adapter.guid(), adapter.data());
+    if (FAILED(hr)) {
+        log->error("Failed to get adapter from output (GUID={})", intoString(output.guid()));
+        adapter.release();
+    }
+    return adapter;
 }

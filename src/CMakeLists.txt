@@ -44,10 +44,12 @@ set(COMMON_WINDOWS_SRC
     ./common/platform/windows/winheaders.h
     ./common/platform/windows/ComWrapper.h
 
-    ./common/platform/windows/DeviceManagerD3D.h
-    ./common/platform/windows/DeviceManagerD3D.cpp
+    ./common/platform/windows/DxgiHelper.h
+    ./common/platform/windows/DxgiHelper.cpp
     ./common/platform/windows/OpenH264LoaderWin32.h
     ./common/platform/windows/OpenH264LoaderWin32.cpp
+    ./common/platform/windows/QPCTimer.h
+    ./common/platform/windows/QPCTimer.cpp
 )
 
 set(CLIENT_SRC
@@ -81,10 +83,12 @@ set(CLIENT_WINDOWS_SRC
 )
 
 set(SERVER_SRC
+    ./server/CapturePipeline.h
+
     ./server/AudioEncoder.h
     ./server/AudioEncoder.cpp
-    ./server/CapturePipeline.h
-    ./server/CapturePipeline.cpp
+    ./server/CapturePipelineFactory.h
+    ./server/CapturePipelineFactory.cpp
     ./server/Connection.h
     ./server/Connection.cpp
     ./server/KnownClients.h
@@ -98,17 +102,21 @@ set(SERVER_SRC
 
 set(SERVER_WINDOWS_SRC
     ./server/platform/windows/main.cpp
+
+    ./server/platform/windows/CaptureWin32.h
     
     ./server/platform/windows/AudioCaptureWASAPI.h
     ./server/platform/windows/AudioCaptureWASAPI.cpp
     ./server/platform/windows/CaptureD3D.h
     ./server/platform/windows/CaptureD3D.cpp
-    ./server/platform/windows/CapturePipelineD3D.h
-    ./server/platform/windows/CapturePipelineD3D.cpp
+    ./server/platform/windows/CapturePipelineD3DMF.h
+    ./server/platform/windows/CapturePipelineD3DMF.cpp
     ./server/platform/windows/CapturePipelineD3DSoft.h
     ./server/platform/windows/CapturePipelineD3DSoft.cpp
-    ./server/platform/windows/EncoderD3D.h
-    ./server/platform/windows/EncoderD3D.cpp
+    ./server/platform/windows/CapturePipelineFactroryWin32.h
+    ./server/platform/windows/CapturePipelineFactroryWin32.cpp
+    ./server/platform/windows/EncoderMF.h
+    ./server/platform/windows/EncoderMF.cpp
     ./server/platform/windows/ScaleD3D.h
     ./server/platform/windows/ScaleD3D.cpp
 )

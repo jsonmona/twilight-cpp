@@ -1,12 +1,12 @@
-#ifndef TWILIGHT_SERVER_PLATFORM_WINDOWS_ENCODERD3D_H
-#define TWILIGHT_SERVER_PLATFORM_WINDOWS_ENCODERD3D_H
+#ifndef TWILIGHT_SERVER_PLATFORM_WINDOWS_ENCODERMF_H
+#define TWILIGHT_SERVER_PLATFORM_WINDOWS_ENCODERMF_H
 
 #include "common/ByteBuffer.h"
 #include "common/DesktopFrame.h"
 #include "common/StatisticMixer.h"
 #include "common/log.h"
 
-#include "common/platform/windows/DeviceManagerD3D.h"
+#include "common/platform/windows/DxgiHelper.h"
 
 #include <atomic>
 #include <deque>
@@ -14,15 +14,18 @@
 #include <memory>
 #include <vector>
 
-class EncoderD3D {
+class EncoderMF {
 public:
-    explicit EncoderD3D(DeviceManagerD3D _devs);
-    ~EncoderD3D();
+    EncoderMF();
+    ~EncoderMF();
 
     template <typename Fn>
     void setOnDataAvailable(Fn fn) {
         onDataAvailable = std::move(fn);
     }
+
+    void init(DxgiHelper dxgiHelper);
+    void open(D3D11Device device, D3D11DeviceContext context);
 
     void start();
     void stop();
@@ -31,7 +34,7 @@ public:
 
     StatisticMixer::Stat calcEncoderStat() { return statMixer.calcStat(); }
 
-    void pushFrame(DesktopFrame<D3D11Texture2D>&& cap);
+    bool pushFrame(DesktopFrame<D3D11Texture2D>* cap);
 
 private:
     struct SideData {
@@ -46,6 +49,8 @@ private:
 
     bool waitingInput;
     bool initialized;
+
+    UINT resetToken;
 
     std::function<void(DesktopFrame<ByteBuffer>&&)> onDataAvailable;
 

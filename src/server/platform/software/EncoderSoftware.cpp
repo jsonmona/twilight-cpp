@@ -89,15 +89,15 @@ void EncoderSoftware::run_() {
 
         SFrameBSInfo info = {};
         SSourcePicture pic = {};
-        pic.iPicWidth = cap.desktop->width;
-        pic.iPicHeight = cap.desktop->height;
+        pic.iPicWidth = cap.desktop.width;
+        pic.iPicHeight = cap.desktop.height;
         pic.iColorFormat = videoFormatI420;
-        pic.iStride[0] = cap.desktop->linesize[0];
-        pic.iStride[1] = cap.desktop->linesize[1];
-        pic.iStride[2] = cap.desktop->linesize[2];
-        pic.pData[0] = cap.desktop->data[0];
-        pic.pData[1] = cap.desktop->data[1];
-        pic.pData[2] = cap.desktop->data[2];
+        pic.iStride[0] = cap.desktop.linesize[0];
+        pic.iStride[1] = cap.desktop.linesize[1];
+        pic.iStride[2] = cap.desktop.linesize[2];
+        pic.pData[0] = cap.desktop.data[0];
+        pic.pData[1] = cap.desktop.data[1];
+        pic.pData[2] = cap.desktop.data[2];
 
         check_quit(pic.pData[1] != pic.pData[0] + (width * height), log, "Requirement #1 unsactifactory");
         check_quit(pic.pData[2] != pic.pData[1] + (width * height / 4), log, "Requirement #2 unsactifactory");
@@ -120,7 +120,7 @@ void EncoderSoftware::run_() {
             }
 
             DesktopFrame<ByteBuffer> enc;
-            enc.desktop = std::make_shared<ByteBuffer>(std::move(combined));
+            enc.desktop = std::move(combined);
             enc.cursorPos = std::move(cap.cursorPos);
             enc.cursorShape = std::move(cap.cursorShape);
 

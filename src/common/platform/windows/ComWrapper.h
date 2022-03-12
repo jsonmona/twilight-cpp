@@ -122,6 +122,7 @@ using DxgiOutput = ComWrapper<IDXGIOutput>;
 using DxgiOutput5 = ComWrapper<IDXGIOutput5>;
 using DxgiOutputDuplication = ComWrapper<IDXGIOutputDuplication>;
 using DxgiResource = ComWrapper<IDXGIResource>;
+using DxgiKeyedMutex = ComWrapper<IDXGIKeyedMutex>;
 
 using D3D11Device = ComWrapper<ID3D11Device>;
 using D3D11DeviceContext = ComWrapper<ID3D11DeviceContext>;

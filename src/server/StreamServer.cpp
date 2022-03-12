@@ -1,5 +1,7 @@
 #include "StreamServer.h"
 
+#include "server/CapturePipelineFactory.h"
+
 #include <mbedtls/sha256.h>
 
 constexpr uint16_t SERVICE_PORT = 6495;
@@ -45,7 +47,10 @@ StreamServer::StreamServer()
         }
     });
 
-    capture = CapturePipeline::createInstance();
+    auto factory = CapturePipelineFactory::createInstance();
+    auto opt = factory->getBestOption();
+    capture = factory->createPipeline(opt.first, opt.second);
+
     capture->setOutputCallback([this](DesktopFrame<ByteBuffer>&& cap) { processOutput_(std::move(cap)); });
     audioEncoder.setOnAudioData([this](const uint8_t* data, size_t len) {
         msg::Packet pkt;
@@ -83,6 +88,7 @@ void StreamServer::stop() {
 }
 
 void StreamServer::getNativeMode(int* w, int* h, Rational* fps) {
+    check_quit(!capture->init(), log, "Failed to initialize CapturePipeline");
     capture->getNativeMode(w, h, fps);
 }
 
@@ -105,7 +111,7 @@ bool StreamServer::startStream(Connection* conn) {
 
     // TODO: Allow multiple clients
     streaming = true;
-    capture->setMode(requestedWidth, requestedHeight, requestedFramerate);
+    capture->setEncoderMode(requestedWidth, requestedHeight, requestedFramerate);
     capture->start();
     audioEncoder.start();
     return true;
@@ -141,28 +147,20 @@ void StreamServer::processOutput_(DesktopFrame<ByteBuffer>&& cap) {
         broadcast_(pkt, cap.cursorShape->image.data());
     }
 
-    if (cursorPos && cap.desktop) {
-        msg::DesktopFrame* m = pkt.mutable_desktop_frame();
+    msg::DesktopFrame* m = pkt.mutable_desktop_frame();
+    if (cursorPos) {
         m->set_cursor_visible(cursorPos->visible);
         if (cursorPos->visible) {
             m->set_cursor_x(cursorPos->x);
             m->set_cursor_y(cursorPos->y);
         }
-
-        pkt.set_extra_data_len(cap.desktop->size());
-        broadcast_(pkt, *cap.desktop);
+    }
+    else {
+        m->set_cursor_visible(false);
     }
 
-    if (nowTime - lastStatReport > std::chrono::milliseconds(250)) {
-        lastStatReport = nowTime;
-        auto cap = capture->calcCaptureStat();
-        auto enc = capture->calcEncoderStat();
-
-        if (cap.valid() && enc.valid()) {
-            log->info("Server stat: cap={:.2f}/{:.2f}/{:.2f}  enc={:.2f}/{:.2f}/{:.2f}", cap.min * 1000, cap.avg * 1000,
-                      cap.max * 1000, enc.min * 1000, enc.avg * 1000, enc.max * 1000);
-        }
-    }
+    pkt.set_extra_data_len(cap.desktop.size());
+    broadcast_(pkt, cap.desktop);
 }
 
 void StreamServer::broadcast_(const msg::Packet& pkt, const uint8_t* extraData) {

@@ -29,19 +29,20 @@ public:
     ByteBuffer() : ptr(nullptr), size_(0), capacity_(0) {}
     explicit ByteBuffer(size_t initialSize) : ptr(nullptr), size_(0), capacity_(0) { resize(initialSize); }
     ByteBuffer(const ByteBuffer &copy) = delete;
-    ByteBuffer(ByteBuffer &&move) : ptr(nullptr), size_(0), capacity_(0) {
-        std::swap(ptr, move.ptr);
-        std::swap(size_, move.size_);
-        std::swap(capacity_, capacity_);
-    }
+    ByteBuffer(ByteBuffer &&move) : ptr(nullptr), size_(0), capacity_(0) { swap(*this, move); }
 
     ByteBuffer &operator=(const ByteBuffer &copy) = delete;
     ByteBuffer &operator=(ByteBuffer &&move) {
-        // This must swap or std::swap overload will be broken
-        std::swap(ptr, move.ptr);
-        std::swap(size_, move.size_);
-        std::swap(capacity_, capacity_);
+        swap(*this, move);
         return *this;
+    }
+
+    friend void swap(ByteBuffer &a, ByteBuffer &b) {
+        using std::swap;
+
+        swap(a.ptr, b.ptr);
+        swap(a.size_, b.size_);
+        swap(a.capacity_, b.capacity_);
     }
 
     ~ByteBuffer() { free(ptr); }
@@ -198,12 +199,5 @@ private:
     size_t capacity_;
     size_t size_;
 };
-
-namespace std {
-template <>
-inline void swap(ByteBuffer &lhs, ByteBuffer &rhs) {
-    lhs = std::move(rhs);
-}
-}  // namespace std
 
 #endif

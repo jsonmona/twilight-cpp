@@ -43,7 +43,7 @@ void DecoderSoftware::run_() {
 
         uint8_t *framebuffer[3] = {};
         SBufferInfo decBufferInfo = {};
-        err = decoder->DecodeFrameNoDelay(data.desktop->data(), data.desktop->size(), framebuffer, &decBufferInfo);
+        err = decoder->DecodeFrameNoDelay(data.desktop.data(), data.desktop.size(), framebuffer, &decBufferInfo);
         check_quit(err != 0, log, "Failed to decode frame");
 
         if (decBufferInfo.iBufferStatus == 1) {
@@ -71,7 +71,7 @@ void DecoderSoftware::run_() {
             scale.pushInput(std::move(yuv));
 
             DesktopFrame<TextureSoftware> frame;
-            frame.desktop = std::make_shared<TextureSoftware>(scale.popOutput());
+            frame.desktop = scale.popOutput();
             frame.cursorPos = std::move(data.cursorPos);
             frame.cursorShape = std::move(data.cursorShape);
 
@@ -108,8 +108,6 @@ DesktopFrame<TextureSoftware> DecoderSoftware::popData() {
 
     ret = std::move(frameQueue.front());
     frameQueue.pop_front();
-    if (ret.desktop && ret.desktop->width < 0)
-        return ret;
     return ret;
 }
 

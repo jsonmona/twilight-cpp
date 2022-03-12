@@ -22,33 +22,37 @@ static AVPixelFormat scale2avpixfmt(ScaleType type) {
     }
 }
 
-CapturePipelineD3DSoft::CapturePipelineD3DSoft(DeviceManagerD3D devs_, ScaleType type)
-    : log(createNamedLogger("CapturePipelineD3DSoft")),
-      scaleType(type),
-      capture(devs_),
-      scale(),
-      encoder(),
-      device(devs_.device),
-      context(devs_.context) {}
+CapturePipelineD3DSoft::CapturePipelineD3DSoft(DxgiHelper dxgiHelper)
+    : log(createNamedLogger("CapturePipelineD3DSoft")), dxgiHelper(dxgiHelper),
+      scaleType(ScaleType::NV12), flagRun(false) {}
 
 CapturePipelineD3DSoft::~CapturePipelineD3DSoft() {}
 
-void CapturePipelineD3DSoft::start() {
-    lastPresentTime = std::chrono::steady_clock::now();
+bool CapturePipelineD3DSoft::init() {
+    auto outputs = dxgiHelper.findAllOutput();
+    check_quit(outputs.empty(), log, "No output available");
 
-    capture.setOnNextFrame([this](DesktopFrame<D3D11Texture2D>&& cap) { captureNextFrame_(std::move(cap)); });
+    capture.init(dxgiHelper);
+    capture.open(outputs[0].castTo<IDXGIOutput>());
+
+    return true;
+}
+
+void CapturePipelineD3DSoft::start() {
     encoder.setDataAvailableCallback(writeOutput);
 
     capture.start();
     encoder.start();
 
+    timer.setFrequency(framerate);
+
     flagRun.store(true, std::memory_order_release);
-    runThread = std::thread([this]() { run_(); });
+    captureThread = std::thread([this]() { loopCapture_(); });
+    encodeThread = std::thread([this]() { loopEncoder_(); });
 }
 
 void CapturePipelineD3DSoft::stop() {
-    flagRun.store(false, std::memory_order_relaxed);
-    runThread.join();
+    flagRun.store(false, std::memory_order_release);
 
     encoder.stop();
     capture.stop();
@@ -58,86 +62,68 @@ void CapturePipelineD3DSoft::getNativeMode(int* width, int* height, Rational* fr
     capture.getCurrentMode(width, height, framerate);
 }
 
-void CapturePipelineD3DSoft::setMode(int width, int height, Rational framerate) {
-    capture.setFramerate(framerate);
-    scale.setOutputFormat(width, height, scale2avpixfmt(scaleType));
-
-    // FIXME: Ugly code
-    encoder.~EncoderSoftware();
-    new (&encoder) EncoderSoftware();
+bool CapturePipelineD3DSoft::setCaptureMode(int width, int height, Rational framerate) {
+    return false;
 }
 
-void CapturePipelineD3DSoft::run_() {
-    HRESULT hr;
-    hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    check_quit(FAILED(hr), log, "Failed to initialize COM");
+bool CapturePipelineD3DSoft::setEncoderMode(int width, int height, Rational framerate) {
+    scale.setOutputFormat(width, height, scale2avpixfmt(scaleType));
+    encoder.setResolution(width, height);
+
+    this->framerate = framerate;
+
+    return true;
+}
+
+void CapturePipelineD3DSoft::loopCapture_() {
+    while (flagRun.load(std::memory_order_acquire)) {
+        DesktopFrame<TextureSoftware> frame = capture.readSoftware();
+
+        bool dirty = !frame.desktop.isEmpty() || frame.cursorPos || frame.cursorShape;
+
+        if (dirty) {
+            std::lock_guard lock(frameLock);
+
+            if (!frame.desktop.isEmpty()) {
+                scale.pushInput(std::move(frame.desktop));
+                scale.flush();
+
+                lastFrame.desktop = true;
+                lastFrame.timeCaptured = frame.timeCaptured;
+            }
+
+            if (frame.cursorPos)
+                lastFrame.cursorPos = std::move(frame.cursorPos);
+            if (frame.cursorShape)
+                lastFrame.cursorShape = std::move(frame.cursorShape);
+        }
+    }
+}
+
+void CapturePipelineD3DSoft::loopEncoder_() {
+    using std::swap;
+
+    bool firstFrameProvided = false;
 
     while (flagRun.load(std::memory_order_acquire)) {
-        capture.poll();
+        while (!timer.checkInterval())
+            Sleep(1);
+
+        DesktopFrame<TextureSoftware> frame;
+
+        /* load desktop frame */ {
+            std::lock_guard lock(frameLock);
+            if (!firstFrameProvided && !lastFrame.desktop)
+                continue;
+
+            firstFrameProvided = true;
+            frame.desktop = scale.popOutput();
+
+            swap(frame.timeCaptured, lastFrame.timeCaptured);
+            swap(frame.cursorPos, lastFrame.cursorPos);
+            swap(frame.cursorShape, lastFrame.cursorShape);
+        }
+
+        encoder.pushData(std::move(frame));
     }
-
-    CoUninitialize();
-}
-
-D3D11_TEXTURE2D_DESC CapturePipelineD3DSoft::copyToStageTex_(const D3D11Texture2D& tex) {
-    D3D11_TEXTURE2D_DESC stageDesc;
-    D3D11_TEXTURE2D_DESC desc;
-    tex->GetDesc(&desc);
-
-    bool shouldRecreateTex = true;
-
-    if (stageTex.isValid()) {
-        stageTex->GetDesc(&stageDesc);
-
-        shouldRecreateTex =
-            (stageDesc.Format != desc.Format) || (stageDesc.Width != desc.Width) || (stageDesc.Height != desc.Height);
-    }
-
-    if (shouldRecreateTex) {
-        stageTex.release();
-
-        stageDesc = {};
-        stageDesc.Format = desc.Format;
-        stageDesc.Width = desc.Width;
-        stageDesc.Height = desc.Height;
-        stageDesc.Usage = D3D11_USAGE_STAGING;
-        stageDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
-        stageDesc.MipLevels = 1;
-        stageDesc.ArraySize = 1;
-        stageDesc.SampleDesc.Count = 1;
-
-        device->CreateTexture2D(&stageDesc, nullptr, stageTex.data());
-    }
-
-    context->CopyResource(stageTex.ptr(), tex.ptr());
-    return stageDesc;
-}
-
-void CapturePipelineD3DSoft::captureNextFrame_(DesktopFrame<D3D11Texture2D>&& cap) {
-    if (cap.desktop) {
-        D3D11_TEXTURE2D_DESC desc = copyToStageTex_(*cap.desktop);
-
-        AVPixelFormat fmt = dxgi2avpixfmt(desc.Format);
-        scale.setInputFormat(desc.Width, desc.Height, fmt);
-
-        D3D11_MAPPED_SUBRESOURCE mapInfo;
-        context->Map(stageTex.ptr(), 0, D3D11_MAP_READ, 0, &mapInfo);
-
-        uint8_t* dataPtr = reinterpret_cast<uint8_t*>(mapInfo.pData);
-        int linesize = mapInfo.RowPitch;
-
-        TextureSoftware mappedTex = TextureSoftware::reference(&dataPtr, &linesize, desc.Width, desc.Height, fmt);
-        scale.pushInput(std::move(mappedTex));
-        scale.flush();
-
-        context->Unmap(stageTex.ptr(), 0);
-
-        lastTex = std::make_shared<TextureSoftware>(scale.popOutput());
-    }
-
-    DesktopFrame<TextureSoftware> data;
-    data.desktop = lastTex;
-    data.cursorPos = std::move(cap.cursorPos);
-    data.cursorShape = std::move(cap.cursorShape);
-    encoder.pushData(std::move(data));
 }

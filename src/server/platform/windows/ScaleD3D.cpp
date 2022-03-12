@@ -18,11 +18,11 @@ class ScaleD3D_AYUV : public ScaleD3D {
     D3D11PixelShader pixelShader;
 
 protected:
-    void _convert() override;
+    void convert_(const D3D11Texture2D& inputTex) override;
 
 public:
-    ScaleD3D_AYUV(int w, int h, bool copyInput)
-        : ScaleD3D(createNamedLogger("ScaleD3D_AYUV"), w, h, ScaleType::AYUV, copyInput) {}
+    ScaleD3D_AYUV(int w, int h) : ScaleD3D(createNamedLogger("ScaleD3D_AYUV"), w, h, ScaleType::AYUV) {}
+
     void init(const D3D11Device& device, const D3D11DeviceContext& context) override;
 };
 
@@ -33,42 +33,40 @@ class ScaleD3D_NV12 : public ScaleD3D {
     D3D11PixelShader pixelShaderY, pixelShaderUV, pixelShaderCopy;
 
 protected:
-    void _convert() override;
+    void convert_(const D3D11Texture2D& inputTex) override;
 
 public:
-    ScaleD3D_NV12(int w, int h, bool copyInput)
-        : ScaleD3D(createNamedLogger("ScaleD3D_NV12"), w, h, ScaleType::NV12, copyInput) {}
+    ScaleD3D_NV12(int w, int h) : ScaleD3D(createNamedLogger("ScaleD3D_NV12"), w, h, ScaleType::NV12) {}
+
     void init(const D3D11Device& device, const D3D11DeviceContext& context) override;
 };
 
-std::unique_ptr<ScaleD3D> ScaleD3D::createInstance(int w, int h, ScaleType type, bool copyInput) {
+std::unique_ptr<ScaleD3D> ScaleD3D::createInstance(int w, int h, ScaleType type) {
     std::unique_ptr<ScaleD3D> ret;
 
     if (type == ScaleType::AYUV)
-        ret = std::make_unique<ScaleD3D_AYUV>(w, h, copyInput);
+        ret = std::make_unique<ScaleD3D_AYUV>(w, h);
     else if (type == ScaleType::NV12)
-        ret = std::make_unique<ScaleD3D_NV12>(w, h, copyInput);
+        ret = std::make_unique<ScaleD3D_NV12>(w, h);
     else
         error_quit(createNamedLogger("ScaleD3D"), "Invalid surface type requested");
 
     return ret;
 }
 
-ScaleD3D::ScaleD3D(LoggerPtr logger, int w, int h, ScaleType type, bool _copyInput)
+ScaleD3D::ScaleD3D(LoggerPtr logger, int w, int h, ScaleType type)
     : log(logger),
       outType(type),
       outWidth(w),
       outHeight(h),
       inFormat(DXGI_FORMAT_UNKNOWN),
-      outFormat(DXGI_FORMAT_UNKNOWN),
-      copyInput(_copyInput) {}
+      outFormat(DXGI_FORMAT_UNKNOWN) {}
 
 ScaleD3D::~ScaleD3D() {}
 
 void ScaleD3D::init(const D3D11Device& device, const D3D11DeviceContext& context) {
     HRESULT hr;
 
-    dirty = true;
     outputTex.release();
     vertexBuffer.release();
     cbuffer.release();
@@ -99,37 +97,21 @@ void ScaleD3D::init(const D3D11Device& device, const D3D11DeviceContext& context
     device->CreateBuffer(&vertexBufferDesc, &vertexBufferData, vertexBuffer.data());
 
     float Kr, Kg, Kb;
-    if (outWidth <= 720) {
-        Kb = 0.114f;
-        Kr = 0.229f;
-    } else {
-        Kb = 0.0722f;
-        Kr = 0.2126f;
-    }
-    /* Bt.2020
-    Kb = 0.0593f;
-    Kr = 0.2627f;
-    */
 
+    // Bt.709
+    Kb = 0.0722f;
+    Kr = 0.2126f;
     Kg = 1 - Kr - Kb;
 
     // RGB -> YPbPr matrix transposed
-    float mat[4][4] = {Kr,
-                       -0.5f * Kr / (1 - Kb),
-                       0.5f,
-                       0,
-                       Kg,
-                       -0.5f * Kg / (1 - Kb),
-                       -0.5f * Kg / (1 - Kr),
-                       0,
-                       Kb,
-                       0.5f,
-                       -0.5f * Kb / (1 - Kr),
-                       0,
-                       0,
-                       0,
-                       0,
-                       0};
+    // clang-format off
+    float mat[4][4] = {
+        Kr, -0.5f * Kr / (1 - Kb),  0.5f,                 0,
+        Kg, -0.5f * Kg / (1 - Kb), -0.5f * Kg / (1 - Kr), 0,
+        Kb,  0.5f,                 -0.5f * Kb / (1 - Kr), 0,
+        0,   0,                     0,                    0
+    };
+    // clang-format on
 
     D3D11_BUFFER_DESC cbufferDesc = {};
     cbufferDesc.ByteWidth = sizeof(mat);
@@ -161,78 +143,28 @@ void ScaleD3D::init(const D3D11Device& device, const D3D11DeviceContext& context
     device->CreateInputLayout(inputLayoutDesc, 1, vertexBlob.data(), vertexBlob.size(), inputLayout.data());
 }
 
-void ScaleD3D::_reconfigure() {
-    inputTex.release();
+void ScaleD3D::pushInput(const D3D11Texture2D& inputTex) {
+    D3D11_TEXTURE2D_DESC desc;
+    inputTex->GetDesc(&desc);
+    inWidth = desc.Width;
+    inHeight = desc.Height;
+    inFormat = desc.Format;
+    check_quit((desc.BindFlags & D3D11_BIND_SHADER_RESOURCE) == 0, log,
+               "Input texture does not have D3D11_BIND_SHADER_RESOURCE");
+
     srInput.release();
 
-    if (copyInput) {
-        D3D11_TEXTURE2D_DESC inDesc = {};
-        inDesc.Width = inWidth;
-        inDesc.Height = inHeight;
-        inDesc.Format = inFormat;
-        inDesc.Usage = D3D11_USAGE_DEFAULT;
-        inDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-        inDesc.MipLevels = 1;
-        inDesc.ArraySize = 1;
-        inDesc.SampleDesc.Count = 1;
-        device->CreateTexture2D(&inDesc, nullptr, inputTex.data());
+    D3D11_SHADER_RESOURCE_VIEW_DESC srDesc = {};
+    srDesc.Format = inFormat;
+    srDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+    srDesc.Texture2D.MostDetailedMip = 0;
+    srDesc.Texture2D.MipLevels = -1;
+    device->CreateShaderResourceView(inputTex.ptr(), &srDesc, srInput.data());
 
-        D3D11_SHADER_RESOURCE_VIEW_DESC srDesc = {};
-        srDesc.Format = inFormat;
-        srDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-        srDesc.Texture2D.MostDetailedMip = 0;
-        srDesc.Texture2D.MipLevels = -1;
-        device->CreateShaderResourceView(inputTex.ptr(), &srDesc, srInput.data());
-    }
-}
-
-bool ScaleD3D::_checkNeedsReconfigure(const D3D11Texture2D& tex) {
-    D3D11_TEXTURE2D_DESC desc;
-    tex->GetDesc(&desc);
-
-    bool cond = false;
-    cond = cond || desc.Width != inWidth;
-    cond = cond || desc.Height != inHeight;
-    cond = cond || desc.Format != inFormat;
-
-    if (cond) {
-        inWidth = desc.Width;
-        inHeight = desc.Height;
-        inFormat = desc.Format;
-        return true;
-    }
-
-    return false;
-}
-
-void ScaleD3D::pushInput(const D3D11Texture2D& tex) {
-    if (_checkNeedsReconfigure(tex))
-        _reconfigure();
-
-    if (copyInput) {
-        context->CopyResource(inputTex.ptr(), tex.ptr());
-    } else {
-        inputTex = tex;
-        srInput.release();
-    }
-
-    dirty = true;
+    convert_(inputTex);
 }
 
 D3D11Texture2D ScaleD3D::popOutput() {
-    if (!copyInput && srInput.isInvalid()) {
-        // TODO: Deduplicate code below
-        D3D11_SHADER_RESOURCE_VIEW_DESC srDesc = {};
-        srDesc.Format = inFormat;
-        srDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-        srDesc.Texture2D.MostDetailedMip = 0;
-        srDesc.Texture2D.MipLevels = -1;
-        device->CreateShaderResourceView(inputTex.ptr(), &srDesc, srInput.data());
-    }
-
-    if (dirty)
-        _convert();
-
     D3D11Texture2D tex;
     D3D11_TEXTURE2D_DESC desc = {};
     desc.Format = outFormat;
@@ -242,7 +174,7 @@ D3D11Texture2D ScaleD3D::popOutput() {
     desc.ArraySize = 1;
     desc.SampleDesc.Count = 1;
     desc.Usage = D3D11_USAGE_DEFAULT;
-    desc.BindFlags = D3D11_BIND_VIDEO_ENCODER;
+    desc.BindFlags = 0;
 
     device->CreateTexture2D(&desc, nullptr, tex.data());
     context->CopyResource(tex.ptr(), outputTex.ptr());
@@ -267,7 +199,7 @@ void ScaleD3D_AYUV::init(const D3D11Device& device, const D3D11DeviceContext& co
     device->CreateRenderTargetView(outputTex.ptr(), &rtDesc, rtOutput.data());
 }
 
-void ScaleD3D_AYUV::_convert() {
+void ScaleD3D_AYUV::convert_(const D3D11Texture2D& inputTex) {
     D3D11_VIEWPORT viewport = {0, 0, (float)(outWidth), (float)(outHeight), 0, 1};
     context->RSSetViewports(1, &viewport);
 
@@ -348,7 +280,7 @@ void ScaleD3D_NV12::init(const D3D11Device& device, const D3D11DeviceContext& co
     device->CreateRenderTargetView(outputTex.ptr(), &rtChromaDesc, rtChroma.data());
 }
 
-void ScaleD3D_NV12::_convert() {
+void ScaleD3D_NV12::convert_(const D3D11Texture2D& inputTex) {
     D3D11_VIEWPORT viewport = {0, 0, (float)(outWidth), (float)(outHeight), 0, 1};
     context->RSSetViewports(1, &viewport);
 

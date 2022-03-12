@@ -1,4 +1,4 @@
-#include "EncoderD3D.h"
+#include "EncoderMF.h"
 
 #include <chrono>
 #include <deque>
@@ -103,31 +103,45 @@ static MFTransform getVideoEncoder(const MFDxgiDeviceManager& deviceManager, con
     return transform;
 }
 
-EncoderD3D::EncoderD3D(DeviceManagerD3D _devs)
-    : log(createNamedLogger("EncoderD3D")),
+EncoderMF::EncoderMF()
+    : log(createNamedLogger("EncoderMF")),
       statMixer(120),
       width(-1),
       height(-1),
-      mfDeviceManager(_devs.mfDeviceManager) {
-    check_quit(!_devs.isVideoSupported(), log, "D3D does not support video");
+      waitingInput(false),
+      initialized(false) {}
+
+EncoderMF::~EncoderMF() {}
+
+void EncoderMF::init(DxgiHelper dxgiHelper) {
 }
 
-EncoderD3D::~EncoderD3D() {}
+void EncoderMF::open(D3D11Device device, D3D11DeviceContext context) {
+    HRESULT hr;
 
-void EncoderD3D::start() {
+    mfDeviceManager.release();
+
+    hr = MFCreateDXGIDeviceManager(&resetToken, mfDeviceManager.data());
+    check_quit(FAILED(hr), log, "Failed to create MF DXGI device manager");
+
+    hr = mfDeviceManager->ResetDevice(device.ptr(), resetToken);
+    check_quit(FAILED(hr), log, "Failed to reset DXGI device for MF");
+}
+
+void EncoderMF::start() {
     frameCnt = 0;
     initialized = false;
     waitingInput = true;
 }
 
-void EncoderD3D::stop() {
+void EncoderMF::stop() {
     initialized = false;
 
     encoder->ProcessMessage(MFT_MESSAGE_NOTIFY_END_OF_STREAM, inputStreamId);
     encoder->ProcessMessage(MFT_MESSAGE_COMMAND_DRAIN, 0);
 }
 
-void EncoderD3D::init_() {
+void EncoderMF::init_() {
     HRESULT hr;
 
     encoder = getVideoEncoder(mfDeviceManager, log);
@@ -230,7 +244,7 @@ void EncoderD3D::init_() {
     check_quit(chosenType == -1, log, "No supported input type found");
 }
 
-void EncoderD3D::poll() {
+void EncoderMF::poll() {
     HRESULT hr;
 
     if (waitingInput || !initialized)
@@ -258,9 +272,9 @@ void EncoderD3D::poll() {
             DesktopFrame<SideData> now;
             DesktopFrame<ByteBuffer> enc;
 
-            enc.desktop = std::make_shared<ByteBuffer>(popEncoderData_(&sampleTime));
+            enc.desktop = popEncoderData_(&sampleTime);
             for (int i = 0; i < extraData.size(); i++) {
-                if (extraData[i].desktop->pts == sampleTime) {
+                if (extraData[i].desktop.pts == sampleTime) {
                     now = std::move(extraData[i]);
                     idx = i;
                     break;
@@ -276,7 +290,7 @@ void EncoderD3D::poll() {
             else
                 extraData.erase(extraData.begin() + idx);
 
-            auto timeTaken = std::chrono::steady_clock::now() - now.desktop->inputTime;
+            auto timeTaken = std::chrono::steady_clock::now() - now.desktop.inputTime;
             statMixer.pushValue(std::chrono::duration_cast<std::chrono::duration<float>>(timeTaken).count());
 
             enc.cursorPos = std::move(now.cursorPos);
@@ -288,14 +302,10 @@ void EncoderD3D::poll() {
     }
 }
 
-void EncoderD3D::pushFrame(DesktopFrame<D3D11Texture2D>&& cap) {
-    if (!waitingInput) {
-        poll();
-        if (!waitingInput) {
-            log->info("Frame dropped by encoder");
-            return;
-        }
-    }
+bool EncoderMF::pushFrame(DesktopFrame<D3D11Texture2D>* cap) {
+    if (!waitingInput)
+        return false;
+
     waitingInput = false;
 
     // FIXME: Does not accept changing resolution after first call
@@ -303,7 +313,7 @@ void EncoderD3D::pushFrame(DesktopFrame<D3D11Texture2D>&& cap) {
         initialized = true;
 
         D3D11_TEXTURE2D_DESC desc = {};
-        cap.desktop->ptr()->GetDesc(&desc);
+        cap->desktop.ptr()->GetDesc(&desc);
         width = desc.Width;
         height = desc.Height;
 
@@ -318,18 +328,14 @@ void EncoderD3D::pushFrame(DesktopFrame<D3D11Texture2D>&& cap) {
     const long long sampleDur = MFTime * frameDen / frameNum;
     const long long sampleTime = frameCnt * MFTime * frameDen / frameNum;
 
-    DesktopFrame<SideData> now;
-    now.cursorPos = std::move(cap.cursorPos);
-    now.cursorShape = std::move(cap.cursorShape);
-    now.desktop = std::make_shared<SideData>(SideData{sampleTime, std::chrono::steady_clock::now()});
+    extraData.push_back(cap->getOtherType<SideData>(SideData{sampleTime, std::chrono::steady_clock::now()}));
 
-    extraData.push_back(std::move(now));
-
-    pushEncoderTexture_(*cap.desktop, sampleDur, sampleTime);
+    pushEncoderTexture_(cap->desktop, sampleDur, sampleTime);
     frameCnt++;
+    return true;
 }
 
-void EncoderD3D::pushEncoderTexture_(const D3D11Texture2D& tex, long long sampleDur, long long sampleTime) {
+void EncoderMF::pushEncoderTexture_(const D3D11Texture2D& tex, long long sampleDur, long long sampleTime) {
     HRESULT hr;
 
     MFMediaBuffer mediaBuffer;
@@ -350,7 +356,7 @@ void EncoderD3D::pushEncoderTexture_(const D3D11Texture2D& tex, long long sample
     check_quit(FAILED(hr), log, "Failed to put input into encoder");
 }
 
-ByteBuffer EncoderD3D::popEncoderData_(long long* sampleTime) {
+ByteBuffer EncoderMF::popEncoderData_(long long* sampleTime) {
     HRESULT hr;
 
     MFT_OUTPUT_STREAM_INFO outputStreamInfo;

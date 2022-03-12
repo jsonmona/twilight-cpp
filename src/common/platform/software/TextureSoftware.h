@@ -5,13 +5,8 @@
 
 #include <memory>
 
-struct TextureSoftware {
-    int width, height;
-    AVPixelFormat format;
-    int linesize[4];
-    uint8_t *data[4];
-    uint8_t *allocated;
-
+class TextureSoftware {
+public:
     TextureSoftware();
     TextureSoftware(const TextureSoftware &copy) = delete;
     TextureSoftware(TextureSoftware &&move) noexcept;
@@ -26,6 +21,14 @@ struct TextureSoftware {
     void release();
 
     TextureSoftware clone() const;
+    bool isEmpty() const;
+
+public:
+    int width, height;
+    AVPixelFormat format;
+    int linesize[4];
+    uint8_t *data[4];
+    uint8_t *allocated;
 };
 
 #endif

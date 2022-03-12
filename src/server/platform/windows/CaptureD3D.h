@@ -7,7 +7,9 @@
 #include "common/log.h"
 
 #include "common/platform/windows/ComWrapper.h"
-#include "common/platform/windows/DeviceManagerD3D.h"
+#include "common/platform/windows/DxgiHelper.h"
+
+#include "server/platform/windows/CaptureWin32.h"
 
 #include <atomic>
 #include <chrono>
@@ -16,53 +18,40 @@
 #include <thread>
 #include <vector>
 
-class CaptureD3D {
+class CaptureD3D : public CaptureWin32 {
+public:
+    CaptureD3D();
+    ~CaptureD3D() override;
+
+    bool init(DxgiHelper dxgiHelper) override;
+    bool open(DxgiOutput output) override;
+    bool start() override;
+    void stop() override;
+
+    void getCurrentMode(int* width, int* height, Rational* framerate) override;
+
+    DesktopFrame<TextureSoftware> readSoftware() override;
+    DesktopFrame<D3D11Texture2D> readD3D() override;
+
+    const D3D11DeviceContext& ctx() const { return context; }
+
+private:
     LoggerPtr log;
 
     bool frameAcquired;
-    bool firstFrameSent;
-    bool desktopTexDirty;
+    bool sentFirstFrame;
+    bool supportsMapping;
 
+    DxgiHelper dxgiHelper;
     DxgiOutput5 output;
     D3D11Device device;
     D3D11DeviceContext context;
     DxgiOutputDuplication outputDuplication;
 
-    D3D11Texture2D nextDesktop;
-    std::shared_ptr<CursorPos> nextCursorPos;
-    std::shared_ptr<CursorShape> nextCursorShape;
-
-    long long perfCounterFreq;
-    long long lastPresentTime;
-    long long frameInterval;
-    StatisticMixer statMixer;
-
-    std::function<void(DesktopFrame<D3D11Texture2D>&&)> onNextFrame;
-
     bool tryReleaseFrame_();
     bool openDuplication_();
-    void captureFrame_();
     void parseCursor_(CursorShape* cursorShape, const DXGI_OUTDUPL_POINTER_SHAPE_INFO& cursorInfo,
                       const std::vector<uint8_t>& buffer);
-
-public:
-    CaptureD3D(DeviceManagerD3D _devs);
-    ~CaptureD3D();
-
-    void start();
-    void stop();
-
-    void poll();
-
-    void setFramerate(Rational framerate);
-    void getCurrentMode(int* width, int* height, Rational* framerate);
-
-    StatisticMixer::Stat calcCaptureStat() { return statMixer.calcStat(); }
-
-    template <typename Fn>
-    void setOnNextFrame(Fn fn) {
-        onNextFrame = std::move(fn);
-    }
 };
 
 #endif
