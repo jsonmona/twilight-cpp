@@ -18,7 +18,7 @@
 
 class CapturePipelineD3DSoft : public CapturePipeline {
 public:
-    explicit CapturePipelineD3DSoft(DxgiHelper dxgiHelper);
+    CapturePipelineD3DSoft(LocalClock& clock, DxgiHelper dxgiHelper);
     ~CapturePipelineD3DSoft() override;
 
     bool init() override;

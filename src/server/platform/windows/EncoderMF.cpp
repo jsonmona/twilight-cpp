@@ -103,9 +103,9 @@ static MFTransform getVideoEncoder(const MFDxgiDeviceManager& deviceManager, con
     return transform;
 }
 
-EncoderMF::EncoderMF()
+EncoderMF::EncoderMF(LocalClock& clock)
     : log(createNamedLogger("EncoderMF")),
-      statMixer(120),
+      clock(clock),
       width(-1),
       height(-1),
       waitingInput(false),
@@ -113,8 +113,7 @@ EncoderMF::EncoderMF()
 
 EncoderMF::~EncoderMF() {}
 
-void EncoderMF::init(DxgiHelper dxgiHelper) {
-}
+void EncoderMF::init(DxgiHelper dxgiHelper) {}
 
 void EncoderMF::open(D3D11Device device, D3D11DeviceContext context) {
     HRESULT hr;
@@ -266,36 +265,26 @@ void EncoderMF::poll() {
         } else if (evType == METransformNeedInput) {
             waitingInput = true;
         } else if (evType == METransformHaveOutput) {
-            int idx = -1;
-
+            auto toRemove = extraData.end();
             long long sampleTime;
-            DesktopFrame<SideData> now;
-            DesktopFrame<ByteBuffer> enc;
+            DesktopFrame<long long> now;
 
-            enc.desktop = popEncoderData_(&sampleTime);
-            for (int i = 0; i < extraData.size(); i++) {
-                if (extraData[i].desktop.pts == sampleTime) {
-                    now = std::move(extraData[i]);
-                    idx = i;
+            ByteBuffer encoded = popEncoderData_(&sampleTime);
+            for (auto itr = extraData.begin(); itr != extraData.end(); ++itr) {
+                if (itr->desktop == sampleTime) {
+                    now = std::move(*itr);
+                    toRemove = itr;
                     break;
                 }
             }
 
-            check_quit(idx == -1, log, "Failed to find matching ExtraData (size={}, sampleTime={})", extraData.size(),
-                       sampleTime);
+            check_quit(toRemove == extraData.end(), log, "Failed to find matching ExtraData (size={}, sampleTime={})",
+                       extraData.size(), sampleTime);
 
-            // TODO: Measure if this *optimization* is worth it
-            if (idx == 0)
-                extraData.pop_front();
-            else
-                extraData.erase(extraData.begin() + idx);
+            extraData.erase(toRemove);
 
-            auto timeTaken = std::chrono::steady_clock::now() - now.desktop.inputTime;
-            statMixer.pushValue(std::chrono::duration_cast<std::chrono::duration<float>>(timeTaken).count());
-
-            enc.cursorPos = std::move(now.cursorPos);
-            enc.cursorShape = std::move(now.cursorShape);
-            onDataAvailable(std::move(enc));
+            now.timeEncoded = clock.time();
+            onDataAvailable(now.getOtherType(std::move(encoded)));
         } else {
             log->warn("Ignoring unknown MediaEventType {}", static_cast<DWORD>(evType));
         }
@@ -323,12 +312,12 @@ bool EncoderMF::pushFrame(DesktopFrame<D3D11Texture2D>* cap) {
     }
 
     // FIXME: Assuming 60fps
-    const long long MFTime = 10000000;  // 100-ns to sec (used by MediaFoundation)
-    const long long frameNum = 60, frameDen = 1;
-    const long long sampleDur = MFTime * frameDen / frameNum;
-    const long long sampleTime = frameCnt * MFTime * frameDen / frameNum;
+    long long MFTime = 10000000;  // 100-ns to sec (used by MediaFoundation)
+    long long frameNum = 60, frameDen = 1;
+    long long sampleDur = MFTime * frameDen / frameNum;
+    long long sampleTime = frameCnt * MFTime * frameDen / frameNum;
 
-    extraData.push_back(cap->getOtherType<SideData>(SideData{sampleTime, std::chrono::steady_clock::now()}));
+    extraData.push_back(cap->getOtherType<long long>(std::move(sampleTime)));
 
     pushEncoderTexture_(cap->desktop, sampleDur, sampleTime);
     frameCnt++;

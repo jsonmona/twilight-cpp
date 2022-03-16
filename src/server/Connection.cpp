@@ -99,6 +99,9 @@ void Connection::run_() {
         case msg::Packet::kClientIntro:
             msg_clientIntro_(pkt.client_intro());
             break;
+        case msg::Packet::kPingRequest:
+            msg_pingRequest_(pkt.ping_request());
+            break;
         case msg::Packet::kQueryHostCapsRequest:
             msg_queryHostCapsRequest_(pkt.query_host_caps_request());
             break;
@@ -141,6 +144,23 @@ void Connection::msg_clientIntro_(const msg::ClientIntro& req) {
     else
         res->set_status(msg::ServerIntro_Status_OK);
 
+    send(pkt, nullptr);
+}
+
+void Connection::msg_pingRequest_(const msg::PingRequest& req) {
+    // Silently ignore ping request from unauthorized clients
+    if (!authorized)
+        return;
+
+    msg::Packet pkt;
+    pkt.set_extra_data_len(0);
+
+    if (req.latency() != 0)
+        log->debug("Client estimated network ping: {}", req.latency());
+
+    auto* res = pkt.mutable_ping_response();
+    res->set_id(req.id());
+    res->set_time(server->getClock().time().count());
     send(pkt, nullptr);
 }
 

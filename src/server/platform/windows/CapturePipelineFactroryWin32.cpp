@@ -37,7 +37,8 @@ std::pair<size_t, size_t> CapturePipelineFactoryWin32::getFallbackOption() {
     return {0, 0};
 }
 
-std::unique_ptr<CapturePipeline> CapturePipelineFactoryWin32::createPipeline(size_t captureIdx, size_t encoderIdx) {
+std::unique_ptr<CapturePipeline> CapturePipelineFactoryWin32::createPipeline(LocalClock& clock, size_t captureIdx,
+                                                                             size_t encoderIdx) {
     switch (captureIdx) {
     case 0:
         break;
@@ -54,9 +55,9 @@ std::unique_ptr<CapturePipeline> CapturePipelineFactoryWin32::createPipeline(siz
     }
 
     if (encoderIdx == 0)
-        return std::make_unique<CapturePipelineD3DSoft>(dxgiHelper);
+        return std::make_unique<CapturePipelineD3DSoft>(clock, dxgiHelper);
     if (encoderIdx == 1)
-        return std::make_unique<CapturePipelineD3DMF>(dxgiHelper);
+        return std::make_unique<CapturePipelineD3DMF>(clock, dxgiHelper);
 
     return nullptr;
 }

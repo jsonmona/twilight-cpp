@@ -7,15 +7,16 @@
 #include "common/platform/windows/QPCTimer.h"
 
 #include "server/CapturePipeline.h"
+
 #include "server/platform/windows/CaptureD3D.h"
-#include "server/platform/windows/ScaleD3D.h"
 #include "server/platform/windows/EncoderMF.h"
+#include "server/platform/windows/ScaleD3D.h"
 
 #include <thread>
 
 class CapturePipelineD3DMF : public CapturePipeline {
 public:
-    explicit CapturePipelineD3DMF(DxgiHelper dxgiHelper);
+    CapturePipelineD3DMF(LocalClock& clock, DxgiHelper dxgiHelper);
     ~CapturePipelineD3DMF() override;
 
     bool init() override;

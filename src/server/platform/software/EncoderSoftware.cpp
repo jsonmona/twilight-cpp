@@ -7,9 +7,20 @@
 
 using namespace std::chrono_literals;
 
-EncoderSoftware::EncoderSoftware() : log(createNamedLogger("EncoderSoftware")), width(-1), height(-1), statMixer(120) {}
+EncoderSoftware::EncoderSoftware(LocalClock& clock)
+    : log(createNamedLogger("EncoderSoftware")),
+      clock(clock),
+      width(-1),
+      height(-1),
+      nextFrameAvailable(false),
+      flagRun(false) {}
 
 EncoderSoftware::~EncoderSoftware() {
+    /* acquire data lock */ {
+        std::lock_guard lock(dataLock);
+        dataCV.notify_all();
+    }
+
     if (runThread.joinable())
         runThread.join();
 }
@@ -25,6 +36,7 @@ void EncoderSoftware::start() {
 
 void EncoderSoftware::stop() {
     flagRun.store(false, std::memory_order_release);
+    dataCV.notify_all();
 }
 
 void EncoderSoftware::setResolution(int width, int height) {
@@ -61,31 +73,20 @@ void EncoderSoftware::run_() {
     err = encoder->SetOption(ENCODER_OPTION_DATAFORMAT, &videoFormat);
     check_quit(err != 0, log, "Failed to set dataformat to {}", videoFormat);
 
-    while (true) {
-        if (!flagRun.load(std::memory_order_acquire))
-            break;
-
+    while (flagRun.load(std::memory_order_acquire)) {
         DesktopFrame<TextureSoftware> cap;
 
         /* lock */ {
             std::unique_lock lock(dataLock);
-            while (dataQueue.empty() && flagRun.load(std::memory_order_relaxed))
+            while (!nextFrameAvailable && flagRun.load(std::memory_order_relaxed))
                 dataCV.wait(lock);
 
             if (!flagRun.load(std::memory_order_relaxed))
                 continue;
 
-            if (dataQueue.size() > 15) {
-                log->warn("High number of pending textures ({}) for encoder. Is encoder overloaded?", dataQueue.size());
-                // TODO: notify peer of dropping frames
-                dataQueue.erase(++dataQueue.begin(), dataQueue.end());
-            }
-
-            cap = std::move(dataQueue.front());
-            dataQueue.pop_front();
+            cap = std::move(nextFrame);
+            nextFrameAvailable = false;
         }
-
-        auto startTime = std::chrono::steady_clock::now();
 
         SFrameBSInfo info = {};
         SSourcePicture pic = {};
@@ -99,8 +100,8 @@ void EncoderSoftware::run_() {
         pic.pData[1] = cap.desktop.data[1];
         pic.pData[2] = cap.desktop.data[2];
 
-        check_quit(pic.pData[1] != pic.pData[0] + (width * height), log, "Requirement #1 unsactifactory");
-        check_quit(pic.pData[2] != pic.pData[1] + (width * height / 4), log, "Requirement #2 unsactifactory");
+        check_quit(pic.pData[1] != pic.pData[0] + (width * height), log, "Requirement #1 unsatisfied");
+        check_quit(pic.pData[2] != pic.pData[1] + (width * height / 4), log, "Requirement #2 unsatisfied");
 
         err = encoder->EncodeFrame(&pic, &info);
         check_quit(err != 0, log, "Failed to encode a frame");
@@ -119,31 +120,27 @@ void EncoderSoftware::run_() {
                 combined.append(layerInfo.pBsBuf, layerSize);
             }
 
-            DesktopFrame<ByteBuffer> enc;
-            enc.desktop = std::move(combined);
-            enc.cursorPos = std::move(cap.cursorPos);
-            enc.cursorShape = std::move(cap.cursorShape);
-
-            onDataAvailable(std::move(enc));
+            cap.timeEncoded = clock.time();
+            onDataAvailable(cap.getOtherType(std::move(combined)));
         } else {
             // FIXME: What happens to sidedata when the frame is skipped?
-            log->info("Encoder decided to skip a frame");
+            log->warn("Encoder decided to skip a frame");
         }
-
-        auto endTime = std::chrono::steady_clock::now();
-        auto timeDiff = endTime - startTime;
-        statMixer.pushValue(std::chrono::duration_cast<std::chrono::duration<float>>(timeDiff).count());
     }
 
     err = encoder->Uninitialize();
     if (err != 0)
-        log->warn("Failed to uninitialize encoder");
+        log->error("Failed to uninitialize encoder");
 
     loader->DestroySVCEncoder(encoder);
 }
 
 void EncoderSoftware::pushData(DesktopFrame<TextureSoftware>&& newData) {
-    std::lock_guard lock(dataLock);
-    dataQueue.push_back(std::move(newData));
+    std::unique_lock lock(dataLock);
+    while (nextFrameAvailable && flagRun.load(std::memory_order_acquire))
+        dataCV.wait(lock);
+
+    nextFrameAvailable = true;
+    nextFrame = std::move(newData);
     dataCV.notify_one();
 }

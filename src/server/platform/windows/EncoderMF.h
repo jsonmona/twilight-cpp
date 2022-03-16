@@ -8,6 +8,8 @@
 
 #include "common/platform/windows/DxgiHelper.h"
 
+#include "server/LocalClock.h"
+
 #include <atomic>
 #include <deque>
 #include <functional>
@@ -16,7 +18,7 @@
 
 class EncoderMF {
 public:
-    EncoderMF();
+    explicit EncoderMF(LocalClock& clock);
     ~EncoderMF();
 
     template <typename Fn>
@@ -32,17 +34,12 @@ public:
 
     void poll();
 
-    StatisticMixer::Stat calcEncoderStat() { return statMixer.calcStat(); }
-
     bool pushFrame(DesktopFrame<D3D11Texture2D>* cap);
 
 private:
-    struct SideData {
-        long long pts;
-        std::chrono::steady_clock::time_point inputTime;
-    };
-
     LoggerPtr log;
+
+    LocalClock& clock;
 
     int width, height;
     long long frameCnt;
@@ -54,13 +51,12 @@ private:
 
     std::function<void(DesktopFrame<ByteBuffer>&&)> onDataAvailable;
 
-    std::deque<DesktopFrame<SideData>> extraData;
+    std::deque<DesktopFrame<long long>> extraData;
 
     MFDxgiDeviceManager mfDeviceManager;
     MFTransform encoder;
     MFMediaEventGenerator eventGen;
     DWORD inputStreamId, outputStreamId;
-    StatisticMixer statMixer;
 
     void init_();
 

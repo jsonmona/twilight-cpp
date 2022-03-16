@@ -3,25 +3,29 @@ syntax = "proto3";
 option optimize_for = LITE_RUNTIME;
 package msg;
 
-message ServerPerfReport {
-    float capture_min = 1;
-    float capture_avg = 2;
-    float capture_max = 3;
-
-    float encoder_min = 5;
-    float encoder_avg = 6;
-    float encoder_max = 7;
-}
-
 // Extra data contains desktom image (encoded)
 message DesktopFrame {
     bool cursor_visible = 2;
     int32 cursor_x = 3;
     int32 cursor_y = 4;
+
+    fixed64 time_captured = 5;
+    fixed64 time_encoded = 6;
 }
 
-// Extra data contains cursor image (raw RGBA)
+// Extra data contains cursor image
 message CursorShape {
+    enum Format {
+        // Standard RGBA format (4 bytes per pixel, 0xAABBGGRR)
+        RGBA = 0;
+
+        // Like RGBA, but alpha channel is either 0x00 or 0xFF.
+        // If alpha is 0, RGB replaces screen content. If not, RGB is XORed with screen content.
+        // As described by https://docs.microsoft.com/en-us/windows/win32/api/dxgi1_2/ne-dxgi1_2-dxgi_outdupl_pointer_shape_type
+        RGBA_XOR = 1;
+    }
+
+    Format format = 1;
     int32 width = 2;
     int32 height = 3;
 

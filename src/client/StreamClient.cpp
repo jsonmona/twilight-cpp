@@ -47,6 +47,16 @@ void StreamClient::disconnect() {
     recvThread.join();
 }
 
+bool StreamClient::send(const msg::Packet &pkt, const ByteBuffer &extraData) {
+    assert(pkt.extra_data_len() == extraData.size());
+
+    return send(pkt, extraData.data());
+}
+
+bool StreamClient::send(const msg::Packet &pkt, const uint8_t *extraData) {
+    return conn.send(pkt, extraData);
+}
+
 void StreamClient::_runRecv() {
     bool stat;
     msg::Packet pkt;

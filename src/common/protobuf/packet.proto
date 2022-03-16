@@ -19,6 +19,8 @@ message Packet {
         ServerIntro server_intro = 201;
         QueryHostCapsRequest query_host_caps_request = 202;
         QueryHostCapsResponse query_host_caps_response = 203;
+        PingRequest ping_request = 210;
+        PingResponse ping_response = 211;
         ConfigureStreamRequest configure_stream_request = 204;
         ConfigureStreamResponse configure_stream_response = 205;
         StartStreamRequest start_stream_request = 206;

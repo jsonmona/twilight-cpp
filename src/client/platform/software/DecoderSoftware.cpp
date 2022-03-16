@@ -2,7 +2,8 @@
 
 #include <map>
 
-DecoderSoftware::DecoderSoftware() : log(createNamedLogger("DecoderSoftware")), flagRun(false) {}
+DecoderSoftware::DecoderSoftware(NetworkClock &clock)
+    : log(createNamedLogger("DecoderSoftware")), clock(clock), flagRun(false) {}
 
 DecoderSoftware::~DecoderSoftware() {
     check_quit(flagRun.load(std::memory_order_relaxed), log, "Being destructed without stopping");
@@ -70,10 +71,8 @@ void DecoderSoftware::run_() {
             TextureSoftware yuv = TextureSoftware::reference(framebuffer, linesize, w, h, fmt);
             scale.pushInput(std::move(yuv));
 
-            DesktopFrame<TextureSoftware> frame;
-            frame.desktop = scale.popOutput();
-            frame.cursorPos = std::move(data.cursorPos);
-            frame.cursorShape = std::move(data.cursorShape);
+            auto frame = data.getOtherType(scale.popOutput());
+            frame.timeDecoded = clock.time();
 
             std::lock_guard lock(frameLock);
             frameQueue.push_back(std::move(frame));
@@ -97,8 +96,11 @@ void DecoderSoftware::pushData(DesktopFrame<ByteBuffer> &&nextData) {
 DesktopFrame<TextureSoftware> DecoderSoftware::popData() {
     DesktopFrame<TextureSoftware> ret;
 
-    std::lock_guard lock(packetLock);
-    if (frameQueue.empty() || !flagRun.load(std::memory_order_relaxed))
+    std::unique_lock lock(frameLock);
+    while (frameQueue.empty() && flagRun.load(std::memory_order_relaxed))
+        frameCV.wait(lock);
+
+    if (!flagRun.load(std::memory_order_acquire))
         return ret;
 
     // Prevent excessive buffering

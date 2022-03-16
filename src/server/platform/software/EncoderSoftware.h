@@ -10,11 +10,13 @@
 #include "common/platform/software/OpenH264Loader.h"
 #include "common/platform/software/TextureSoftware.h"
 
+#include "server/LocalClock.h"
+
 #include <deque>
 
 class EncoderSoftware {
 public:
-    EncoderSoftware();
+    explicit EncoderSoftware(LocalClock& clock);
     ~EncoderSoftware();
 
     template <typename Fn>
@@ -27,26 +29,25 @@ public:
 
     void setResolution(int width, int height);
 
-    StatisticMixer::Stat calcEncoderStat() { return statMixer.calcStat(); }
-
     void pushData(DesktopFrame<TextureSoftware>&& newData);
 
 private:
     LoggerPtr log;
 
+    LocalClock& clock;
     std::function<void(DesktopFrame<ByteBuffer>&&)> onDataAvailable;
 
     std::shared_ptr<OpenH264Loader> loader;
     int width, height;
 
+    bool nextFrameAvailable;
     std::atomic<bool> flagRun;
 
     std::thread runThread;
     std::mutex dataLock;
     std::condition_variable dataCV;
-    std::deque<DesktopFrame<TextureSoftware>> dataQueue;
 
-    StatisticMixer statMixer;
+    DesktopFrame<TextureSoftware> nextFrame;
 
     void run_();
 };

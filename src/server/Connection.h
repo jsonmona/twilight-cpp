@@ -37,6 +37,7 @@ private:
 
     void run_();
     void msg_clientIntro_(const msg::ClientIntro& req);
+    void msg_pingRequest_(const msg::PingRequest& req);
     void msg_queryHostCapsRequest_(const msg::QueryHostCapsRequest& req);
     void msg_configureStreamRequest_(const msg::ConfigureStreamRequest& req);
     void msg_startStreamRequest_(const msg::StartStreamRequest& req);

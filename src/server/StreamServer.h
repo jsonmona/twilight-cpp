@@ -11,10 +11,9 @@
 #include "server/AudioEncoder.h"
 #include "server/Connection.h"
 #include "server/KnownClients.h"
+#include "server/LocalClock.h"
 
 #include <atomic>
-#include <chrono>
-#include <cstdio>
 #include <deque>
 #include <memory>
 #include <mutex>
@@ -34,6 +33,8 @@ public:
     void configureStream(Connection* conn, int width, int height, Rational framerate);
     bool startStream(Connection* conn);
     void endStream(Connection* conn);
+
+    const LocalClock& getClock() const { return clock; }
 
     ByteBuffer getLocalCert();
 
@@ -59,6 +60,8 @@ private:
     int requestedHeight;
     Rational requestedFramerate;
     bool streaming;
+
+    LocalClock clock;
 
     AudioEncoder audioEncoder;
 

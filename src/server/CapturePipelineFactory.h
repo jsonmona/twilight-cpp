@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "server/LocalClock.h"
+
 class CapturePipeline;
 
 class CapturePipelineFactory {
@@ -21,7 +23,8 @@ public:
     virtual std::pair<size_t, size_t> getBestOption() = 0;
     virtual std::pair<size_t, size_t> getFallbackOption() = 0;
 
-    virtual std::unique_ptr<CapturePipeline> createPipeline(size_t captureIdx, size_t encoderIdx) = 0;
+    virtual std::unique_ptr<CapturePipeline> createPipeline(LocalClock& clock, size_t captureIdx,
+                                                            size_t encoderIdx) = 0;
 
     static std::unique_ptr<CapturePipelineFactory> createInstance();
 };

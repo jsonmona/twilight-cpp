@@ -10,7 +10,8 @@ static const UINT quadVertexStride = 2 * sizeof(quadVertex[0]);
 static const UINT quadVertexOffset = 0;
 static const UINT quadVertexCount = 4;
 
-StreamViewerD3D::StreamViewerD3D() : StreamViewerBase(), log(createNamedLogger("StreamViewerD3D")) {
+StreamViewerD3D::StreamViewerD3D(NetworkClock &clock)
+    : StreamViewerBase(), log(createNamedLogger("StreamViewerD3D")), clock(clock) {
     width = 1920;
     height = 1080;
 }
@@ -19,7 +20,7 @@ StreamViewerD3D::~StreamViewerD3D() {
     log->info("Stopping!!!");
 
     bool wasInitialized = flagInitialized.load(std::memory_order_seq_cst);
-    ;
+
     if (wasInitialized) {
         decoder->stop();
 
@@ -43,34 +44,40 @@ void StreamViewerD3D::processDesktopFrame(const msg::Packet &pkt, uint8_t *extra
     while (!flagRunRender.load(std::memory_order_acquire))
         Sleep(1);
 
+    auto &res = pkt.desktop_frame();
+
     DesktopFrame<ByteBuffer> now;
     now.desktop.write(0, extraData, pkt.extra_data_len());
+    now.timeCaptured = std::chrono::microseconds(res.time_captured());
+    now.timeEncoded = std::chrono::microseconds(res.time_encoded());
+    now.timeReceived = clock.time();
 
     now.cursorPos = std::make_shared<CursorPos>();
-    now.cursorPos->visible = pkt.desktop_frame().cursor_visible();
+    now.cursorPos->visible = res.cursor_visible();
     if (now.cursorPos->visible) {
-        now.cursorPos->x = pkt.desktop_frame().cursor_x();
-        now.cursorPos->y = pkt.desktop_frame().cursor_y();
+        now.cursorPos->x = res.cursor_x();
+        now.cursorPos->y = res.cursor_y();
     } else {
         now.cursorPos->x = -1;
         now.cursorPos->y = -1;
     }
 
-    now.cursorShape.swap(pendingCursorChange);
+    now.cursorShape = std::atomic_exchange(&pendingCursorChange, {});
 
     decoder->pushData(std::move(now));
 }
 
 void StreamViewerD3D::processCursorShape(const msg::Packet &pkt, uint8_t *extraData) {
     const auto &data = pkt.cursor_shape();
-    pendingCursorChange = std::make_shared<CursorShape>();
-    pendingCursorChange->height = data.height();
-    pendingCursorChange->width = data.width();
-    pendingCursorChange->hotspotX = data.hotspot_x();
-    pendingCursorChange->hotspotY = data.hotspot_y();
-    pendingCursorChange->image.resize(pkt.extra_data_len());
 
-    memcpy(pendingCursorChange->image.data(), extraData, pkt.extra_data_len());
+    auto now = std::make_shared<CursorShape>();
+    now->height = data.height();
+    now->width = data.width();
+    now->hotspotX = data.hotspot_x();
+    now->hotspotY = data.hotspot_y();
+    now->image.write(0, extraData, pkt.extra_data_len());
+
+    std::atomic_exchange(&pendingCursorChange, now);
 }
 
 void StreamViewerD3D::_init() {
@@ -187,7 +194,7 @@ void StreamViewerD3D::_init() {
     cursorTexHeight = 128;
     _recreateCursorTexture();
 
-    decoder = std::make_unique<DecoderSoftware>();
+    decoder = std::make_unique<DecoderSoftware>(clock);
     decoder->start();
 
     flagRunRender.store(true, std::memory_order_release);
@@ -230,8 +237,38 @@ void StreamViewerD3D::_renderLoop() {
     bool cursorVisible = false;
     int cursorX = -1, cursorY = -1;
 
+    std::chrono::steady_clock::time_point lastStatPrint = std::chrono::steady_clock::now();
+    StatisticMixer totalTime(480);
+    StatisticMixer encodingTime(480);
+    StatisticMixer networkTime(480);
+    StatisticMixer decodingTime(480);
+
     while (flagRunRender.load(std::memory_order_acquire)) {
         DesktopFrame<TextureSoftware> frame = decoder->popData();
+
+        if (frame.desktop.isEmpty())
+            continue;
+
+        frame.timePresented = clock.time();
+        if (frame.timeCaptured.count() != -1) {
+            encodingTime.pushValue((frame.timeEncoded - frame.timeCaptured).count() / 1000.0f);
+            totalTime.pushValue((frame.timePresented - frame.timeCaptured).count() / 1000.0f);
+        }
+        networkTime.pushValue((frame.timeReceived - frame.timeEncoded).count() / 1000.0f);
+        decodingTime.pushValue((frame.timeDecoded - frame.timeReceived).count() / 1000.0f);
+
+        if (std::chrono::steady_clock::now() - lastStatPrint >= std::chrono::milliseconds(5000)) {
+            lastStatPrint = std::chrono::steady_clock::now();
+            auto totStat = totalTime.calcStat();
+            auto encStat = encodingTime.calcStat();
+            auto netStat = networkTime.calcStat();
+            auto decStat = decodingTime.calcStat();
+
+            if (encStat.valid() && netStat.valid() && decStat.valid()) {
+                log->info("Total latency: {:.2f}ms  (Encoding: {:.2f} ms  Network: {:.2f} ms  Decoding: {:.2f} ms)",
+                          totStat.avg, encStat.avg, netStat.avg, decStat.avg);
+            }
+        }
 
         if (!frame.desktop.isEmpty()) {
             desktopLoaded = true;

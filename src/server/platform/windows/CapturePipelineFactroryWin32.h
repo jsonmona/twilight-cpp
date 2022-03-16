@@ -18,7 +18,7 @@ public:
     std::pair<size_t, size_t> getBestOption() override;
     std::pair<size_t, size_t> getFallbackOption() override;
 
-    std::unique_ptr<CapturePipeline> createPipeline(size_t captureIdx, size_t encoderIdx) override;
+    std::unique_ptr<CapturePipeline> createPipeline(LocalClock& clock, size_t captureIdx, size_t encoderIdx) override;
 
 private:
     LoggerPtr log;

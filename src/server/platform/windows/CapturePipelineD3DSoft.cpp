@@ -22,9 +22,13 @@ static AVPixelFormat scale2avpixfmt(ScaleType type) {
     }
 }
 
-CapturePipelineD3DSoft::CapturePipelineD3DSoft(DxgiHelper dxgiHelper)
-    : log(createNamedLogger("CapturePipelineD3DSoft")), dxgiHelper(dxgiHelper),
-      scaleType(ScaleType::NV12), flagRun(false) {}
+CapturePipelineD3DSoft::CapturePipelineD3DSoft(LocalClock& clock, DxgiHelper dxgiHelper)
+    : log(createNamedLogger("CapturePipelineD3DSoft")),
+      dxgiHelper(dxgiHelper),
+      scaleType(ScaleType::NV12),
+      flagRun(false),
+      capture(clock),
+      encoder(clock) {}
 
 CapturePipelineD3DSoft::~CapturePipelineD3DSoft() {}
 

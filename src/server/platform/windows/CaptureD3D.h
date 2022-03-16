@@ -1,6 +1,7 @@
 #ifndef TWILIGHT_SERVER_PLATFORM_WINDOWS_CAPTURED3D_H
 #define TWILIGHT_SERVER_PLATFORM_WINDOWS_CAPTURED3D_H
 
+#include "common/ByteBuffer.h"
 #include "common/DesktopFrame.h"
 #include "common/Rational.h"
 #include "common/StatisticMixer.h"
@@ -8,6 +9,8 @@
 
 #include "common/platform/windows/ComWrapper.h"
 #include "common/platform/windows/DxgiHelper.h"
+
+#include "server/LocalClock.h"
 
 #include "server/platform/windows/CaptureWin32.h"
 
@@ -20,7 +23,7 @@
 
 class CaptureD3D : public CaptureWin32 {
 public:
-    CaptureD3D();
+    explicit CaptureD3D(LocalClock& clock);
     ~CaptureD3D() override;
 
     bool init(DxgiHelper dxgiHelper) override;
@@ -42,6 +45,9 @@ private:
     bool sentFirstFrame;
     bool supportsMapping;
 
+    LocalClock& clock;
+    uint64_t qpcFreq;
+
     DxgiHelper dxgiHelper;
     DxgiOutput5 output;
     D3D11Device device;
@@ -51,7 +57,7 @@ private:
     bool tryReleaseFrame_();
     bool openDuplication_();
     void parseCursor_(CursorShape* cursorShape, const DXGI_OUTDUPL_POINTER_SHAPE_INFO& cursorInfo,
-                      const std::vector<uint8_t>& buffer);
+                      const ByteBuffer& buffer);
 };
 
 #endif

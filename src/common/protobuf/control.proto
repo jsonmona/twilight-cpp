@@ -27,6 +27,23 @@ message ServerIntro {
     Status status = 3;
 }
 
+message PingRequest {
+    fixed32 id = 1;
+
+    // Round-trip network latency in microseconds, 0 if no estimation available
+    int32 latency = 2;
+
+    // Network jitter in microseconds, 0 if no estimation available
+    int32 jitter = 3;
+}
+
+message PingResponse {
+    fixed32 id = 1;
+
+    // Time since server started in microseconds
+    fixed64 time = 2;
+}
+
 message QueryHostCapsRequest {
     Codec codec = 1;
 }

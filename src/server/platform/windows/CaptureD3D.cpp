@@ -8,13 +8,27 @@
 #include <deque>
 #include <utility>
 
-CaptureD3D::CaptureD3D()
+static uint64_t qpc() {
+    LARGE_INTEGER val;
+    QueryPerformanceCounter(&val);
+    return val.QuadPart;
+}
+
+static uint64_t getQpcFreq() {
+    LARGE_INTEGER val;
+    QueryPerformanceFrequency(&val);
+    return val.QuadPart;
+}
+
+CaptureD3D::CaptureD3D(LocalClock& clock)
     : log(createNamedLogger("CaptureD3D")),
       frameAcquired(false),
-      sentFirstFrame(false), supportsMapping(false) {}
+      sentFirstFrame(false),
+      supportsMapping(false),
+      clock(clock),
+      qpcFreq(getQpcFreq()) {}
 
-CaptureD3D::~CaptureD3D() {
-}
+CaptureD3D::~CaptureD3D() {}
 
 bool CaptureD3D::init(DxgiHelper dxgiHelper_) {
     dxgiHelper = std::move(dxgiHelper_);
@@ -98,7 +112,7 @@ DesktopFrame<TextureSoftware> CaptureD3D::readSoftware() {
     DesktopFrame<D3D11Texture2D> frame = readD3D();
     TextureSoftware tex;
 
-    //TODO: Cache staging texture
+    // TODO: Cache staging texture
     if (frame.desktop.isValid()) {
         D3D11Texture2D staging;
 
@@ -126,9 +140,9 @@ DesktopFrame<TextureSoftware> CaptureD3D::readSoftware() {
 
         void* data[4] = {mapInfo.pData, nullptr, nullptr, nullptr};
         int linesize[4] = {mapInfo.RowPitch, 0, 0, 0};
-        tex = TextureSoftware::reference(reinterpret_cast<uint8_t**>(data), linesize, oldDesc.Width,
-                                          oldDesc.Height, AV_PIX_FMT_BGRA)
-                   .clone();
+        tex = TextureSoftware::reference(reinterpret_cast<uint8_t**>(data), linesize, oldDesc.Width, oldDesc.Height,
+                                         AV_PIX_FMT_BGRA)
+                  .clone();
 
         context->Unmap(staging.ptr(), 0);
     }
@@ -158,6 +172,18 @@ DesktopFrame<D3D11Texture2D> CaptureD3D::readD3D() {
         if (frameInfo.LastPresentTime.QuadPart != 0 || !sentFirstFrame) {
             sentFirstFrame = true;
             frame.desktop = desktopResource.castTo<ID3D11Texture2D>();
+
+            // Represent present time in LocalClock's time
+            uint64_t delay = qpc() - frameInfo.LastPresentTime.QuadPart;
+            std::chrono::microseconds currTime = clock.time();
+
+            // Optimize for 10MHz. MSVC devs do that, so it must be worth it.
+            if (qpcFreq == 10'000'000)
+                currTime -= std::chrono::microseconds(delay / 10);
+            else
+                currTime -= std::chrono::microseconds(delay * 1'000'000 / qpcFreq);
+
+            frame.timeCaptured = currTime;
         }
 
         if (frameInfo.LastMouseUpdateTime.QuadPart != 0) {
@@ -174,7 +200,7 @@ DesktopFrame<D3D11Texture2D> CaptureD3D::readD3D() {
             frame.cursorShape = std::make_shared<CursorShape>();
 
             UINT bufferSize = frameInfo.PointerShapeBufferSize;
-            std::vector<uint8_t> buffer(bufferSize);
+            ByteBuffer buffer(bufferSize);
 
             DXGI_OUTDUPL_POINTER_SHAPE_INFO cursorInfo;
             hr = outputDuplication->GetFramePointerShape(bufferSize, buffer.data(), &bufferSize, &cursorInfo);
@@ -184,17 +210,6 @@ DesktopFrame<D3D11Texture2D> CaptureD3D::readD3D() {
             frame.cursorShape->hotspotY = cursorInfo.HotSpot.y;
             parseCursor_(frame.cursorShape.get(), cursorInfo, buffer);
         }
-
-            /*
-            if (rgbTex.isValid()) {
-                hr = targetMutex->AcquireSync(0, INFINITE);
-                check_quit(FAILED(hr), log, "Failed to acquire mutex for shared texture");
-
-                context->CopyResource(targetTex.ptr(), rgbTex.ptr());
-
-                hr = targetMutex->ReleaseSync(0);
-                check_quit(FAILED(hr), log, "Failed to release mutex for shared texture");
-            }*/
     } else if (hr == DXGI_ERROR_WAIT_TIMEOUT) {
         // ignore
     } else if (hr == DXGI_ERROR_ACCESS_LOST)
@@ -249,7 +264,7 @@ bool CaptureD3D::openDuplication_() {
 }
 
 void CaptureD3D::parseCursor_(CursorShape* cursorShape, const DXGI_OUTDUPL_POINTER_SHAPE_INFO& cursorInfo,
-                              const std::vector<uint8_t>& buffer) {
+                              const ByteBuffer& buffer) {
     if (cursorInfo.Type == DXGI_OUTDUPL_POINTER_SHAPE_TYPE_COLOR) {
         cursorShape->image.resize(cursorInfo.Height * cursorInfo.Width * 4);
         cursorShape->width = cursorInfo.Width;

@@ -1,9 +1,11 @@
 #include "CapturePipelineD3DMF.h"
 
-CapturePipelineD3DMF::CapturePipelineD3DMF(DxgiHelper dxgiHelper)
+CapturePipelineD3DMF::CapturePipelineD3DMF(LocalClock& clock, DxgiHelper dxgiHelper)
     : log(createNamedLogger("CapturePipelineD3DMF")),
       dxgiHelper(dxgiHelper),
-      captureStagingTexHandle(INVALID_HANDLE_VALUE) {}
+      captureStagingTexHandle(INVALID_HANDLE_VALUE),
+      capture(clock),
+      encoder(clock) {}
 
 CapturePipelineD3DMF::~CapturePipelineD3DMF() {
     check_quit(flagRunning.load(std::memory_order_relaxed), log, "Destructing without stopping first!");
@@ -40,6 +42,8 @@ bool CapturePipelineD3DMF::init() {
     encoder.init(dxgiHelper);
     encoder.open(device, context);
     encoder.setOnDataAvailable(writeOutput);
+
+    return true;
 }
 
 void CapturePipelineD3DMF::start() {
@@ -65,9 +69,9 @@ void CapturePipelineD3DMF::start() {
 
     scale->init(device, context);
 
-    //FIXME: Does not support resolution change
+    // FIXME: Does not support resolution change
     D3D11_TEXTURE2D_DESC desc = {};
-    desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM; //FIXME: Does not support HDR
+    desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;  // FIXME: Does not support HDR
     desc.Width = w;
     desc.Height = h;
     desc.ArraySize = 1;
@@ -111,7 +115,7 @@ bool CapturePipelineD3DMF::setCaptureMode(int width, int height, Rational framer
 }
 
 bool CapturePipelineD3DMF::setEncoderMode(int width, int height, Rational framerate_) {
-    //TODO: Make it possible to change mode while running
+    // TODO: Make it possible to change mode while running
     check_quit(flagRunning, log, "Can't change mode while running yet");
     scale = ScaleD3D::createInstance(width, height, ScaleType::NV12);
     framerate = framerate_;

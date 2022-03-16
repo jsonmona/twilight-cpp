@@ -40,6 +40,9 @@ public:
     void connect(HostListEntry host);
     void disconnect();
 
+    bool send(const msg::Packet &pkt, const ByteBuffer &extraData);
+    bool send(const msg::Packet &pkt, const uint8_t *extraData);
+
 private:
     LoggerPtr log;
 

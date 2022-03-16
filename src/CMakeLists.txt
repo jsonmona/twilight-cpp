@@ -66,6 +66,8 @@ set(CLIENT_SRC
     ./client/HubWindowHostItem.h
     ./client/HubWindowHostItem.cpp
     ./client/HubWindowHostItem.ui
+    ./client/NetworkClock.h
+    ./client/NetworkClock.cpp
     ./client/StreamClient.h
     ./client/StreamClient.cpp
     ./client/StreamWindow.h
@@ -93,6 +95,8 @@ set(SERVER_SRC
     ./server/Connection.cpp
     ./server/KnownClients.h
     ./server/KnownClients.cpp
+    ./server/LocalClock.h
+    ./server/LocalClock.cpp
     ./server/StreamServer.h
     ./server/StreamServer.cpp
 

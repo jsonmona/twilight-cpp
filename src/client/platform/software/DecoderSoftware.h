@@ -17,20 +17,23 @@
 #include "common/platform/software/TextureSoftware.h"
 #include "common/util.h"
 
+#include "client/NetworkClock.h"
+
 class DecoderSoftware {
 public:
-    DecoderSoftware();
+    explicit DecoderSoftware(NetworkClock& clock);
     ~DecoderSoftware();
 
     void start();
     void stop();
 
-    void pushData(DesktopFrame<ByteBuffer> &&nextData);
+    void pushData(DesktopFrame<ByteBuffer>&& nextData);
     DesktopFrame<TextureSoftware> popData();
 
 private:
     LoggerPtr log;
 
+    NetworkClock& clock;
     std::shared_ptr<OpenH264Loader> loader;
     ScaleSoftware scale;
 

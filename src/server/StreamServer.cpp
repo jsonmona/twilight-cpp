@@ -49,7 +49,7 @@ StreamServer::StreamServer()
 
     auto factory = CapturePipelineFactory::createInstance();
     auto opt = factory->getBestOption();
-    capture = factory->createPipeline(opt.first, opt.second);
+    capture = factory->createPipeline(clock, opt.first, opt.second);
 
     capture->setOutputCallback([this](DesktopFrame<ByteBuffer>&& cap) { processOutput_(std::move(cap)); });
     audioEncoder.setOnAudioData([this](const uint8_t* data, size_t len) {
@@ -130,8 +130,6 @@ ByteBuffer StreamServer::getLocalCert() {
 }
 
 void StreamServer::processOutput_(DesktopFrame<ByteBuffer>&& cap) {
-    auto nowTime = std::chrono::steady_clock::now();
-
     if (cap.cursorPos)
         cursorPos = std::move(cap.cursorPos);
 
@@ -154,10 +152,12 @@ void StreamServer::processOutput_(DesktopFrame<ByteBuffer>&& cap) {
             m->set_cursor_x(cursorPos->x);
             m->set_cursor_y(cursorPos->y);
         }
-    }
-    else {
+    } else {
         m->set_cursor_visible(false);
     }
+
+    m->set_time_captured(cap.timeCaptured.count());
+    m->set_time_encoded(cap.timeEncoded.count());
 
     pkt.set_extra_data_len(cap.desktop.size());
     broadcast_(pkt, cap.desktop);

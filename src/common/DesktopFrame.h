@@ -1,10 +1,13 @@
 #ifndef TWILIGHT_COMMON_DESKTOPFRAME_H
 #define TWILIGHT_COMMON_DESKTOPFRAME_H
 
+#include <chrono>
 #include <cstdint>
 #include <memory>
-#include <vector>
 #include <utility>
+#include <vector>
+
+#include "common/ByteBuffer.h"
 
 // TODO: Move this to a more proper place
 enum class ScaleType { AYUV, NV12 };
@@ -18,11 +21,11 @@ struct DesktopFrame {
     std::shared_ptr<CursorPos> cursorPos;
     std::shared_ptr<CursorShape> cursorShape;
 
-    uint64_t timeCaptured;
-    uint64_t timeEncoded;
-    uint64_t timeReceived;
-    uint64_t timeDecoded;
-    uint64_t timePresented;
+    std::chrono::microseconds timeCaptured;
+    std::chrono::microseconds timeEncoded;
+    std::chrono::microseconds timeReceived;
+    std::chrono::microseconds timeDecoded;
+    std::chrono::microseconds timePresented;
 
     template <typename U>
     DesktopFrame<U> getOtherType(U&& newDesktop) {
@@ -43,11 +46,11 @@ struct DesktopFrame {
         : desktop(),
           cursorPos(),
           cursorShape(),
-          timeCaptured(),
-          timeEncoded(),
-          timeReceived(),
-          timeDecoded(),
-          timePresented() {}
+          timeCaptured(-1),
+          timeEncoded(-1),
+          timeReceived(-1),
+          timeDecoded(-1),
+          timePresented(-1) {}
     DesktopFrame(const DesktopFrame& copy) = delete;
     DesktopFrame(DesktopFrame&& move) = default;
     DesktopFrame& operator=(const DesktopFrame& copy) = delete;
@@ -75,7 +78,7 @@ struct CursorPos {
 struct CursorShape {
     int width, height;
     int hotspotX, hotspotY;
-    std::vector<uint8_t> image;
+    ByteBuffer image;
 };
 
 #endif

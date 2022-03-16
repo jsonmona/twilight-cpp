@@ -10,7 +10,7 @@
 #include "common/platform/windows/winheaders.h"
 
 StreamWindow::StreamWindow(HostListEntry host)
-    : QWidget(), log(createNamedLogger("StreamWindow")), viewer(new StreamViewerD3D()), boxLayout(this) {
+    : QWidget(), log(createNamedLogger("StreamWindow")), viewer(new StreamViewerD3D(clock)), boxLayout(this) {
     connect(this, &StreamWindow::showLater, this, &StreamWindow::show);
     connect(this, &StreamWindow::closeLater, this, &StreamWindow::close);
     connect(this, &StreamWindow::displayPinLater, this, &StreamWindow::displayPin_);
@@ -33,6 +33,7 @@ StreamWindow::StreamWindow(HostListEntry host)
 
     flagRunAudio.store(true, std::memory_order_release);
     audioThread = std::thread(&StreamWindow::runAudio_, this);
+    pingThread = std::thread(&StreamWindow::runPing_, this);
 }
 
 StreamWindow::~StreamWindow() {
@@ -41,6 +42,8 @@ StreamWindow::~StreamWindow() {
     flagRunAudio.store(false, std::memory_order_release);
     audioDataCV.notify_all();
     audioThread.join();
+
+    pingThread.join();
 }
 
 void StreamWindow::displayPin_(int pin) {
@@ -83,6 +86,10 @@ void StreamWindow::processNewPacket_(const msg::Packet &pkt, uint8_t *extraData)
     case msg::Packet::kCursorShape:
         viewer->processCursorShape(pkt, extraData);
         break;
+    case msg::Packet::kPingResponse: {
+        auto &res = pkt.ping_response();
+        clock.adjust(res.id(), res.time());
+    }
     case msg::Packet::kAudioFrame: {
         ByteBuffer buf(pkt.extra_data_len());
         buf.write(0, extraData, pkt.extra_data_len());
@@ -206,4 +213,22 @@ void StreamWindow::runAudio_() {
     }
 
     CoUninitialize();
+}
+
+void StreamWindow::runPing_() {
+    while (flagRunAudio.load(std::memory_order_relaxed)) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(150));
+        auto id = clock.generatePing();
+        if (id == 0)
+            continue;
+
+        msg::Packet pkt;
+        pkt.set_extra_data_len(0);
+
+        auto *req = pkt.mutable_ping_request();
+        req->set_id(id);
+        req->set_latency(clock.latency());
+
+        sc.send(pkt, nullptr);
+    }
 }
