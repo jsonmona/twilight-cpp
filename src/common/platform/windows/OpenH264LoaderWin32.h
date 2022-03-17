@@ -1,6 +1,12 @@
 #ifndef TWILIGHT_COMMON_PLATFORM_WINDOWS_OPENH264LOADERWIN32_H
 #define TWILIGHT_COMMON_PLATFORM_WINDOWS_OPENH264LOADERWIN32_H
 
+#ifdef __GNUC__
+#define TWILIGHT_CDECL __attribute__((__cdecl__))
+#else
+#define TWILIGHT_CDECL __cdecl
+#endif
+
 #include <atomic>
 
 #include <common/log.h>
@@ -32,14 +38,14 @@ private:
 
     HINSTANCE hInst = 0;
 
-    int (*__cdecl CreateSVCEncoderProc)(ISVCEncoder **ppEncoder) = nullptr;
-    void (*__cdecl DestroySVCEncoderProc)(ISVCEncoder *pEncoder) = nullptr;
+    int(TWILIGHT_CDECL *CreateSVCEncoderProc)(ISVCEncoder **ppEncoder) = nullptr;
+    void(TWILIGHT_CDECL *DestroySVCEncoderProc)(ISVCEncoder *pEncoder) = nullptr;
 
-    long (*__cdecl CreateDecoderProc)(ISVCDecoder **ppDecoder) = nullptr;
-    void (*__cdecl DestroyDecoderProc)(ISVCDecoder *pDecoder) = nullptr;
+    long(TWILIGHT_CDECL *CreateDecoderProc)(ISVCDecoder **ppDecoder) = nullptr;
+    void(TWILIGHT_CDECL *DestroyDecoderProc)(ISVCDecoder *pDecoder) = nullptr;
 
-    OpenH264Version (*__cdecl GetCodecVersionProc)(void) = nullptr;
-    void (*__cdecl GetCodecVersionExProc)(OpenH264Version *pVersion) = nullptr;
+    OpenH264Version(TWILIGHT_CDECL *GetCodecVersionProc)(void) = nullptr;
+    void(TWILIGHT_CDECL *GetCodecVersionExProc)(OpenH264Version *pVersion) = nullptr;
 };
 
 #endif

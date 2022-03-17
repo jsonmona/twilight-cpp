@@ -42,4 +42,6 @@ bool OpenH264Loader::checkVersion(const LoggerPtr &log) const {
     if (version.uMajor != OPENH264_MAJOR || version.uMinor < OPENH264_MINOR ||
         (version.uMinor == OPENH264_MINOR && version.uRevision < OPENH264_REVISION))
         error_quit(log, "OpenH264 loaded is incompatible with API!");
+
+    return true;
 }
