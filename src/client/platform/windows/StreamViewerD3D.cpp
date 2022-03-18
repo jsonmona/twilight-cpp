@@ -45,6 +45,7 @@ void StreamViewerD3D::processDesktopFrame(const msg::Packet &pkt, uint8_t *extra
         Sleep(1);
 
     auto &res = pkt.desktop_frame();
+    clock.monotonicHint(res.time_encoded());
 
     DesktopFrame<ByteBuffer> now;
     now.desktop.write(0, extraData, pkt.extra_data_len());

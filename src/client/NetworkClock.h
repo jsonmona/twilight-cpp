@@ -5,8 +5,10 @@
 #include <map>
 #include <mutex>
 #include <random>
+#include <atomic>
 
 #include "common/log.h"
+#include "common/StatisticMixer.h"
 
 class NetworkClock {
 public:
@@ -19,16 +21,24 @@ public:
 
     void adjust(uint32_t pingId, uint64_t clock);
 
-    // 0 => Do not send ping; Else => Specifies an id
-    uint32_t generatePing();
+    // Hint that current time must be larger or equal to `clockLeast`
+    void monotonicHint(std::chrono::microseconds clockLeast);
+    void monotonicHint(uint64_t clockLeast) { monotonicHint(std::chrono::microseconds(clockLeast)); }
+
+    // Return value: whether to send ping
+    // [out] pingId: Specifies the id (only valid when return value is true)
+    // [out] sleepAmount: Specifies how long to sleep (always valid)
+    bool generatePing(uint32_t* pingId, std::chrono::milliseconds* sleepAmount);
 
 private:
     LoggerPtr log;
 
+    std::atomic<std::chrono::steady_clock::time_point::rep> epoch;
+
     std::mutex lock;
     int networkLatency;
     int networkJitter;
-    std::chrono::steady_clock::time_point epoch;
+    size_t pingTimingIdx;
     std::chrono::steady_clock::time_point lastPing;
 
     std::map<uint32_t, std::chrono::steady_clock::time_point> pingReqMap;
