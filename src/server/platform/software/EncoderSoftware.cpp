@@ -86,6 +86,7 @@ void EncoderSoftware::run_() {
 
             cap = std::move(nextFrame);
             nextFrameAvailable = false;
+            dataCV.notify_one();
         }
 
         SFrameBSInfo info = {};
