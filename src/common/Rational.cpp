@@ -4,7 +4,8 @@
 #include <cassert>
 
 // TODO: Use binary GCD
-static int gcd(int u, int v) {
+template<typename T>
+static T gcd(T u, T v) {
     if (u <= 0)
         return v;
     if (v <= 0)
@@ -27,6 +28,17 @@ Rational& Rational::operator=(const Rational& copy) {
 
 Rational& Rational::operator=(Rational&& move) noexcept {
     return *this = move;
+}
+
+Rational& Rational::operator*=(const Rational& other) {
+    long long n = (long long)num_ * other.num_;
+    long long d = (long long)den_ * other.den_;
+    long long k = gcd(n, d);
+    num_ = n / k;
+    den_ = d / k;
+    assert(num_ == n / k);
+    assert(den_ == d / k);
+    return *this;
 }
 
 Rational Rational::reduce() const {

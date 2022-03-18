@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "common/ByteBuffer.h"
+#include "common/Rational.h"
 
 // TODO: Move this to a more proper place
 enum class ScaleType { AYUV, NV12 };
@@ -79,6 +80,8 @@ struct DesktopFrame {
 struct CursorPos {
     bool visible;
     int x, y;
+    Rational xScaler;
+    Rational yScaler;
 };
 
 struct CursorShape {

@@ -151,6 +151,10 @@ void StreamServer::processOutput_(DesktopFrame<ByteBuffer>&& cap) {
         if (cursorPos->visible) {
             m->set_cursor_x(cursorPos->x);
             m->set_cursor_y(cursorPos->y);
+            m->set_cursor_x_scaler_num(cursorPos->xScaler.num());
+            m->set_cursor_x_scaler_den(cursorPos->xScaler.den());
+            m->set_cursor_y_scaler_num(cursorPos->yScaler.num());
+            m->set_cursor_y_scaler_den(cursorPos->yScaler.den());
         }
     } else {
         m->set_cursor_visible(false);

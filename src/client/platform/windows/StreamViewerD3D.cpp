@@ -63,6 +63,8 @@ void StreamViewerD3D::processDesktopFrame(const msg::Packet &pkt, uint8_t *extra
     if (now.cursorPos->visible) {
         now.cursorPos->x = res.cursor_x();
         now.cursorPos->y = res.cursor_y();
+        now.cursorPos->xScaler = Rational(res.cursor_x_scaler_num(), res.cursor_x_scaler_den());
+        now.cursorPos->yScaler = Rational(res.cursor_y_scaler_num(), res.cursor_y_scaler_den());
     } else {
         now.cursorPos->x = -1;
         now.cursorPos->y = -1;
@@ -238,7 +240,6 @@ void StreamViewerD3D::renderLoop_() {
     float clearColor[4] = {0, 0, 0, 1};
 
     bool cursorVisible = false;
-    int cursorX = -1, cursorY = -1;
 
     std::chrono::steady_clock::time_point lastStatPrint = std::chrono::steady_clock::now();
     StatisticMixer totalTime(300);
@@ -324,17 +325,20 @@ void StreamViewerD3D::renderLoop_() {
         if (frame.cursorPos) {
             cursorVisible = frame.cursorPos->visible;
 
-            if (cursorVisible && (frame.cursorPos->x != cursorX || frame.cursorPos->y != cursorY)) {
-                cursorX = frame.cursorPos->x;
-                cursorY = frame.cursorPos->y;
+            if (cursorVisible) {
+                int cursorX = frame.cursorPos->xScaler.imul(frame.cursorPos->x);
+                int cursorY = frame.cursorPos->yScaler.imul(frame.cursorPos->y);
 
                 D3D11_MAPPED_SUBRESOURCE mapInfo = {};
-                context->Map(cbuffer.ptr(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapInfo);
+                hr = context->Map(cbuffer.ptr(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapInfo);
+                check_quit(FAILED(hr), log, "Failed to map cbuffer");
+
                 float *pData = reinterpret_cast<float *>(mapInfo.pData);
                 pData[0] = (float)cursorX / width;
                 pData[1] = (float)cursorY / height;
-                pData[2] = (float)cursorTexSize / width;
-                pData[3] = (float)cursorTexSize / height;
+                pData[2] = (float)cursorTexSize / width * frame.cursorPos->xScaler.toFloat();
+                pData[3] = (float)cursorTexSize / height * frame.cursorPos->yScaler.toFloat();
+
                 context->Unmap(cbuffer.ptr(), 0);
             }
         }

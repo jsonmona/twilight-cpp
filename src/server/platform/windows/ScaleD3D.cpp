@@ -143,6 +143,11 @@ void ScaleD3D::init(const D3D11Device& device, const D3D11DeviceContext& context
     device->CreateInputLayout(inputLayoutDesc, 1, vertexBlob.data(), vertexBlob.size(), inputLayout.data());
 }
 
+void ScaleD3D::getRatio(Rational* xRatio, Rational* yRatio) {
+    *xRatio = {outWidth, inWidth};
+    *yRatio = {outHeight, inHeight};
+}
+
 void ScaleD3D::pushInput(const D3D11Texture2D& inputTex) {
     D3D11_TEXTURE2D_DESC desc;
     inputTex->GetDesc(&desc);

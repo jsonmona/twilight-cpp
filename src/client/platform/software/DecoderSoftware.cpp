@@ -154,6 +154,12 @@ void DecoderSoftware::run_() {
 
             auto frame = data.getOtherType(scale.popOutput());
             frame.timeDecoded = clock.time();
+            if (frame.cursorPos && frame.cursorPos->visible) {
+                Rational xScaler, yScaler;
+                scale.getRatio(&xScaler, &yScaler);
+                frame.cursorPos->xScaler *= xScaler;
+                frame.cursorPos->yScaler *= yScaler;
+            }
 
             std::lock_guard lock(frameLock);
             frameQueue.push_back(std::move(frame));

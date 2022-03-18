@@ -9,6 +9,11 @@ message DesktopFrame {
     int32 cursor_x = 3;
     int32 cursor_y = 4;
 
+    int32 cursor_x_scaler_num = 8;
+    int32 cursor_x_scaler_den = 9;
+    int32 cursor_y_scaler_num = 10;
+    int32 cursor_y_scaler_den = 11;
+
     bool is_idr = 7;
 
     fixed64 time_captured = 5;

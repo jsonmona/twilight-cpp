@@ -1,7 +1,25 @@
 #include "ScaleSoftware.h"
 
+ScaleSoftware::ScaleSoftware()
+    : log(createNamedLogger("ScaleSoftware")),
+      hasTexture(false),
+      formatChanged(false),
+      dirty(false),
+      inputWidth(-1),
+      inputHeight(-1),
+      inputFormat(AV_PIX_FMT_NONE),
+      outputWidth(-1),
+      outputHeight(-1),
+      outputFormat(AV_PIX_FMT_NONE),
+      ctx(nullptr) {}
+
 ScaleSoftware::~ScaleSoftware() {
     sws_freeContext(ctx);
+}
+
+void ScaleSoftware::getRatio(Rational* xRatio, Rational* yRatio) {
+    *xRatio = {outputWidth, inputWidth};
+    *yRatio = {outputHeight, inputHeight};
 }
 
 void ScaleSoftware::reset() {
@@ -27,7 +45,7 @@ void ScaleSoftware::setOutputFormat(int w, int h, AVPixelFormat fmt) {
     }
 }
 
-void ScaleSoftware::pushInput(TextureSoftware &&tex) {
+void ScaleSoftware::pushInput(TextureSoftware&& tex) {
     inputTex = std::move(tex);
 
     hasTexture = true;
@@ -43,7 +61,7 @@ TextureSoftware ScaleSoftware::popOutput() {
     return outputTex.clone();
 }
 
-TextureSoftware &&ScaleSoftware::moveOutput() {
+TextureSoftware&& ScaleSoftware::moveOutput() {
     check_quit(!hasTexture, log, "Tried to move output when empty");
     hasTexture = false;
 
