@@ -9,8 +9,12 @@
 #include "common/RingBuffer.h"
 #include "common/platform/windows/winheaders.h"
 
-StreamWindow::StreamWindow(HostListEntry host)
-    : QWidget(), log(createNamedLogger("StreamWindow")), viewer(new StreamViewerD3D(clock)), boxLayout(this) {
+StreamWindow::StreamWindow(HostListEntry host, bool playAudio)
+    : QWidget(),
+      log(createNamedLogger("StreamWindow")),
+      viewer(new StreamViewerD3D(clock)),
+      boxLayout(this),
+      flagPlayAudio(playAudio) {
     connect(this, &StreamWindow::showLater, this, &StreamWindow::show);
     connect(this, &StreamWindow::closeLater, this, &StreamWindow::close);
     connect(this, &StreamWindow::displayPinLater, this, &StreamWindow::displayPin_);
@@ -31,19 +35,26 @@ StreamWindow::StreamWindow(HostListEntry host)
     boxLayout.addWidget(viewer);
     boxLayout.setContentsMargins(0, 0, 0, 0);
 
-    flagRunAudio.store(true, std::memory_order_release);
-    audioThread = std::thread(&StreamWindow::runAudio_, this);
+    if (playAudio)
+        audioThread = std::thread(&StreamWindow::runAudio_, this);
+
+    flagRunPing.store(true, std::memory_order_relaxed);
     pingThread = std::thread(&StreamWindow::runPing_, this);
 }
 
 StreamWindow::~StreamWindow() {
     sc.disconnect();
 
-    flagRunAudio.store(false, std::memory_order_release);
-    audioDataCV.notify_all();
-    audioThread.join();
+    bool wasPlayingAudio = flagPlayAudio.exchange(false, std::memory_order_relaxed);
+    bool wasRunningPing = flagRunPing.exchange(false, std::memory_order_relaxed);
 
-    pingThread.join();
+    if (wasPlayingAudio) {
+        audioDataCV.notify_all();
+        audioThread.join();
+    }
+
+    if (wasRunningPing)
+        pingThread.join();
 }
 
 void StreamWindow::displayPin_(int pin) {
@@ -89,8 +100,11 @@ void StreamWindow::processNewPacket_(const msg::Packet &pkt, uint8_t *extraData)
     case msg::Packet::kPingResponse: {
         auto &res = pkt.ping_response();
         clock.adjust(res.id(), res.time());
+        break;
     }
     case msg::Packet::kAudioFrame: {
+        if (!flagPlayAudio.load(std::memory_order_relaxed))
+            break;
         ByteBuffer buf(pkt.extra_data_len());
         buf.write(0, extraData, pkt.extra_data_len());
 
@@ -174,16 +188,16 @@ void StreamWindow::runAudio_() {
     stat = cubeb_stream_start(stm);
     check_quit(stat != CUBEB_OK, log, "Failed to start cubeb stream");
 
-    while (flagRunAudio.load(std::memory_order_relaxed)) {
+    while (flagPlayAudio.load(std::memory_order_relaxed)) {
         ByteBuffer nowData;
 
         /* lock */ {
             std::unique_lock lock(audioDataLock);
 
-            while (audioData.empty() && flagRunAudio.load(std::memory_order_acquire))
+            while (audioData.empty() && flagPlayAudio.load(std::memory_order_relaxed))
                 audioDataCV.wait(lock);
 
-            if (!flagRunAudio.load(std::memory_order_relaxed))
+            if (!flagPlayAudio.load(std::memory_order_acquire))
                 break;
 
             nowData = std::move(audioData.front());
@@ -213,10 +227,15 @@ void StreamWindow::runAudio_() {
     }
 
     CoUninitialize();
+
+    /* lock */ {
+        std::lock_guard lock(audioDataLock);
+        audioData.clear();
+    }
 }
 
 void StreamWindow::runPing_() {
-    while (flagRunAudio.load(std::memory_order_relaxed)) {
+    while (flagPlayAudio.load(std::memory_order_relaxed)) {
         uint32_t pingId;
         std::chrono::milliseconds sleepAmount;
 

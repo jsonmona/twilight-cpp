@@ -95,7 +95,7 @@ void HubWindow::on_btnAddHost_clicked(bool checked) {
 void HubWindow::connectToEntry(HostListEntry entry) {
     // TODO: Allow use of URI (so that protocol and port can be specified)
 
-    streamWindow = new StreamWindow(entry);
+    streamWindow = new StreamWindow(entry, true);
 
     QRect screenSize = qApp->primaryScreen()->geometry();
 

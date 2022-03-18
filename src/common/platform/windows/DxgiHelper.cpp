@@ -74,9 +74,17 @@ std::vector<DxgiOutput5> DxgiHelper::findAllOutput() {
     return ret;
 }
 
-D3D11Device DxgiHelper::createDevice(const DxgiAdapter1 &adapter, bool requireVideo) {
+D3D11Device DxgiHelper::createDevice(IDXGIAdapter *adapter, bool requireVideo) {
     HRESULT hr;
     D3D11Device device;
+
+    bool releaseAdapter = false;
+    if (adapter == nullptr) {
+        releaseAdapter = true;
+        hr = factory->EnumAdapters(0, &adapter);
+        if (FAILED(hr))
+            return device;
+    }
 
     /*
     DXGI_ADAPTER_DESC1 adapterDesc;
@@ -103,36 +111,32 @@ D3D11Device DxgiHelper::createDevice(const DxgiAdapter1 &adapter, bool requireVi
 #endif
 
     D3D_FEATURE_LEVEL featureLevels[] = {D3D_FEATURE_LEVEL_10_0};
-    hr = D3D11CreateDevice(adapter.ptr(), D3D_DRIVER_TYPE_UNKNOWN, nullptr, flag, featureLevels, 1, D3D11_SDK_VERSION,
+    hr = D3D11CreateDevice(adapter, D3D_DRIVER_TYPE_UNKNOWN, nullptr, flag, featureLevels, 1, D3D11_SDK_VERSION,
                            device.data(), nullptr, nullptr);
 
     if (FAILED(hr)) {
-        DXGI_ADAPTER_DESC1 desc;
-        adapter->GetDesc1(&desc);
+        DXGI_ADAPTER_DESC desc;
+        adapter->GetDesc(&desc);
 
         log->warn("Failed to create D3D device for {} (requireVideo={})", intoUTF8(desc.Description), requireVideo);
         device.release();
+        if (releaseAdapter)
+            adapter->Release();
         return device;
     }
-
-    /*
-        hr = MFCreateDXGIDeviceManager(&mfDeviceManagerResetToken, mfDeviceManager.data());
-        check_quit(FAILED(hr), log, "Failed to create Media Foundation DXGI device manager");
-
-        hr = mfDeviceManager->ResetDevice(device.ptr(), mfDeviceManagerResetToken);
-        check_quit(FAILED(hr), log, "Failed to reset device");
-    */
 
     if (requireVideo)
         device.castTo<ID3D10Multithread>()->SetMultithreadProtected(true);
 
+    if (releaseAdapter)
+        adapter->Release();
     return device;
 }
 
-DxgiAdapter1 DxgiHelper::getAdapterFromOutput(const DxgiOutput5& output) {
+DxgiAdapter1 DxgiHelper::getAdapterFromOutput(const DxgiOutput5 &output) {
     HRESULT hr;
     DxgiAdapter1 adapter;
-    
+
     hr = output->GetParent(adapter.guid(), adapter.data());
     if (FAILED(hr)) {
         log->error("Failed to get adapter from output (GUID={})", intoString(output.guid()));

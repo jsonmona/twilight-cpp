@@ -27,7 +27,7 @@ class StreamWindow : public QWidget {
     Q_OBJECT;
 
 public:
-    explicit StreamWindow(HostListEntry host);
+    StreamWindow(HostListEntry host, bool playAudio);
     ~StreamWindow();
 
 signals:
@@ -46,7 +46,8 @@ private:
     StreamViewerBase *viewer;
     NetworkClock clock;
 
-    std::atomic<bool> flagRunAudio;
+    std::atomic<bool> flagRunPing;
+    std::atomic<bool> flagPlayAudio;
     std::atomic<bool> flagPinBoxClosed;
 
     std::mutex pinBoxLock;

@@ -7,8 +7,10 @@
 
 #include "common/ByteBuffer.h"
 #include "common/log.h"
-#include "common/platform/windows/ComWrapper.h"
 #include "common/util.h"
+
+#include "common/platform/windows/ComWrapper.h"
+#include "common/platform/windows/DxgiHelper.h"
 
 #include "client/NetworkClock.h"
 #include "client/StreamViewerBase.h"
@@ -33,23 +35,28 @@ protected:
 
 private:
     HWND hwnd() const { return reinterpret_cast<HWND>(winId()); }
-    void _init();
-    void _recreateCursorTexture();
-    void _renderLoop();
+    void init_();
+    void recreateCursorTexture_();
+    void renderLoop_();
 
     LoggerPtr log;
-
-    std::atomic<bool> flagInitialized = false;
-    std::atomic<bool> flagRunRender = false;
-
-    std::thread renderThread;
     NetworkClock &clock;
 
-    DxgiFactory5 dxgiFactory;
+    std::atomic<bool> flagInitialized;
+    std::atomic<bool> flagRunRender;
+
+    int width, height;
+    int cursorTexSize;
+
+    std::thread renderThread;
+
+    std::unique_ptr<DecoderSoftware> decoder;
+    std::shared_ptr<CursorShape> pendingCursorChange;
+
+    DxgiHelper dxgiHelper;
     D3D11Device device;
     D3D11DeviceContext context;
     ComWrapper<IDXGISwapChain1> swapChain;
-    D3D11RenderTargetView framebufferRTV;
     D3D11Texture2D desktopTex;
     D3D11Texture2D cursorTex;
     D3D11VertexShader vertexShaderFull;
@@ -63,12 +70,6 @@ private:
     D3D11ShaderResourceView desktopSRV;
     D3D11ShaderResourceView cursorSRV;
     D3D11BlendState blendState;
-
-    std::unique_ptr<DecoderSoftware> decoder;
-    std::shared_ptr<CursorShape> pendingCursorChange;
-
-    int width, height;
-    int cursorTexWidth, cursorTexHeight;
 };
 
 #endif

@@ -13,8 +13,8 @@ public:
 
     std::vector<DxgiOutput5> findAllOutput();
 
-    D3D11Device createDevice(const DxgiAdapter1& adapter, bool requireVideo);
-    DxgiAdapter1 getAdapterFromOutput(const DxgiOutput5 &output);
+    D3D11Device createDevice(IDXGIAdapter* adapter, bool requireVideo);
+    DxgiAdapter1 getAdapterFromOutput(const DxgiOutput5& output);
 
 private:
     LoggerPtr log;

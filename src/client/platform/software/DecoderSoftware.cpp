@@ -3,13 +3,91 @@
 #include <map>
 
 DecoderSoftware::DecoderSoftware(NetworkClock &clock)
-    : log(createNamedLogger("DecoderSoftware")), clock(clock), flagRun(false) {}
+    : log(createNamedLogger("DecoderSoftware")),
+      clock(clock),
+      idrPacketInQueue(false),
+      outputWidth(-1),
+      outputHeight(-1),
+      flagRun(false) {}
 
 DecoderSoftware::~DecoderSoftware() {
     check_quit(flagRun.load(std::memory_order_relaxed), log, "Being destructed without stopping");
 
     if (looper.joinable())
         looper.join();
+}
+
+void DecoderSoftware::pushData(DesktopFrame<ByteBuffer> &&nextData) {
+    std::lock_guard<std::mutex> lock(packetLock);
+
+    if (nextData.isIDR) {
+        if (idrPacketInQueue) {
+            // Two IDR packets in queue. Skip all remaining packets
+            log->warn("Skipping {} frames! Is decoder overloaded?", packetQueue.size());
+
+            std::shared_ptr<CursorPos> lastPos;
+            std::shared_ptr<CursorShape> lastShape;
+            for (auto &now : packetQueue) {
+                if (now.cursorPos)
+                    lastPos = std::move(now.cursorPos);
+                if (now.cursorShape)
+                    lastShape = std::move(now.cursorShape);
+            }
+
+            packetQueue.clear();
+
+            if (lastPos && !nextData.cursorPos)
+                nextData.cursorPos = std::move(lastPos);
+            if (lastShape && !nextData.cursorShape)
+                nextData.cursorShape = std::move(lastShape);
+        }
+        idrPacketInQueue = true;
+    }
+
+    packetQueue.push_back(std::move(nextData));
+    packetCV.notify_one();
+}
+
+DesktopFrame<TextureSoftware> DecoderSoftware::popData() {
+    DesktopFrame<TextureSoftware> ret;
+
+    std::unique_lock lock(frameLock);
+    while (frameQueue.empty() && flagRun.load(std::memory_order_relaxed))
+        frameCV.wait(lock);
+
+    if (!flagRun.load(std::memory_order_acquire))
+        return ret;
+
+    // Prevent excessive buffering
+    // FIXME: This also needs to be logged
+    frameBufferHistory.push(frameQueue.size());
+    while (frameBufferHistory.max - frameBufferHistory.min + 1 < frameQueue.size())
+        frameQueue.pop_front();
+
+    ret = std::move(frameQueue.front());
+    frameQueue.pop_front();
+    return ret;
+}
+
+void DecoderSoftware::start() {
+    if (loader == nullptr) {
+        loader = OpenH264Loader::getInstance();
+        loader->prepare();
+    }
+
+    flagRun.store(true, std::memory_order_release);
+    looper = std::thread([this]() { run_(); });
+}
+
+void DecoderSoftware::stop() {
+    flagRun.store(false, std::memory_order_release);
+    packetCV.notify_all();
+    frameCV.notify_all();
+}
+
+void DecoderSoftware::setOutputResolution(int width, int height) {
+    outputWidth = width;
+    outputHeight = height;
 }
 
 void DecoderSoftware::run_() {
@@ -40,6 +118,8 @@ void DecoderSoftware::run_() {
 
             data = std::move(packetQueue.front());
             packetQueue.pop_front();
+            if (data.isIDR)
+                idrPacketInQueue = false;
         }
 
         uint8_t *framebuffer[3] = {};
@@ -69,6 +149,7 @@ void DecoderSoftware::run_() {
             }
 
             TextureSoftware yuv = TextureSoftware::reference(framebuffer, linesize, w, h, fmt);
+            scale.setOutputFormat(outputWidth, outputHeight, AV_PIX_FMT_RGBA);
             scale.pushInput(std::move(yuv));
 
             auto frame = data.getOtherType(scale.popOutput());
@@ -85,49 +166,4 @@ void DecoderSoftware::run_() {
     if (err != 0)
         log->warn("Failed to uninitialize decoder");
     loader->DestroyDecoder(decoder);
-}
-
-void DecoderSoftware::pushData(DesktopFrame<ByteBuffer> &&nextData) {
-    std::lock_guard<std::mutex> lock(packetLock);
-    packetQueue.push_back(std::move(nextData));
-    packetCV.notify_one();
-}
-
-DesktopFrame<TextureSoftware> DecoderSoftware::popData() {
-    DesktopFrame<TextureSoftware> ret;
-
-    std::unique_lock lock(frameLock);
-    while (frameQueue.empty() && flagRun.load(std::memory_order_relaxed))
-        frameCV.wait(lock);
-
-    if (!flagRun.load(std::memory_order_acquire))
-        return ret;
-
-    // Prevent excessive buffering
-    frameBufferHistory.push(frameQueue.size());
-    while (frameBufferHistory.max - frameBufferHistory.min + 1 < frameQueue.size())
-        frameQueue.pop_front();
-
-    ret = std::move(frameQueue.front());
-    frameQueue.pop_front();
-    return ret;
-}
-
-void DecoderSoftware::start() {
-    if (loader == nullptr) {
-        loader = OpenH264Loader::getInstance();
-        loader->prepare();
-    }
-
-    // FIXME: fixed output dimension
-    scale.setOutputFormat(1920, 1080, AV_PIX_FMT_RGBA);
-
-    flagRun.store(true, std::memory_order_release);
-    looper = std::thread([this]() { run_(); });
-}
-
-void DecoderSoftware::stop() {
-    flagRun.store(false, std::memory_order_release);
-    packetCV.notify_all();
-    frameCV.notify_all();
 }

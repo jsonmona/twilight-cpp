@@ -159,6 +159,8 @@ void StreamServer::processOutput_(DesktopFrame<ByteBuffer>&& cap) {
     m->set_time_captured(cap.timeCaptured.count());
     m->set_time_encoded(cap.timeEncoded.count());
 
+    m->set_is_idr(cap.isIDR);
+
     pkt.set_extra_data_len(cap.desktop.size());
     broadcast_(pkt, cap.desktop);
 }

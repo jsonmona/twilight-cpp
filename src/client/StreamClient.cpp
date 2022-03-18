@@ -161,18 +161,18 @@ bool StreamClient::doIntro_(const HostListEntry &host, bool forceAuth) {
     if (hostcaps.status() != msg::QueryHostCapsResponse_Status_OK)
         error_quit(log, "Failed to query host caps");
 
-    int nativeHeight = hostcaps.native_height();
     int nativeWidth = hostcaps.native_width();
-    int nativeFpsDen = hostcaps.native_fps_den();
+    int nativeHeight = hostcaps.native_height();
     int nativeFpsNum = hostcaps.native_fps_num();
+    int nativeFpsDen = hostcaps.native_fps_den();
 
     /* ConfigureStreamRequest */ {
         auto *req = pkt.mutable_configure_stream_request();
         req->set_codec(msg::Codec::H264_BASELINE);
         req->set_width(nativeWidth);
         req->set_height(nativeHeight);
-        req->set_fps_den(nativeFpsDen);
         req->set_fps_num(nativeFpsNum);
+        req->set_fps_den(nativeFpsDen);
 
         if (!conn.send(pkt, nullptr))
             return false;
@@ -198,6 +198,16 @@ bool StreamClient::doIntro_(const HostListEntry &host, bool forceAuth) {
 
     pkt.mutable_start_stream_request();
     if (!conn.send(pkt, nullptr))
+        return false;
+
+    if (!conn.recv(&pkt, nullptr))
+        return false;
+
+    check_quit(pkt.msg_case() != msg::Packet::kStartStreamResponse, log, "Expected StartStreamResponse, received {}",
+               pkt.msg_case());
+    auto &startStreamResponse = pkt.start_stream_response();
+
+    if (startStreamResponse.status() != msg::StartStreamResponse_Status_OK)
         return false;
 
     return true;

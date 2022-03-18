@@ -50,7 +50,7 @@ bool CaptureD3D::open(DxgiOutput output_) {
     if (output.isInvalid())
         return false;
 
-    device = dxgiHelper.createDevice(dxgiHelper.getAdapterFromOutput(output), false);
+    device = dxgiHelper.createDevice(dxgiHelper.getAdapterFromOutput(output).ptr(), false);
     check_quit(device.isInvalid(), log, "Failed to create D3D device from output");
 
     context.release();

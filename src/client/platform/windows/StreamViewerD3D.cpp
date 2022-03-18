@@ -11,14 +11,16 @@ static const UINT quadVertexOffset = 0;
 static const UINT quadVertexCount = 4;
 
 StreamViewerD3D::StreamViewerD3D(NetworkClock &clock)
-    : StreamViewerBase(), log(createNamedLogger("StreamViewerD3D")), clock(clock) {
-    width = 1920;
-    height = 1080;
-}
+    : StreamViewerBase(),
+      log(createNamedLogger("StreamViewerD3D")),
+      clock(clock),
+      flagInitialized(false),
+      flagRunRender(false),
+      width(-1),
+      height(-1),
+      cursorTexSize(-1) {}
 
 StreamViewerD3D::~StreamViewerD3D() {
-    log->info("Stopping!!!");
-
     bool wasInitialized = flagInitialized.load(std::memory_order_seq_cst);
 
     if (wasInitialized) {
@@ -34,7 +36,7 @@ void StreamViewerD3D::resizeEvent(QResizeEvent *ev) {
 
     bool wasInitialized = flagInitialized.exchange(true, std::memory_order_seq_cst);
     if (!wasInitialized) {
-        _init();
+        init_();
     }
 }
 
@@ -49,9 +51,12 @@ void StreamViewerD3D::processDesktopFrame(const msg::Packet &pkt, uint8_t *extra
 
     DesktopFrame<ByteBuffer> now;
     now.desktop.write(0, extraData, pkt.extra_data_len());
+
     now.timeCaptured = std::chrono::microseconds(res.time_captured());
     now.timeEncoded = std::chrono::microseconds(res.time_encoded());
     now.timeReceived = clock.time();
+
+    now.isIDR = res.is_idr();
 
     now.cursorPos = std::make_shared<CursorPos>();
     now.cursorPos->visible = res.cursor_visible();
@@ -81,18 +86,14 @@ void StreamViewerD3D::processCursorShape(const msg::Packet &pkt, uint8_t *extraD
     std::atomic_exchange(&pendingCursorChange, now);
 }
 
-void StreamViewerD3D::_init() {
+void StreamViewerD3D::init_() {
     HRESULT hr;
 
-    hr = CreateDXGIFactory1(dxgiFactory.guid(), dxgiFactory.data());
-    check_quit(FAILED(hr), log, "Failed to create dxgi factory");
+    device = dxgiHelper.createDevice(nullptr, true);
+    check_quit(device.isInvalid(), log, "Failed to create D3D device");
 
-    D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_0;
-
-    hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
-                           D3D11_CREATE_DEVICE_DEBUG | D3D11_CREATE_DEVICE_BGRA_SUPPORT, &featureLevel, 1,
-                           D3D11_SDK_VERSION, device.data(), nullptr, context.data());
-    check_quit(FAILED(hr), log, "Failed to create D3D11 device");
+    context.release();
+    device->GetImmediateContext(context.data());
 
     DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
     swapChainDesc.Width = 0;
@@ -103,16 +104,16 @@ void StreamViewerD3D::_init() {
     swapChainDesc.BufferCount = 2;
     swapChainDesc.Scaling = DXGI_SCALING_STRETCH;
     swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+    swapChainDesc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
     swapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
-    hr = dxgiFactory->CreateSwapChainForHwnd(device.ptr(), hwnd(), &swapChainDesc, nullptr, nullptr, swapChain.data());
+    hr = dxgiHelper.getFactory()->CreateSwapChainForHwnd(device.ptr(), hwnd(), &swapChainDesc, nullptr, nullptr,
+                                                         swapChain.data());
     check_quit(FAILED(hr), log, "Failed to create swap chain");
 
-    D3D11Texture2D framebuffer;
-    hr = swapChain->GetBuffer(0, framebuffer.guid(), framebuffer.data());
-    check_quit(FAILED(hr), log, "Failed to get framebuffer");
-
-    hr = device->CreateRenderTargetView(framebuffer.ptr(), nullptr, framebufferRTV.data());
-    check_quit(FAILED(hr), log, "Failed to create framebuffer RTV");
+    hr = swapChain->GetDesc1(&swapChainDesc);
+    check_quit(FAILED(hr), log, "Failed to get swapchain desc");
+    width = swapChainDesc.Width;
+    height = swapChainDesc.Height;
 
     // FIXME: Unchecked std::optional unwrapping
     ByteBuffer vertexBlobFull = loadEntireFile("viewer-vs_full.fxc").value();
@@ -191,26 +192,26 @@ void StreamViewerD3D::_init() {
     blendStateDesc.RenderTarget[0].RenderTargetWriteMask = 0x0f;
     device->CreateBlendState(&blendStateDesc, blendState.data());
 
-    cursorTexWidth = 128;
-    cursorTexHeight = 128;
-    _recreateCursorTexture();
+    cursorTexSize = 128;
+    recreateCursorTexture_();
 
     decoder = std::make_unique<DecoderSoftware>(clock);
+    decoder->setOutputResolution(width, height);
     decoder->start();
 
     flagRunRender.store(true, std::memory_order_release);
-    renderThread = std::thread([this]() { _renderLoop(); });
+    renderThread = std::thread([this]() { renderLoop_(); });
 }
 
-void StreamViewerD3D::_recreateCursorTexture() {
+void StreamViewerD3D::recreateCursorTexture_() {
     HRESULT hr;
 
     cursorTex.release();
     cursorSRV.release();
 
     D3D11_TEXTURE2D_DESC cursorTexDesc = {};
-    cursorTexDesc.Width = cursorTexWidth;
-    cursorTexDesc.Height = cursorTexHeight;
+    cursorTexDesc.Width = cursorTexSize;
+    cursorTexDesc.Height = cursorTexSize;
     cursorTexDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
     cursorTexDesc.ArraySize = 1;
     cursorTexDesc.MipLevels = 1;
@@ -230,7 +231,8 @@ void StreamViewerD3D::_recreateCursorTexture() {
     check_quit(FAILED(hr), log, "Failed to create cursor SRV");
 }
 
-void StreamViewerD3D::_renderLoop() {
+void StreamViewerD3D::renderLoop_() {
+    HRESULT hr;
     bool desktopLoaded = false;
     bool cursorLoaded = false;
     float clearColor[4] = {0, 0, 0, 1};
@@ -239,10 +241,10 @@ void StreamViewerD3D::_renderLoop() {
     int cursorX = -1, cursorY = -1;
 
     std::chrono::steady_clock::time_point lastStatPrint = std::chrono::steady_clock::now();
-    StatisticMixer totalTime(480);
-    StatisticMixer encodingTime(480);
-    StatisticMixer networkTime(480);
-    StatisticMixer decodingTime(480);
+    StatisticMixer totalTime(300);
+    StatisticMixer encodingTime(300);
+    StatisticMixer networkTime(300);
+    StatisticMixer decodingTime(300);
 
     while (flagRunRender.load(std::memory_order_acquire)) {
         DesktopFrame<TextureSoftware> frame = decoder->popData();
@@ -266,8 +268,8 @@ void StreamViewerD3D::_renderLoop() {
             auto decStat = decodingTime.calcStat();
 
             if (encStat.valid() && netStat.valid() && decStat.valid()) {
-                log->info("Total latency: {:.2f}ms  (Encoding: {:.2f} ms  Network: {:.2f} ms  Decoding: {:.2f} ms)",
-                          totStat.avg, encStat.avg, netStat.avg, decStat.avg);
+                log->info("Total latency: {:.2f}ms  (Encoding: {:.2f} ms", totStat.avg, encStat.avg);
+                log->info("    Network: {:.2f} ms  Decoding: {:.2f} ms)", netStat.avg, decStat.avg);
             }
         }
 
@@ -291,6 +293,34 @@ void StreamViewerD3D::_renderLoop() {
             context->Unmap(desktopTex.ptr(), 0);
         }
 
+        if (frame.cursorShape) {
+            cursorLoaded = true;
+            auto &shape = *frame.cursorShape;
+
+            if (cursorTexSize < shape.width || cursorTexSize < shape.height) {
+                cursorTexSize = std::max(shape.width, shape.height);
+                recreateCursorTexture_();
+            }
+
+            uint8_t *pSrc = shape.image.data();
+
+            D3D11_MAPPED_SUBRESOURCE mapInfo = {};
+            hr = context->Map(cursorTex.ptr(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapInfo);
+            check_quit(FAILED(hr), log, "Failed to map cursor texture");
+
+            uint8_t *pDst = reinterpret_cast<uint8_t *>(mapInfo.pData);
+            if (cursorTexSize == mapInfo.RowPitch) {
+                // Fast path
+                memcpy(pDst, pSrc, cursorTexSize * cursorTexSize);
+            } else {
+                memset(pDst, 0, cursorTexSize * mapInfo.RowPitch);
+                for (int i = 0; i < shape.height; i++)
+                    memcpy(pDst + (i * mapInfo.RowPitch), pSrc + (shape.width * 4) * i, shape.width * 4);
+            }
+
+            context->Unmap(cursorTex.ptr(), 0);
+        }
+
         if (frame.cursorPos) {
             cursorVisible = frame.cursorPos->visible;
 
@@ -303,30 +333,19 @@ void StreamViewerD3D::_renderLoop() {
                 float *pData = reinterpret_cast<float *>(mapInfo.pData);
                 pData[0] = (float)cursorX / width;
                 pData[1] = (float)cursorY / height;
-                pData[2] = (float)cursorTexWidth / width;
-                pData[3] = (float)cursorTexHeight / height;
+                pData[2] = (float)cursorTexSize / width;
+                pData[3] = (float)cursorTexSize / height;
                 context->Unmap(cbuffer.ptr(), 0);
             }
         }
 
-        if (frame.cursorShape) {
-            cursorLoaded = true;
-            auto &shape = *frame.cursorShape;
+        D3D11Texture2D framebuffer;
+        hr = swapChain->GetBuffer(0, framebuffer.guid(), framebuffer.data());
+        check_quit(FAILED(hr), log, "Failed to get framebuffer");
 
-            if (cursorTexWidth < shape.width || cursorTexHeight < shape.height) {
-                cursorTexWidth = cursorTexHeight = std::max(shape.width, shape.height);
-                _recreateCursorTexture();
-            }
-
-            D3D11_MAPPED_SUBRESOURCE mapInfo = {};
-            context->Map(cursorTex.ptr(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapInfo);
-            uint8_t *pDst = reinterpret_cast<uint8_t *>(mapInfo.pData);
-            uint8_t *pSrc = shape.image.data();
-            memset(pDst, 0, cursorTexHeight * mapInfo.RowPitch);
-            for (int i = 0; i < shape.height; i++)
-                memcpy(pDst + (i * mapInfo.RowPitch), pSrc + (shape.width * 4) * i, shape.width * 4);
-            context->Unmap(cursorTex.ptr(), 0);
-        }
+        D3D11RenderTargetView framebufferRTV;
+        hr = device->CreateRenderTargetView(framebuffer.ptr(), nullptr, framebufferRTV.data());
+        check_quit(FAILED(hr), log, "Failed to create framebuffer RTV");
 
         context->ClearRenderTargetView(framebufferRTV.ptr(), clearColor);
         context->OMSetRenderTargets(1, framebufferRTV.data(), nullptr);
@@ -362,6 +381,6 @@ void StreamViewerD3D::_renderLoop() {
             }
         }
 
-        swapChain->Present(1, 0);
+        swapChain->Present(0, DXGI_PRESENT_ALLOW_TEARING);
     }
 }

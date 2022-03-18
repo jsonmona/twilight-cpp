@@ -267,9 +267,10 @@ void EncoderMF::poll() {
         } else if (evType == METransformHaveOutput) {
             auto toRemove = extraData.end();
             long long sampleTime;
+            bool isIDR;
             DesktopFrame<long long> now;
 
-            ByteBuffer encoded = popEncoderData_(&sampleTime);
+            ByteBuffer encoded = popEncoderData_(&sampleTime, &isIDR);
             for (auto itr = extraData.begin(); itr != extraData.end(); ++itr) {
                 if (itr->desktop == sampleTime) {
                     now = std::move(*itr);
@@ -284,6 +285,7 @@ void EncoderMF::poll() {
             extraData.erase(toRemove);
 
             now.timeEncoded = clock.time();
+            now.isIDR = isIDR;
             onDataAvailable(now.getOtherType(std::move(encoded)));
         } else {
             log->warn("Ignoring unknown MediaEventType {}", static_cast<DWORD>(evType));
@@ -345,7 +347,7 @@ void EncoderMF::pushEncoderTexture_(const D3D11Texture2D& tex, long long sampleD
     check_quit(FAILED(hr), log, "Failed to put input into encoder");
 }
 
-ByteBuffer EncoderMF::popEncoderData_(long long* sampleTime) {
+ByteBuffer EncoderMF::popEncoderData_(long long* sampleTime, bool* isIDR) {
     HRESULT hr;
 
     MFT_OUTPUT_STREAM_INFO outputStreamInfo;
@@ -366,7 +368,8 @@ ByteBuffer EncoderMF::popEncoderData_(long long* sampleTime) {
     if (sampleTime)
         outputBuffer.pSample->GetSampleTime(sampleTime);
 
-    // TODO: check MFSampleExtension_CleanPoint
+    if (isIDR)
+        *isIDR = MFGetAttributeUINT32(outputBuffer.pSample, MFSampleExtension_CleanPoint, 0);
 
     DWORD bufferCount = 0;
     hr = outputBuffer.pSample->GetBufferCount(&bufferCount);

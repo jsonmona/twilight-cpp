@@ -26,7 +26,7 @@ std::pair<size_t, size_t> CapturePipelineFactoryWin32::getBestOption() {
     if (outputs.empty())
         return {0, 0};
 
-    D3D11Device dev = dxgiHelper.createDevice(dxgiHelper.getAdapterFromOutput(outputs[0]), true);
+    D3D11Device dev = dxgiHelper.createDevice(dxgiHelper.getAdapterFromOutput(outputs[0]).ptr(), true);
     if (dev.isInvalid())
         return {0, 0};
 

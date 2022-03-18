@@ -27,6 +27,8 @@ struct DesktopFrame {
     std::chrono::microseconds timeDecoded;
     std::chrono::microseconds timePresented;
 
+    bool isIDR;
+
     template <typename U>
     DesktopFrame<U> getOtherType(U&& newDesktop) {
         DesktopFrame<U> ret;
@@ -39,6 +41,8 @@ struct DesktopFrame {
         ret.timeReceived = timeReceived;
         ret.timeDecoded = timeDecoded;
         ret.timePresented = timePresented;
+
+        ret.isIDR = isIDR;
         return ret;
     }
 
@@ -50,7 +54,8 @@ struct DesktopFrame {
           timeEncoded(-1),
           timeReceived(-1),
           timeDecoded(-1),
-          timePresented(-1) {}
+          timePresented(-1),
+          isIDR(false) {}
     DesktopFrame(const DesktopFrame& copy) = delete;
     DesktopFrame(DesktopFrame&& move) = default;
     DesktopFrame& operator=(const DesktopFrame& copy) = delete;
@@ -67,6 +72,7 @@ struct DesktopFrame {
         swap(a.timeReceived, b.timeReceived);
         swap(a.timeDecoded, b.timeDecoded);
         swap(a.timePresented, b.timePresented);
+        swap(a.isIDR, b.isIDR);
     }
 };
 

@@ -27,7 +27,7 @@ bool CapturePipelineD3DMF::init() {
 
     DxgiOutput5 output = outputs[0];
 
-    device = dxgiHelper.createDevice(dxgiHelper.getAdapterFromOutput(output), true);
+    device = dxgiHelper.createDevice(dxgiHelper.getAdapterFromOutput(output).ptr(), true);
     if (device.isInvalid()) {
         log->error("Failed to create video D3D11 context");
         return false;

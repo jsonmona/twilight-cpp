@@ -27,6 +27,8 @@ public:
     void start();
     void stop();
 
+    void setOutputResolution(int width, int height);
+
     void pushData(DesktopFrame<ByteBuffer>&& nextData);
     DesktopFrame<TextureSoftware> popData();
 
@@ -36,6 +38,9 @@ private:
     NetworkClock& clock;
     std::shared_ptr<OpenH264Loader> loader;
     ScaleSoftware scale;
+
+    bool idrPacketInQueue;
+    int outputWidth, outputHeight;
 
     std::atomic<bool> flagRun;
     std::thread looper;

@@ -61,7 +61,7 @@ private:
     void init_();
 
     void pushEncoderTexture_(const D3D11Texture2D& tex, long long sampleDur, long long sampleTime);
-    ByteBuffer popEncoderData_(long long* sampleTime);
+    ByteBuffer popEncoderData_(long long* sampleTime, bool* isIDR);
 };
 
 #endif

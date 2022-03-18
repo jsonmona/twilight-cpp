@@ -122,6 +122,7 @@ void EncoderSoftware::run_() {
             }
 
             cap.timeEncoded = clock.time();
+            cap.isIDR = info.eFrameType == videoFrameTypeIDR;
             onDataAvailable(cap.getOtherType(std::move(combined)));
         } else {
             // FIXME: What happens to sidedata when the frame is skipped?
