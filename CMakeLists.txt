@@ -24,7 +24,7 @@ if(TWILIGHT_BUILD_GUI)
     find_package(Qt6 COMPONENTS Widgets OpenGLWidgets REQUIRED)
 endif()
 
-add_definitions(-DWINVER=0x0603 -D_WIN32_WINNT=0x0603 /Zc:__cplusplus -DUNICODE -D_UNICODE)
+add_definitions(-DWINVER=0x0603 -D_WIN32_WINNT=0x0603 /Zc:__cplusplus -DUNICODE -D_UNICODE /wd4819)
 
 add_subdirectory(external)
 add_subdirectory(src)
