@@ -5,10 +5,12 @@
 #include "common/StatisticMixer.h"
 #include "common/util.h"
 
-static const float quadVertex[] = {-1, -1, -1, 1, 1, -1, 1, 1};
-static const UINT quadVertexStride = 2 * sizeof(quadVertex[0]);
-static const UINT quadVertexOffset = 0;
-static const UINT quadVertexCount = 4;
+struct CursorBox_cbuffer {
+    float cursorPos[2];
+    float cursorSize[2];
+    uint32_t flagCursorVisible;
+    uint32_t dummy_[3];
+};
 
 StreamViewerD3D::StreamViewerD3D(NetworkClock &clock)
     : StreamViewerBase(),
@@ -118,45 +120,16 @@ void StreamViewerD3D::init_() {
     height = swapChainDesc.Height;
 
     // FIXME: Unchecked std::optional unwrapping
-    ByteBuffer vertexBlobFull = loadEntireFile("viewer-vs_full.fxc").value();
-    hr = device->CreateVertexShader(vertexBlobFull.data(), vertexBlobFull.size(), nullptr, vertexShaderFull.data());
+    ByteBuffer vertexBlob = loadEntireFile("viewer-vs_fullscreen.fxc").value();
+    hr = device->CreateVertexShader(vertexBlob.data(), vertexBlob.size(), nullptr, vertexShaderFullscreen.data());
     check_quit(FAILED(hr), log, "Failed to create vertex shader (full)");
 
-    ByteBuffer vertexBlobBox = loadEntireFile("viewer-vs_box.fxc").value();
-    hr = device->CreateVertexShader(vertexBlobBox.data(), vertexBlobBox.size(), nullptr, vertexShaderBox.data());
-    check_quit(FAILED(hr), log, "Failed to create vertex shader (box)");
-
-    ByteBuffer pixelBlob = loadEntireFile("viewer-ps_main.fxc").value();
-    hr = device->CreatePixelShader(pixelBlob.data(), pixelBlob.size(), nullptr, pixelShader.data());
+    ByteBuffer pixelBlob = loadEntireFile("viewer-ps_desktop.fxc").value();
+    hr = device->CreatePixelShader(pixelBlob.data(), pixelBlob.size(), nullptr, pixelShaderDesktop.data());
     check_quit(FAILED(hr), log, "Failed to create pixel shader");
 
-    D3D11_SAMPLER_DESC samplerDesc = {};
-    samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
-    samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
-    samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
-    samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
-    samplerDesc.MipLODBias = 0.0f;
-    samplerDesc.MaxAnisotropy = 1;
-    samplerDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
-    samplerDesc.MinLOD = -FLT_MAX;
-    samplerDesc.MaxLOD = FLT_MAX;
-    device->CreateSamplerState(&samplerDesc, clampSampler.data());
-
-    D3D11_INPUT_ELEMENT_DESC inputLayoutDesc[] = {
-        {"POS", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0}};
-    device->CreateInputLayout(inputLayoutDesc, 1, vertexBlobFull.data(), vertexBlobFull.size(), inputLayoutFull.data());
-    device->CreateInputLayout(inputLayoutDesc, 1, vertexBlobBox.data(), vertexBlobBox.size(), inputLayoutBox.data());
-
-    D3D11_BUFFER_DESC vertexBufferDesc = {};
-    vertexBufferDesc.ByteWidth = sizeof(quadVertex);
-    vertexBufferDesc.Usage = D3D11_USAGE_IMMUTABLE;
-    vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-    D3D11_SUBRESOURCE_DATA vertexBufferData = {};
-    vertexBufferData.pSysMem = quadVertex;
-    device->CreateBuffer(&vertexBufferDesc, &vertexBufferData, vertexBuffer.data());
-
     D3D11_BUFFER_DESC cbufferDesc = {};
-    cbufferDesc.ByteWidth = sizeof(float) * 4;
+    cbufferDesc.ByteWidth = sizeof(CursorBox_cbuffer);
     cbufferDesc.Usage = D3D11_USAGE_DYNAMIC;
     cbufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
     cbufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
@@ -183,16 +156,25 @@ void StreamViewerD3D::init_() {
     device->CreateShaderResourceView(desktopTex.ptr(), &desktopSrvDesc, desktopSRV.data());
     check_quit(FAILED(hr), log, "Failed to create desktop SRV");
 
-    D3D11_BLEND_DESC blendStateDesc = {};
-    blendStateDesc.RenderTarget[0].BlendEnable = true;
-    blendStateDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
-    blendStateDesc.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
-    blendStateDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
-    blendStateDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
-    blendStateDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
-    blendStateDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
-    blendStateDesc.RenderTarget[0].RenderTargetWriteMask = 0x0f;
-    device->CreateBlendState(&blendStateDesc, blendState.data());
+    D3D11_SAMPLER_DESC desktopSamplerDesc = {};
+    desktopSamplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
+    desktopSamplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
+    desktopSamplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+    desktopSamplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+    hr = device->CreateSamplerState(&desktopSamplerDesc, desktopTexSampler.data());
+    check_quit(FAILED(hr), log, "Failed to create sampler state");
+
+    D3D11_SAMPLER_DESC cursorSamplerDesc = {};
+    cursorSamplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_BORDER;
+    cursorSamplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_BORDER;
+    cursorSamplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+    cursorSamplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+    cursorSamplerDesc.BorderColor[0] = 0;
+    cursorSamplerDesc.BorderColor[1] = 0;
+    cursorSamplerDesc.BorderColor[2] = 0;
+    cursorSamplerDesc.BorderColor[3] = 0;
+    hr = device->CreateSamplerState(&cursorSamplerDesc, cursorTexSampler.data());
+    check_quit(FAILED(hr), log, "Failed to create sampler state");
 
     cursorTexSize = 128;
     recreateCursorTexture_();
@@ -239,7 +221,7 @@ void StreamViewerD3D::renderLoop_() {
     bool cursorLoaded = false;
     float clearColor[4] = {0, 0, 0, 1};
 
-    bool cursorVisible = false;
+    const uintptr_t nullval = 0;
 
     std::chrono::steady_clock::time_point lastStatPrint = std::chrono::steady_clock::now();
     StatisticMixer totalTime(300);
@@ -322,26 +304,32 @@ void StreamViewerD3D::renderLoop_() {
             context->Unmap(cursorTex.ptr(), 0);
         }
 
-        if (frame.cursorPos) {
-            cursorVisible = frame.cursorPos->visible;
+        D3D11_MAPPED_SUBRESOURCE mapInfo = {};
+        hr = context->Map(cbuffer.ptr(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapInfo);
+        check_quit(FAILED(hr), log, "Failed to map cbuffer");
 
-            if (cursorVisible) {
+        CursorBox_cbuffer *p = reinterpret_cast<CursorBox_cbuffer *>(mapInfo.pData);
+
+        if (frame.cursorPos) {
+            p->flagCursorVisible = !!frame.cursorPos->visible;
+
+            if (frame.cursorPos->visible) {
                 int cursorX = frame.cursorPos->xScaler.imul(frame.cursorPos->x);
                 int cursorY = frame.cursorPos->yScaler.imul(frame.cursorPos->y);
 
-                D3D11_MAPPED_SUBRESOURCE mapInfo = {};
-                hr = context->Map(cbuffer.ptr(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapInfo);
-                check_quit(FAILED(hr), log, "Failed to map cbuffer");
-
-                float *pData = reinterpret_cast<float *>(mapInfo.pData);
-                pData[0] = (float)cursorX / width;
-                pData[1] = (float)cursorY / height;
-                pData[2] = (float)cursorTexSize / width * frame.cursorPos->xScaler.toFloat();
-                pData[3] = (float)cursorTexSize / height * frame.cursorPos->yScaler.toFloat();
-
-                context->Unmap(cbuffer.ptr(), 0);
+                p->cursorPos[0] = (float)cursorX / width;
+                p->cursorPos[1] = (float)cursorY / height;
+                p->cursorSize[0] = (float)cursorTexSize / width * frame.cursorPos->xScaler.toFloat();
+                p->cursorSize[1] = (float)cursorTexSize / height * frame.cursorPos->yScaler.toFloat();
+            } else {
+                p->cursorPos[0] = 0;
+                p->cursorPos[1] = 0;
+                p->cursorSize[0] = 0;
+                p->cursorSize[1] = 0;
             }
         }
+
+        context->Unmap(cbuffer.ptr(), 0);
 
         D3D11Texture2D framebuffer;
         hr = swapChain->GetBuffer(0, framebuffer.guid(), framebuffer.data());
@@ -353,7 +341,6 @@ void StreamViewerD3D::renderLoop_() {
 
         context->ClearRenderTargetView(framebufferRTV.ptr(), clearColor);
         context->OMSetRenderTargets(1, framebufferRTV.data(), nullptr);
-        context->OMSetBlendState(blendState.ptr(), nullptr, 0xffffffff);
 
         if (desktopLoaded) {
             DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
@@ -362,29 +349,23 @@ void StreamViewerD3D::renderLoop_() {
             D3D11_VIEWPORT viewport = {0, 0, (float)(swapChainDesc.Width), (float)(swapChainDesc.Height), 0, 1};
             context->RSSetViewports(1, &viewport);
 
-            context->VSSetShader(vertexShaderFull.ptr(), nullptr, 0);
+            context->VSSetShader(vertexShaderFullscreen.ptr(), nullptr, 0);
+            context->VSSetConstantBuffers(0, 1, cbuffer.data());
 
-            context->PSSetShader(pixelShader.ptr(), nullptr, 0);
+            context->PSSetShader(pixelShaderDesktop.ptr(), nullptr, 0);
+            context->PSSetConstantBuffers(0, 1, cbuffer.data());
             context->PSSetShaderResources(0, 1, desktopSRV.data());
-            context->PSSetSamplers(0, 1, clampSampler.data());
+            context->PSSetShaderResources(1, 1, cursorSRV.data());
+            context->PSSetSamplers(0, 1, desktopTexSampler.data());
+            context->PSSetSamplers(1, 1, cursorTexSampler.data());
 
-            context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
-            context->IASetInputLayout(inputLayoutFull.ptr());
-            context->IASetVertexBuffers(0, 1, vertexBuffer.data(), &quadVertexStride, &quadVertexOffset);
-            context->Draw(quadVertexCount, 0);
-
-            if (cursorLoaded && cursorVisible) {
-                context->VSSetShader(vertexShaderBox.ptr(), nullptr, 0);
-                context->VSSetConstantBuffers(0, 1, cbuffer.data());
-
-                context->PSSetShaderResources(0, 1, cursorSRV.data());
-
-                context->IASetInputLayout(inputLayoutBox.ptr());
-                context->IASetVertexBuffers(0, 1, vertexBuffer.data(), &quadVertexStride, &quadVertexOffset);
-                context->Draw(quadVertexCount, 0);
-            }
+            context->IASetInputLayout(nullptr);
+            context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+            context->IASetVertexBuffers(0, 1, (ID3D11Buffer **)&nullval, (UINT *)&nullval, (UINT *)&nullval);
+            context->Draw(3, 0);
         }
 
-        swapChain->Present(0, DXGI_PRESENT_ALLOW_TEARING);
+        hr = swapChain->Present(0, DXGI_PRESENT_ALLOW_TEARING);
+        check_quit(FAILED(hr), log, "Failed to present next frame");
     }
 }

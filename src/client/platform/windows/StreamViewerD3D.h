@@ -56,20 +56,16 @@ private:
     DxgiHelper dxgiHelper;
     D3D11Device device;
     D3D11DeviceContext context;
-    ComWrapper<IDXGISwapChain1> swapChain;
+    DxgiSwapChain1 swapChain;
     D3D11Texture2D desktopTex;
     D3D11Texture2D cursorTex;
-    D3D11VertexShader vertexShaderFull;
-    D3D11VertexShader vertexShaderBox;
-    D3D11PixelShader pixelShader;
-    D3D11SamplerState clampSampler;
-    D3D11InputLayout inputLayoutFull;
-    D3D11InputLayout inputLayoutBox;
-    D3D11Buffer vertexBuffer;
+    D3D11VertexShader vertexShaderFullscreen;
+    D3D11PixelShader pixelShaderDesktop;
     D3D11Buffer cbuffer;
     D3D11ShaderResourceView desktopSRV;
     D3D11ShaderResourceView cursorSRV;
-    D3D11BlendState blendState;
+    D3D11SamplerState desktopTexSampler;
+    D3D11SamplerState cursorTexSampler;
 };
 
 #endif

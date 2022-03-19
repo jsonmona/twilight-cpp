@@ -253,9 +253,8 @@ if(WIN32)
     fn_add_shader("server" "ps_y" "ps" "./server/platform/windows/rgb2yuv.hlsl")
     fn_add_shader("server" "ps_uv" "ps" "./server/platform/windows/rgb2yuv.hlsl")
     fn_add_shader("server" "ps_copy" "ps" "./server/platform/windows/rgb2yuv.hlsl")
-    fn_add_shader("client" "vs_full" "vs" "./client/platform/windows/viewer.hlsl")
-    fn_add_shader("client" "vs_box" "vs" "./client/platform/windows/viewer.hlsl")
-    fn_add_shader("client" "ps_main" "ps" "./client/platform/windows/viewer.hlsl")
+    fn_add_shader("client" "vs_fullscreen" "vs" "./client/platform/windows/viewer.hlsl")
+    fn_add_shader("client" "ps_desktop" "ps" "./client/platform/windows/viewer.hlsl")
     
     add_custom_target(fxc DEPENDS ${FXC_FILES})
 
