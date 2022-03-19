@@ -140,6 +140,16 @@ void StreamServer::processOutput_(DesktopFrame<ByteBuffer>&& cap) {
         m->set_height(cap.cursorShape->height);
         m->set_hotspot_x(cap.cursorShape->hotspotX);
         m->set_hotspot_y(cap.cursorShape->hotspotY);
+        switch (cap.cursorShape->format) {
+        case CursorShapeFormat::RGBA:
+            m->set_format(msg::CursorShape_Format_RGBA);
+            break;
+        case CursorShapeFormat::RGBA_XOR:
+            m->set_format(msg::CursorShape_Format_RGBA_XOR);
+            break;
+        default:
+            error_quit(log, "Unknown cursor shape format: {}", (int)cap.cursorShape->format);
+        }
 
         pkt.set_extra_data_len(cap.cursorShape->image.size());
         broadcast_(pkt, cap.cursorShape->image.data());

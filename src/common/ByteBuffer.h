@@ -21,9 +21,9 @@ public:
 
         size_t size() const { return parent->nowSize / sizeof(T); }
 
-        T *begin() { return reinterpret_cast<T *>(parent->ptr); }
-
-        T *end() { return reinterpret_cast<T *>(parent->ptr) + size(); }
+        T *data() const { return reinterpret_cast<T *>(parent->ptr); }
+        T *begin() const { return reinterpret_cast<T *>(parent->ptr); }
+        T *end() const { return reinterpret_cast<T *>(parent->ptr) + size(); }
     };
 
     ByteBuffer() : ptr(nullptr), size_(0), capacity_(0) {}

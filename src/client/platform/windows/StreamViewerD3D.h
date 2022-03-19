@@ -58,14 +58,15 @@ private:
     D3D11DeviceContext context;
     DxgiSwapChain1 swapChain;
     D3D11Texture2D desktopTex;
-    D3D11Texture2D cursorTex;
     D3D11VertexShader vertexShaderFullscreen;
     D3D11PixelShader pixelShaderDesktop;
     D3D11Buffer cbuffer;
     D3D11ShaderResourceView desktopSRV;
-    D3D11ShaderResourceView cursorSRV;
     D3D11SamplerState desktopTexSampler;
     D3D11SamplerState cursorTexSampler;
+
+    D3D11Texture2D cursorTex;
+    D3D11ShaderResourceView cursorSRV;
 };
 
 #endif

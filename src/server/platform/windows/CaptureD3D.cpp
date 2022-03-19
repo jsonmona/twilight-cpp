@@ -267,40 +267,42 @@ bool CaptureD3D::openDuplication_() {
 
 void CaptureD3D::parseCursor_(CursorShape* cursorShape, const DXGI_OUTDUPL_POINTER_SHAPE_INFO& cursorInfo,
                               const ByteBuffer& buffer) {
-    if (cursorInfo.Type == DXGI_OUTDUPL_POINTER_SHAPE_TYPE_COLOR) {
+    if (cursorInfo.Type == DXGI_OUTDUPL_POINTER_SHAPE_TYPE_COLOR ||
+        cursorInfo.Type == DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MASKED_COLOR) {
         cursorShape->image.resize(cursorInfo.Height * cursorInfo.Width * 4);
         cursorShape->width = cursorInfo.Width;
         cursorShape->height = cursorInfo.Height;
+        cursorShape->format = cursorInfo.Type == DXGI_OUTDUPL_POINTER_SHAPE_TYPE_COLOR ? CursorShapeFormat::RGBA
+                                                                                       : CursorShapeFormat::RGBA_XOR;
 
-        uint8_t* const basePtr = cursorShape->image.data();
+        uint32_t* dst = cursorShape->image.view<uint32_t>().data();
         for (int i = 0; i < cursorInfo.Height; i++) {
             for (int j = 0; j < cursorInfo.Width; j++) {
-                // bgra -> rgba
+                // BGRA -> RGBA (0xAABBGGRR in little endian)
                 uint32_t val = *reinterpret_cast<const uint32_t*>(buffer.data() + (i * cursorInfo.Pitch + j * 4));
                 val = ((val & 0x00FF00FF) << 16) | ((val & 0x00FF00FF) >> 16) | (val & 0xFF00FF00);
-                *reinterpret_cast<uint32_t*>(basePtr + (i * cursorInfo.Width * 4 + j * 4)) = val;
+                (*dst++) = val;
             }
         }
     } else if (cursorInfo.Type == DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MONOCHROME) {
-        cursorShape->image.resize(cursorInfo.Height * cursorInfo.Width * 4 / 2);
+        cursorShape->image.resize(cursorInfo.Height / 2 * cursorInfo.Width * 4);
         cursorShape->width = cursorInfo.Width;
         cursorShape->height = cursorInfo.Height / 2;
+        cursorShape->format = CursorShapeFormat::RGBA_XOR;
 
-        uint8_t* const basePtr = cursorShape->image.data();
+        uint32_t* dst = cursorShape->image.view<uint32_t>().data();
         for (int i = 0; i < cursorInfo.Height / 2; i++) {
             for (int j = 0; j < cursorInfo.Width / 8; j++) {
                 uint8_t value = buffer[i * cursorInfo.Pitch + j];
                 uint8_t alpha = buffer[(i + cursorInfo.Height / 2) * cursorInfo.Pitch + j];
                 for (int k = 0; k < 8; k++) {
-                    uint8_t rgbValue = (value & 1) ? 0xFF : 0x00;
-                    uint8_t alphaValue = (alpha & 1) ? 0xFF : 0x00;
-                    value >>= 1;
-                    alpha >>= 1;
+                    uint32_t rgb = (value & 0x80) ? 0xFF : 0x00;
+                    uint32_t a = (alpha & 0x80) ? 0xFF : 0x00;
+                    value <<= 1;
+                    alpha <<= 1;
 
-                    basePtr[i * cursorInfo.Width * 4 + j * 8 * 4 + k * 4] = rgbValue;
-                    basePtr[i * cursorInfo.Width * 4 + j * 8 * 4 + k * 4 + 1] = rgbValue;
-                    basePtr[i * cursorInfo.Width * 4 + j * 8 * 4 + k * 4 + 2] = rgbValue;
-                    basePtr[i * cursorInfo.Width * 4 + j * 8 * 4 + k * 4 + 3] = alphaValue;
+                    // RGBA (0xAABBGGRR in little endian)
+                    (*dst++) = (a << 24) | (rgb << 16) | (rgb << 8) | rgb;
                 }
             }
         }

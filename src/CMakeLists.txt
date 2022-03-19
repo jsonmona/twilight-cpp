@@ -6,6 +6,12 @@ if(TWILIGHT_WRITE_SSLKEYLOG)
     add_definitions("-DTWILIGHT_WRITE_SSLKEYLOG")
 endif()
 
+if(CMAKE_CXX_BYTE_ORDER STREQUAL "")
+    message(WARNING "Target endianness unknown, assuming little endian.")
+elseif(CMAKE_CXX_BYTE_ORDER STREQUAL "BIG_ENDIAN")
+    message(FATAL_ERROR "Big endian target is not supported!")
+endif()
+
 set(COMMON_SRC
     ./common/ByteBuffer.h
     ./common/DesktopFrame.h

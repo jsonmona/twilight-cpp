@@ -9,8 +9,10 @@ struct CursorBox_cbuffer {
     float cursorPos[2];
     float cursorSize[2];
     uint32_t flagCursorVisible;
-    uint32_t dummy_[3];
+    uint32_t flagCursorXOR;
+    uint32_t dummy_[2];
 };
+static_assert(sizeof(CursorBox_cbuffer) % 16 == 0, "cbuffer size must be multiple of 16");
 
 StreamViewerD3D::StreamViewerD3D(NetworkClock &clock)
     : StreamViewerBase(),
@@ -81,11 +83,23 @@ void StreamViewerD3D::processCursorShape(const msg::Packet &pkt, uint8_t *extraD
     const auto &data = pkt.cursor_shape();
 
     auto now = std::make_shared<CursorShape>();
+    now->image.write(0, extraData, pkt.extra_data_len());
     now->height = data.height();
     now->width = data.width();
     now->hotspotX = data.hotspot_x();
     now->hotspotY = data.hotspot_y();
-    now->image.write(0, extraData, pkt.extra_data_len());
+
+    switch (data.format()) {
+    case msg::CursorShape_Format_RGBA:
+        now->format = CursorShapeFormat::RGBA;
+        break;
+    case msg::CursorShape_Format_RGBA_XOR:
+        now->format = CursorShapeFormat::RGBA_XOR;
+        break;
+    default:
+        log->warn("Received unknown cursor shape format: {}", data.format());
+        now->format = CursorShapeFormat::RGBA;
+    }
 
     std::atomic_exchange(&pendingCursorChange, now);
 }
@@ -219,6 +233,7 @@ void StreamViewerD3D::renderLoop_() {
     HRESULT hr;
     bool desktopLoaded = false;
     bool cursorLoaded = false;
+    bool usingXORCursor = false;
     float clearColor[4] = {0, 0, 0, 1};
 
     const uintptr_t nullval = 0;
@@ -228,6 +243,14 @@ void StreamViewerD3D::renderLoop_() {
     StatisticMixer encodingTime(300);
     StatisticMixer networkTime(300);
     StatisticMixer decodingTime(300);
+
+    D3D11Texture2D framebuffer;
+    hr = swapChain->GetBuffer(0, framebuffer.guid(), framebuffer.data());
+    check_quit(FAILED(hr), log, "Failed to get framebuffer");
+
+    D3D11RenderTargetView framebufferRTV;
+    hr = device->CreateRenderTargetView(framebuffer.ptr(), nullptr, framebufferRTV.data());
+    check_quit(FAILED(hr), log, "Failed to create framebuffer RTV");
 
     while (flagRunRender.load(std::memory_order_acquire)) {
         DesktopFrame<TextureSoftware> frame = decoder->popData();
@@ -278,7 +301,11 @@ void StreamViewerD3D::renderLoop_() {
 
         if (frame.cursorShape) {
             cursorLoaded = true;
+
             auto &shape = *frame.cursorShape;
+            check_quit(shape.format != CursorShapeFormat::RGBA && shape.format != CursorShapeFormat::RGBA_XOR, log,
+                       "Unexpected cursor shape format: {}", (int)shape.format);
+            usingXORCursor = shape.format == CursorShapeFormat::RGBA_XOR;
 
             if (cursorTexSize < shape.width || cursorTexSize < shape.height) {
                 cursorTexSize = std::max(shape.width, shape.height);
@@ -292,14 +319,9 @@ void StreamViewerD3D::renderLoop_() {
             check_quit(FAILED(hr), log, "Failed to map cursor texture");
 
             uint8_t *pDst = reinterpret_cast<uint8_t *>(mapInfo.pData);
-            if (cursorTexSize == mapInfo.RowPitch) {
-                // Fast path
-                memcpy(pDst, pSrc, cursorTexSize * cursorTexSize);
-            } else {
-                memset(pDst, 0, cursorTexSize * mapInfo.RowPitch);
-                for (int i = 0; i < shape.height; i++)
-                    memcpy(pDst + (i * mapInfo.RowPitch), pSrc + (shape.width * 4) * i, shape.width * 4);
-            }
+            memset(pDst, 0, cursorTexSize * mapInfo.RowPitch);
+            for (int i = 0; i < shape.height; i++)
+                memcpy(pDst + (i * mapInfo.RowPitch), pSrc + (shape.width * 4) * i, shape.width * 4);
 
             context->Unmap(cursorTex.ptr(), 0);
         }
@@ -309,9 +331,11 @@ void StreamViewerD3D::renderLoop_() {
         check_quit(FAILED(hr), log, "Failed to map cbuffer");
 
         CursorBox_cbuffer *p = reinterpret_cast<CursorBox_cbuffer *>(mapInfo.pData);
+        p->flagCursorVisible = false;
+        p->flagCursorXOR = usingXORCursor;
 
         if (frame.cursorPos) {
-            p->flagCursorVisible = !!frame.cursorPos->visible;
+            p->flagCursorVisible = !!(frame.cursorPos->visible && cursorLoaded);
 
             if (frame.cursorPos->visible) {
                 int cursorX = frame.cursorPos->xScaler.imul(frame.cursorPos->x);
@@ -330,14 +354,6 @@ void StreamViewerD3D::renderLoop_() {
         }
 
         context->Unmap(cbuffer.ptr(), 0);
-
-        D3D11Texture2D framebuffer;
-        hr = swapChain->GetBuffer(0, framebuffer.guid(), framebuffer.data());
-        check_quit(FAILED(hr), log, "Failed to get framebuffer");
-
-        D3D11RenderTargetView framebufferRTV;
-        hr = device->CreateRenderTargetView(framebuffer.ptr(), nullptr, framebufferRTV.data());
-        check_quit(FAILED(hr), log, "Failed to create framebuffer RTV");
 
         context->ClearRenderTargetView(framebufferRTV.ptr(), clearColor);
         context->OMSetRenderTargets(1, framebufferRTV.data(), nullptr);

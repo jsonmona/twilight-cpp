@@ -13,6 +13,8 @@
 // TODO: Move this to a more proper place
 enum class ScaleType { AYUV, NV12 };
 
+enum class CursorShapeFormat { RGBA, RGBA_XOR };
+
 struct CursorPos;
 struct CursorShape;
 
@@ -87,6 +89,7 @@ struct CursorPos {
 struct CursorShape {
     int width, height;
     int hotspotX, hotspotY;
+    CursorShapeFormat format;
     ByteBuffer image;
 };
 
