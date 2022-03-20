@@ -40,13 +40,12 @@ private slots:
 
 private:
     LoggerPtr log;
+    NetworkClock clock;
     StreamClient sc;
 
     QVBoxLayout boxLayout;
     StreamViewerBase *viewer;
-    NetworkClock clock;
 
-    std::atomic<bool> flagRunPing;
     std::atomic<bool> flagPlayAudio;
     std::atomic<bool> flagPinBoxClosed;
 
@@ -57,8 +56,6 @@ private:
     std::mutex audioDataLock;
     std::condition_variable audioDataCV;
     std::deque<ByteBuffer> audioData;
-
-    std::thread pingThread;
 
     void processStateChange_(StreamClient::State newState, std::string_view msg);
     void processNewPacket_(const msg::Packet &pkt, uint8_t *extraData);

@@ -10,16 +10,19 @@
 #include <string>
 #include <thread>
 
-#include "client/HostList.h"
 #include "common/CertStore.h"
 #include "common/log.h"
+
 #include "common/net/NetworkSocket.h"
+
+#include "client/HostList.h"
+#include "client/NetworkClock.h"
 
 class StreamClient {
 public:
     enum class State : int { CONNECTED, DISCONNECTED, AUTHENTICATING };
 
-    StreamClient();
+    explicit StreamClient(NetworkClock &clock);
     ~StreamClient();
 
     template <typename Fn>
@@ -45,6 +48,7 @@ public:
 
 private:
     LoggerPtr log;
+    NetworkClock &clock;
 
     NetworkSocket conn;
     CertStore cert;
@@ -53,8 +57,13 @@ private:
     std::function<void(State, std::string_view msg)> onStateChange;
     std::function<void(int)> onDisplayPin;
 
+    std::atomic<bool> flagRunPing;
+
     std::thread recvThread;
-    void _runRecv();
+    std::thread pingThread;
+
+    void runRecv_();
+    void runPing_();
     bool doIntro_(const HostListEntry &host, bool forceAuth);
     bool doAuth_(const HostListEntry &host);
 };

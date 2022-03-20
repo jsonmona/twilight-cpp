@@ -12,6 +12,7 @@
 StreamWindow::StreamWindow(HostListEntry host, bool playAudio)
     : QWidget(),
       log(createNamedLogger("StreamWindow")),
+      sc(clock),
       viewer(new StreamViewerD3D(clock)),
       boxLayout(this),
       flagPlayAudio(playAudio) {
@@ -37,24 +38,17 @@ StreamWindow::StreamWindow(HostListEntry host, bool playAudio)
 
     if (playAudio)
         audioThread = std::thread(&StreamWindow::runAudio_, this);
-
-    flagRunPing.store(true, std::memory_order_relaxed);
-    pingThread = std::thread(&StreamWindow::runPing_, this);
 }
 
 StreamWindow::~StreamWindow() {
     sc.disconnect();
 
     bool wasPlayingAudio = flagPlayAudio.exchange(false, std::memory_order_relaxed);
-    bool wasRunningPing = flagRunPing.exchange(false, std::memory_order_relaxed);
 
     if (wasPlayingAudio) {
         audioDataCV.notify_all();
         audioThread.join();
     }
-
-    if (wasRunningPing)
-        pingThread.join();
 }
 
 void StreamWindow::displayPin_(int pin) {
@@ -231,28 +225,5 @@ void StreamWindow::runAudio_() {
     /* lock */ {
         std::lock_guard lock(audioDataLock);
         audioData.clear();
-    }
-}
-
-void StreamWindow::runPing_() {
-    while (flagPlayAudio.load(std::memory_order_relaxed)) {
-        uint32_t pingId;
-        std::chrono::milliseconds sleepAmount;
-
-        bool sendPing = clock.generatePing(&pingId, &sleepAmount);
-        if (!sendPing) {
-            std::this_thread::sleep_for(sleepAmount);
-            continue;
-        }
-
-        msg::Packet pkt;
-        pkt.set_extra_data_len(0);
-
-        auto *req = pkt.mutable_ping_request();
-        req->set_id(pingId);
-        req->set_latency(clock.latency());
-
-        sc.send(pkt, nullptr);
-        std::this_thread::sleep_for(sleepAmount);
     }
 }

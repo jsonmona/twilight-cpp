@@ -11,7 +11,7 @@
 constexpr uint16_t SERVICE_PORT = 6495;
 constexpr int32_t PROTOCOL_VERSION = 1;
 
-StreamClient::StreamClient() : log(createNamedLogger("StreamClient")) {
+StreamClient::StreamClient(NetworkClock &clock) : log(createNamedLogger("StreamClient")), clock(clock) {
     conn.setOnDisconnected([this](std::string_view msg) { onStateChange(State::DISCONNECTED, msg); });
 
     std::unique_ptr<Keypair> keypair = std::make_unique<Keypair>();
@@ -20,9 +20,17 @@ StreamClient::StreamClient() : log(createNamedLogger("StreamClient")) {
     cert.loadCert("cert.der");
 }
 
-StreamClient::~StreamClient() {}
+StreamClient::~StreamClient() {
+    flagRunPing.store(false, std::memory_order_relaxed);
+    if (pingThread.joinable())
+        pingThread.join();
+}
 
 void StreamClient::connect(HostListEntry host) {
+    flagRunPing.store(false, std::memory_order_relaxed);
+    if (pingThread.joinable())
+        pingThread.join();
+
     bool needsAuth = !host->certHash.isValid();
     host->updateLastConnected();
 
@@ -35,14 +43,20 @@ void StreamClient::connect(HostListEntry host) {
                 onStateChange(State::DISCONNECTED, "Auth failed");  // TODO: Find a way to localize this
                 return;
             }
+
+            flagRunPing.store(true, std::memory_order_relaxed);
+            pingThread = std::thread(&StreamClient::runPing_, this);
+
             onStateChange(State::CONNECTED, "");
-            _runRecv();
+            runRecv_();
         } else
             onStateChange(State::DISCONNECTED, "Unable to connect");  // TODO: Pass message from OS
     });
 }
 
 void StreamClient::disconnect() {
+    flagRunPing.store(false);
+
     conn.disconnect();
     recvThread.join();
 }
@@ -57,7 +71,7 @@ bool StreamClient::send(const msg::Packet &pkt, const uint8_t *extraData) {
     return conn.send(pkt, extraData);
 }
 
-void StreamClient::_runRecv() {
+void StreamClient::runRecv_() {
     bool stat;
     msg::Packet pkt;
     ByteBuffer extraData;
@@ -69,8 +83,29 @@ void StreamClient::_runRecv() {
 
         onNextPacket(pkt, extraData.data());
     }
+}
 
-    log->info("Stopping receive loop");
+void StreamClient::runPing_() {
+    while (flagRunPing.load(std::memory_order_relaxed)) {
+        uint32_t pingId;
+        std::chrono::milliseconds sleepAmount;
+
+        bool sendPing = clock.generatePing(&pingId, &sleepAmount);
+        if (!sendPing) {
+            std::this_thread::sleep_for(sleepAmount);
+            continue;
+        }
+
+        msg::Packet pkt;
+        pkt.set_extra_data_len(0);
+
+        auto *req = pkt.mutable_ping_request();
+        req->set_id(pingId);
+        req->set_latency(clock.latency());
+
+        send(pkt, nullptr);
+        std::this_thread::sleep_for(sleepAmount);
+    }
 }
 
 // Returns negative on error (mbedtls error code)
@@ -169,8 +204,8 @@ bool StreamClient::doIntro_(const HostListEntry &host, bool forceAuth) {
     /* ConfigureStreamRequest */ {
         auto *req = pkt.mutable_configure_stream_request();
         req->set_codec(msg::Codec::H264_BASELINE);
-        req->set_width(nativeWidth);
-        req->set_height(nativeHeight);
+        req->set_width(1280);
+        req->set_height(720);
         req->set_fps_num(nativeFpsNum);
         req->set_fps_den(nativeFpsDen);
 
