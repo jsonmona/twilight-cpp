@@ -43,17 +43,23 @@ float4 ps_desktop(ps_in input) : SV_Target0 {
 
     if (FlagCursorVisible != 0) {
         float4 cursor = cursorTex.Sample(CursorTextureSampler, input.cursorTexCoord);
-
-        if (FlagCursorXOR != 0) {
-            uint3 intColor = color.rgb * 255.5f;
-            uint3 intCursor = cursor.rgb * 255.5f;
-            cursor.rgb = (intColor ^ intCursor) / 255.0f;
-        }
-
         float srcAlpha = cursor.a;
         float dstAlpha = color.a - color.a * cursor.a;  // FMA optimize color.a * (1 - cursor.a)
+        float3 srcColor;
+        float3 dstColor;
+
+        if (FlagCursorXOR == 0) {
+            srcColor = cursor.rgb;
+            dstColor = color.rgb;
+        } else {
+            uint3 intColor = color.rgb * 255.5f;
+            uint3 intCursor = cursor.rgb * 255.5f;
+            srcColor = cursor.rgb;
+            dstColor = (intColor ^ intCursor) / 255.0f;
+        }
+
+        color.rgb = (srcColor * srcAlpha + dstColor * dstAlpha) / (srcAlpha + dstAlpha);
         color.a = srcAlpha + dstAlpha;
-        color.rgb = (cursor.rgb * srcAlpha + color.rgb * dstAlpha) / color.a;
     }
 
     return color;

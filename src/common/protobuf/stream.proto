@@ -27,8 +27,8 @@ message CursorShape {
         RGBA = 0;
 
         // Like RGBA, but alpha channel is either 0x00 or 0xFF.
-        // If alpha is 0, RGB replaces screen content. If not, RGB is XORed with screen content.
-        // As described by https://docs.microsoft.com/en-us/windows/win32/api/dxgi1_2/ne-dxgi1_2-dxgi_outdupl_pointer_shape_type
+        // If alpha is 0, output color is screen content XOR cursor color
+        // If alpha is 1, output color is cursor color
         RGBA_XOR = 1;
     }
 

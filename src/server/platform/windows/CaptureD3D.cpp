@@ -269,11 +269,11 @@ void CaptureD3D::parseCursor_(CursorShape* cursorShape, const DXGI_OUTDUPL_POINT
                               const ByteBuffer& buffer) {
     if (cursorInfo.Type == DXGI_OUTDUPL_POINTER_SHAPE_TYPE_COLOR ||
         cursorInfo.Type == DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MASKED_COLOR) {
+        bool isXOR = cursorInfo.Type == DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MASKED_COLOR;
         cursorShape->image.resize(cursorInfo.Height * cursorInfo.Width * 4);
         cursorShape->width = cursorInfo.Width;
         cursorShape->height = cursorInfo.Height;
-        cursorShape->format = cursorInfo.Type == DXGI_OUTDUPL_POINTER_SHAPE_TYPE_COLOR ? CursorShapeFormat::RGBA
-                                                                                       : CursorShapeFormat::RGBA_XOR;
+        cursorShape->format = !isXOR ? CursorShapeFormat::RGBA : CursorShapeFormat::RGBA_XOR;
 
         uint32_t* dst = cursorShape->image.view<uint32_t>().data();
         for (int i = 0; i < cursorInfo.Height; i++) {
@@ -281,6 +281,8 @@ void CaptureD3D::parseCursor_(CursorShape* cursorShape, const DXGI_OUTDUPL_POINT
                 // BGRA -> RGBA (0xAABBGGRR in little endian)
                 uint32_t val = *reinterpret_cast<const uint32_t*>(buffer.data() + (i * cursorInfo.Pitch + j * 4));
                 val = ((val & 0x00FF00FF) << 16) | ((val & 0x00FF00FF) >> 16) | (val & 0xFF00FF00);
+                if (isXOR)
+                    val ^= 0xFF000000;
                 (*dst++) = val;
             }
         }
@@ -293,13 +295,13 @@ void CaptureD3D::parseCursor_(CursorShape* cursorShape, const DXGI_OUTDUPL_POINT
         uint32_t* dst = cursorShape->image.view<uint32_t>().data();
         for (int i = 0; i < cursorInfo.Height / 2; i++) {
             for (int j = 0; j < cursorInfo.Width / 8; j++) {
-                uint8_t value = buffer[i * cursorInfo.Pitch + j];
-                uint8_t alpha = buffer[(i + cursorInfo.Height / 2) * cursorInfo.Pitch + j];
+                uint8_t andMask = buffer[i * cursorInfo.Pitch + j];
+                uint8_t xorMask = buffer[(i + cursorInfo.Height / 2) * cursorInfo.Pitch + j];
                 for (int k = 0; k < 8; k++) {
-                    uint32_t rgb = (value & 0x80) ? 0xFF : 0x00;
-                    uint32_t a = (alpha & 0x80) ? 0xFF : 0x00;
-                    value <<= 1;
-                    alpha <<= 1;
+                    uint32_t rgb = (xorMask & 0x80) ? 0xFF : 0;
+                    uint32_t a = !(andMask & 0x80) ? 0xFF : 0;
+                    andMask <<= 1;
+                    xorMask <<= 1;
 
                     // RGBA (0xAABBGGRR in little endian)
                     (*dst++) = (a << 24) | (rgb << 16) | (rgb << 8) | rgb;
