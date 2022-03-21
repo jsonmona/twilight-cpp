@@ -9,7 +9,7 @@
 
 #include "server/CapturePipeline.h"
 
-#include "server/platform/software/EncoderSoftware.h"
+#include "server/platform/software/EncoderOpenH264.h"
 
 #include "server/platform/windows/CaptureD3D.h"
 
@@ -38,7 +38,7 @@ private:
     DxgiHelper dxgiHelper;
     CaptureD3D capture;
     ScaleSoftware scale;
-    EncoderSoftware encoder;
+    EncoderOpenH264 encoder;
 
     Rational framerate;
     QPCTimer timer;

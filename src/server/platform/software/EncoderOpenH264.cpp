@@ -1,4 +1,4 @@
-#include "EncoderSoftware.h"
+#include "EncoderOpenH264.h"
 
 #include <algorithm>
 #include <chrono>
@@ -7,15 +7,15 @@
 
 using namespace std::chrono_literals;
 
-EncoderSoftware::EncoderSoftware(LocalClock& clock)
-    : log(createNamedLogger("EncoderSoftware")),
+EncoderOpenH264::EncoderOpenH264(LocalClock& clock)
+    : log(createNamedLogger("EncoderOpenH264")),
       clock(clock),
       width(-1),
       height(-1),
       nextFrameAvailable(false),
       flagRun(false) {}
 
-EncoderSoftware::~EncoderSoftware() {
+EncoderOpenH264::~EncoderOpenH264() {
     /* acquire data lock */ {
         std::lock_guard lock(dataLock);
         dataCV.notify_all();
@@ -25,7 +25,7 @@ EncoderSoftware::~EncoderSoftware() {
         runThread.join();
 }
 
-void EncoderSoftware::start() {
+void EncoderOpenH264::start() {
     check_quit(flagRun.load(std::memory_order_acquire), log, "Encoder is already started");
     if (runThread.joinable())
         runThread.join();
@@ -34,17 +34,17 @@ void EncoderSoftware::start() {
     runThread = std::thread([this]() { run_(); });
 }
 
-void EncoderSoftware::stop() {
+void EncoderOpenH264::stop() {
     flagRun.store(false, std::memory_order_release);
     dataCV.notify_all();
 }
 
-void EncoderSoftware::setResolution(int width, int height) {
+void EncoderOpenH264::setResolution(int width, int height) {
     this->width = width;
     this->height = height;
 }
 
-void EncoderSoftware::run_() {
+void EncoderOpenH264::run_() {
     int err;
 
     if (loader == nullptr) {
@@ -137,7 +137,7 @@ void EncoderSoftware::run_() {
     loader->DestroySVCEncoder(encoder);
 }
 
-void EncoderSoftware::pushData(DesktopFrame<TextureSoftware>&& newData) {
+void EncoderOpenH264::pushData(DesktopFrame<TextureSoftware>&& newData) {
     std::unique_lock lock(dataLock);
     while (nextFrameAvailable && flagRun.load(std::memory_order_acquire))
         dataCV.wait(lock);

@@ -193,7 +193,7 @@ void StreamViewerD3D::init_() {
     cursorTexSize = 128;
     recreateCursorTexture_();
 
-    decoder = std::make_unique<DecoderSoftware>(clock);
+    decoder = std::make_unique<DecoderOpenH264>(clock);
     decoder->setOutputResolution(width, height);
     decoder->start();
 

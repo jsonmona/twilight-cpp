@@ -1,5 +1,5 @@
-#ifndef TWILIGHT_CLIENT_PLATFORM_SOFTWARE_DECODERSOFTWARE_H
-#define TWILIGHT_CLIENT_PLATFORM_SOFTWARE_DECODERSOFTWARE_H
+#ifndef TWILIGHT_CLIENT_PLATFORM_SOFTWARE_DECODEROPENH264_H
+#define TWILIGHT_CLIENT_PLATFORM_SOFTWARE_DECODEROPENH264_H
 
 #include <atomic>
 #include <deque>
@@ -19,10 +19,10 @@
 
 #include "client/NetworkClock.h"
 
-class DecoderSoftware {
+class DecoderOpenH264 {
 public:
-    explicit DecoderSoftware(NetworkClock& clock);
-    ~DecoderSoftware();
+    explicit DecoderOpenH264(NetworkClock& clock);
+    ~DecoderOpenH264();
 
     void start();
     void stop();

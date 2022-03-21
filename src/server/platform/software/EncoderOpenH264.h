@@ -1,5 +1,5 @@
-#ifndef TWILIGHT_SERVER_PLATFORM_SOFTWARE_ENCODERSOFTWARE_H
-#define TWILIGHT_SERVER_PLATFORM_SOFTWARE_ENCODERSOFTWARE_H
+#ifndef TWILIGHT_SERVER_PLATFORM_SOFTWARE_ENCODEROPENH264_H
+#define TWILIGHT_SERVER_PLATFORM_SOFTWARE_ENCODEROPENH264_H
 
 #include "common/ByteBuffer.h"
 #include "common/DesktopFrame.h"
@@ -14,10 +14,10 @@
 
 #include <deque>
 
-class EncoderSoftware {
+class EncoderOpenH264 {
 public:
-    explicit EncoderSoftware(LocalClock& clock);
-    ~EncoderSoftware();
+    explicit EncoderOpenH264(LocalClock& clock);
+    ~EncoderOpenH264();
 
     template <typename Fn>
     void setDataAvailableCallback(Fn fn) {

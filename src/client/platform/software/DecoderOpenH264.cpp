@@ -1,8 +1,8 @@
-#include "DecoderSoftware.h"
+#include "DecoderOpenH264.h"
 
 #include <map>
 
-DecoderSoftware::DecoderSoftware(NetworkClock &clock)
+DecoderOpenH264::DecoderOpenH264(NetworkClock &clock)
     : log(createNamedLogger("DecoderSoftware")),
       clock(clock),
       idrPacketInQueue(false),
@@ -10,14 +10,14 @@ DecoderSoftware::DecoderSoftware(NetworkClock &clock)
       outputHeight(-1),
       flagRun(false) {}
 
-DecoderSoftware::~DecoderSoftware() {
+DecoderOpenH264::~DecoderOpenH264() {
     check_quit(flagRun.load(std::memory_order_relaxed), log, "Being destructed without stopping");
 
     if (looper.joinable())
         looper.join();
 }
 
-void DecoderSoftware::pushData(DesktopFrame<ByteBuffer> &&nextData) {
+void DecoderOpenH264::pushData(DesktopFrame<ByteBuffer> &&nextData) {
     std::lock_guard<std::mutex> lock(packetLock);
 
     if (nextData.isIDR) {
@@ -48,7 +48,7 @@ void DecoderSoftware::pushData(DesktopFrame<ByteBuffer> &&nextData) {
     packetCV.notify_one();
 }
 
-DesktopFrame<TextureSoftware> DecoderSoftware::popData() {
+DesktopFrame<TextureSoftware> DecoderOpenH264::popData() {
     DesktopFrame<TextureSoftware> ret;
 
     std::unique_lock lock(frameLock);
@@ -69,7 +69,7 @@ DesktopFrame<TextureSoftware> DecoderSoftware::popData() {
     return ret;
 }
 
-void DecoderSoftware::start() {
+void DecoderOpenH264::start() {
     if (loader == nullptr) {
         loader = OpenH264Loader::getInstance();
         loader->prepare();
@@ -79,18 +79,18 @@ void DecoderSoftware::start() {
     looper = std::thread([this]() { run_(); });
 }
 
-void DecoderSoftware::stop() {
+void DecoderOpenH264::stop() {
     flagRun.store(false, std::memory_order_release);
     packetCV.notify_all();
     frameCV.notify_all();
 }
 
-void DecoderSoftware::setOutputResolution(int width, int height) {
+void DecoderOpenH264::setOutputResolution(int width, int height) {
     outputWidth = width;
     outputHeight = height;
 }
 
-void DecoderSoftware::run_() {
+void DecoderOpenH264::run_() {
     int err;
     ISVCDecoder *decoder;
 

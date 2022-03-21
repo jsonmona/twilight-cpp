@@ -79,8 +79,8 @@ set(CLIENT_SRC
     ./client/StreamWindow.h
     ./client/StreamWindow.cpp
 
-    ./client/platform/software/DecoderSoftware.h
-    ./client/platform/software/DecoderSoftware.cpp
+    ./client/platform/software/DecoderOpenH264.h
+    ./client/platform/software/DecoderOpenH264.cpp
 )
 
 set(CLIENT_WINDOWS_SRC
@@ -106,8 +106,8 @@ set(SERVER_SRC
     ./server/StreamServer.h
     ./server/StreamServer.cpp
 
-    ./server/platform/software/EncoderSoftware.h
-    ./server/platform/software/EncoderSoftware.cpp
+    ./server/platform/software/EncoderOpenH264.h
+    ./server/platform/software/EncoderOpenH264.cpp
 )
 
 set(SERVER_WINDOWS_SRC
