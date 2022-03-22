@@ -204,8 +204,8 @@ bool StreamClient::doIntro_(const HostListEntry &host, bool forceAuth) {
     /* ConfigureStreamRequest */ {
         auto *req = pkt.mutable_configure_stream_request();
         req->set_codec(msg::Codec::H264_BASELINE);
-        req->set_width(1280);
-        req->set_height(720);
+        req->set_width(nativeWidth);
+        req->set_height(nativeHeight);
         req->set_fps_num(nativeFpsNum);
         req->set_fps_den(nativeFpsDen);
 
