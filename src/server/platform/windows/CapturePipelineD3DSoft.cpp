@@ -43,6 +43,14 @@ bool CapturePipelineD3DSoft::init() {
 }
 
 void CapturePipelineD3DSoft::start() {
+    bool wasRunning = flagRun.exchange(true, std::memory_order_acq_rel);
+    check_quit(wasRunning, log, "Starting without stopping first!");
+
+    if (captureThread.joinable())
+        captureThread.join();
+    if (encodeThread.joinable())
+        encodeThread.join();
+
     encoder.setDataAvailableCallback(writeOutput);
 
     capture.start();
@@ -50,7 +58,6 @@ void CapturePipelineD3DSoft::start() {
 
     timer.setFrequency(framerate);
 
-    flagRun.store(true, std::memory_order_release);
     captureThread = std::thread([this]() { loopCapture_(); });
     encodeThread = std::thread([this]() { loopEncoder_(); });
 }
