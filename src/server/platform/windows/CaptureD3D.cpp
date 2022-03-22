@@ -117,9 +117,9 @@ DesktopFrame<TextureSoftware> CaptureD3D::readSoftware() {
         D3D11Texture2D staging;
 
         D3D11_TEXTURE2D_DESC oldDesc = {};
-        D3D11_TEXTURE2D_DESC desc = {};
-
         frame.desktop->GetDesc(&oldDesc);
+
+        D3D11_TEXTURE2D_DESC desc = {};
         desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
         desc.Width = oldDesc.Width;
         desc.Height = oldDesc.Height;
@@ -134,6 +134,8 @@ DesktopFrame<TextureSoftware> CaptureD3D::readSoftware() {
 
         context->CopyResource(staging.ptr(), frame.desktop.ptr());
 
+        ensureFormat(&textureArena, oldDesc.Width, oldDesc.Height, AV_PIX_FMT_BGRA);
+
         D3D11_MAPPED_SUBRESOURCE mapInfo;
         hr = context->Map(staging.ptr(), 0, D3D11_MAP_READ, 0, &mapInfo);
         check_quit(FAILED(hr), log, "Failed to map staging texture");
@@ -142,7 +144,7 @@ DesktopFrame<TextureSoftware> CaptureD3D::readSoftware() {
         int linesize[4] = {mapInfo.RowPitch, 0, 0, 0};
         tex = TextureSoftware::reference(reinterpret_cast<uint8_t**>(data), linesize, oldDesc.Width, oldDesc.Height,
                                          AV_PIX_FMT_BGRA)
-                  .clone();
+                  .clone(textureArena);
 
         context->Unmap(staging.ptr(), 0);
     }

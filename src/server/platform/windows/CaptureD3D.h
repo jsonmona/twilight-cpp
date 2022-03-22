@@ -45,6 +45,7 @@ private:
     bool sentFirstFrame;
     bool supportsMapping;
 
+    std::shared_ptr<TextureAllocArena> textureArena;
     LocalClock& clock;
     uint64_t qpcFreq;
 

@@ -42,6 +42,8 @@ set(COMMON_SRC
     ./common/platform/software/OpenH264Loader.cpp
     ./common/platform/software/ScaleSoftware.h
     ./common/platform/software/ScaleSoftware.cpp
+    ./common/platform/software/TextureAllocArena.h
+    ./common/platform/software/TextureAllocArena.cpp
     ./common/platform/software/TextureSoftware.h
     ./common/platform/software/TextureSoftware.cpp
 )

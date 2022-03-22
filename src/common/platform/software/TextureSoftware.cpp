@@ -1,60 +1,65 @@
 #include "TextureSoftware.h"
 
+#include <algorithm>
+#include <atomic>
+#include <deque>
+#include <mutex>
+#include <unordered_map>
+
 #include "common/log.h"
+#include "common/util.h"
+
+void swap(TextureSoftware &a, TextureSoftware &b) {
+    using std::swap;
+
+    swap(a.width, b.width);
+    swap(a.height, b.height);
+    swap(a.format, b.format);
+    for (int i = 0; i < 4; i++)
+        swap(a.linesize[i], b.linesize[i]);
+    for (int i = 0; i < 4; i++)
+        swap(a.data[i], b.data[i]);
+    swap(a.arena, b.arena);
+    swap(a.blockId, b.blockId);
+    swap(a.blockSlot, b.blockSlot);
+}
 
 TextureSoftware::TextureSoftware() {
     width = -1;
     height = -1;
     format = AV_PIX_FMT_NONE;
-    allocated = nullptr;
     std::fill(linesize, linesize + 4, 0);
     std::fill(data, data + 4, nullptr);
+    arena.reset();
+    blockId = 0;
+    blockSlot = -1;
 }
 
 TextureSoftware::TextureSoftware(TextureSoftware &&move) noexcept {
-    width = move.width;
-    height = move.height;
-    format = move.format;
-    allocated = move.allocated;
-    std::copy(move.linesize, move.linesize + 4, linesize);
-    std::copy(move.data, move.data + 4, data);
+    width = -1;
+    height = -1;
+    format = AV_PIX_FMT_NONE;
+    std::fill(linesize, linesize + 4, 0);
+    std::fill(data, data + 4, nullptr);
+    arena.reset();
+    blockId = 0;
+    blockSlot = -1;
 
-    std::fill(move.data, move.data + 4, nullptr);
-    move.allocated = nullptr;
+    swap(*this, move);
 }
 
 TextureSoftware::~TextureSoftware() {
-    av_free(allocated);
+    if (arena) {
+        arena->findBlock(blockId)->freeSlot(blockSlot);
+        blockId = 0;
+        blockSlot = -1;
+        arena.reset();
+    }
 }
 
 TextureSoftware &TextureSoftware::operator=(TextureSoftware &&move) noexcept {
-    av_free(allocated);
-
-    width = move.width;
-    height = move.height;
-    format = move.format;
-    allocated = move.allocated;
-    std::copy(move.linesize, move.linesize + 4, linesize);
-    std::copy(move.data, move.data + 4, data);
-
-    std::fill(move.data, move.data + 4, nullptr);
-    move.allocated = nullptr;
+    swap(*this, move);
     return *this;
-}
-
-TextureSoftware TextureSoftware::allocate(int w, int h, AVPixelFormat fmt) {
-    TextureSoftware self;
-
-    self.width = w;
-    self.height = h;
-    self.format = fmt;
-
-    int stat = av_image_alloc(self.data, self.linesize, w, h, fmt, 32);
-    if (stat < 0)
-        error_quit(spdlog::default_logger(), "Failed to create TextureSoftware");
-    self.allocated = self.data[0];
-
-    return self;
 }
 
 TextureSoftware TextureSoftware::reference(uint8_t **data, const int *linesize, int w, int h, AVPixelFormat fmt) {
@@ -65,22 +70,27 @@ TextureSoftware TextureSoftware::reference(uint8_t **data, const int *linesize, 
     self.format = fmt;
 
     const int planeCount = av_pix_fmt_count_planes(fmt);
+    if (planeCount > 4)
+        abort();  // Buffer overflow
     std::copy(data, data + planeCount, self.data);
     std::copy(linesize, linesize + planeCount, self.linesize);
 
     return self;
 }
 
-void TextureSoftware::release() {
-    allocated = nullptr;
-}
+TextureSoftware TextureSoftware::clone(TextureAllocArena *targetArena) const {
+    if (targetArena == nullptr)
+        abort();  // nullptr not supported at this moment
 
-TextureSoftware TextureSoftware::clone() const {
-    TextureSoftware tex = allocate(width, height, format);
+    if (arena.get() != targetArena &&
+        (targetArena->width != width || targetArena->height != height || targetArena->format != format))
+        error_quit(targetArena->log, "Format mismatch while cloning!");
 
-    av_image_copy(tex.data, tex.linesize, const_cast<const uint8_t **>(data), linesize, format, width, height);
+    TextureSoftware ret = targetArena->alloc();
 
-    return tex;
+    av_image_copy(ret.data, ret.linesize, const_cast<const uint8_t **>(data), linesize, format, width, height);
+
+    return ret;
 }
 
 bool TextureSoftware::isEmpty() const {

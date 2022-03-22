@@ -21,18 +21,18 @@ public:
 
     void pushInput(TextureSoftware &&tex);
     TextureSoftware popOutput();
-    TextureSoftware &&moveOutput();
 
     void flush();
 
 private:
-    void _init();
-    void _convert();
+    void convert_();
 
     LoggerPtr log;
+    std::shared_ptr<TextureAllocArena> outputArena;
 
     bool hasTexture;
-    bool formatChanged;
+    bool inputFormatChanged;
+    bool outputFormatChanged;
     bool dirty;
 
     int inputWidth, inputHeight;

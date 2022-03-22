@@ -3,10 +3,16 @@
 
 #include "common/ffmpeg-headers.h"
 
+#include "common/platform/software/TextureAllocArena.h"
+
 #include <memory>
 
 class TextureSoftware {
+    friend class TextureAllocArena;
+
 public:
+    friend void swap(TextureSoftware &a, TextureSoftware &b);
+
     TextureSoftware();
     TextureSoftware(const TextureSoftware &copy) = delete;
     TextureSoftware(TextureSoftware &&move) noexcept;
@@ -15,12 +21,12 @@ public:
     TextureSoftware &operator=(const TextureSoftware &copy) = delete;
     TextureSoftware &operator=(TextureSoftware &&move) noexcept;
 
-    static TextureSoftware allocate(int w, int h, AVPixelFormat fmt);
     static TextureSoftware reference(uint8_t **data, const int *linesize, int w, int h, AVPixelFormat fmt);
 
-    void release();
+    TextureSoftware clone(TextureAllocArena* targetArena) const;
+    TextureSoftware clone(TextureAllocArena &targetArena) const { return clone(&targetArena); }
+    TextureSoftware clone(std::shared_ptr<TextureAllocArena> &targetArena) const { return clone(targetArena.get()); }
 
-    TextureSoftware clone() const;
     bool isEmpty() const;
 
 public:
@@ -28,7 +34,11 @@ public:
     AVPixelFormat format;
     int linesize[4];
     uint8_t *data[4];
-    uint8_t *allocated;
+
+private:
+    std::shared_ptr<TextureAllocArena> arena;
+    size_t blockId;
+    int blockSlot;
 };
 
 #endif

@@ -3,7 +3,8 @@
 ScaleSoftware::ScaleSoftware()
     : log(createNamedLogger("ScaleSoftware")),
       hasTexture(false),
-      formatChanged(false),
+      inputFormatChanged(false),
+      outputFormatChanged(false),
       dirty(false),
       inputWidth(-1),
       inputHeight(-1),
@@ -32,7 +33,7 @@ void ScaleSoftware::setInputFormat(int w, int h, AVPixelFormat fmt) {
         inputWidth = w;
         inputHeight = h;
         inputFormat = fmt;
-        formatChanged = true;
+        inputFormatChanged = true;
     }
 }
 
@@ -41,7 +42,7 @@ void ScaleSoftware::setOutputFormat(int w, int h, AVPixelFormat fmt) {
         outputWidth = w;
         outputHeight = h;
         outputFormat = fmt;
-        formatChanged = true;
+        outputFormatChanged = true;
     }
 }
 
@@ -56,42 +57,32 @@ TextureSoftware ScaleSoftware::popOutput() {
     check_quit(!hasTexture, log, "Tried to pop output when empty");
 
     if (dirty)
-        _convert();
+        convert_();
 
-    return outputTex.clone();
-}
-
-TextureSoftware&& ScaleSoftware::moveOutput() {
-    check_quit(!hasTexture, log, "Tried to move output when empty");
-    hasTexture = false;
-
-    if (dirty)
-        _convert();
-
-    return std::move(outputTex.clone());
+    return outputTex.clone(outputArena);
 }
 
 void ScaleSoftware::flush() {
     if (dirty)
-        _convert();
+        convert_();
 }
 
-void ScaleSoftware::_init() {
-    sws_freeContext(ctx);
-
-    ctx = sws_getContext(inputWidth, inputHeight, inputFormat, outputWidth, outputHeight, outputFormat, SWS_BICUBIC,
-                         nullptr, nullptr, nullptr);
-}
-
-void ScaleSoftware::_convert() {
+void ScaleSoftware::convert_() {
     dirty = false;
     setInputFormat(inputTex.width, inputTex.height, inputTex.format);
 
-    if (formatChanged)
-        _init();
+    if (inputFormatChanged || outputFormatChanged) {
+        sws_freeContext(ctx);
 
-    if (outputTex.allocated == nullptr)
-        outputTex = TextureSoftware::allocate(outputWidth, outputHeight, outputFormat);
+        ctx = sws_getContext(inputWidth, inputHeight, inputFormat, outputWidth, outputHeight, outputFormat,
+                             SWS_FAST_BILINEAR, nullptr, nullptr, nullptr);
+    }
+    if (outputFormatChanged) {
+        ensureFormat(&outputArena, outputWidth, outputHeight, outputFormat);
+        outputTex = outputArena->alloc();
+    }
+
+    inputFormatChanged = outputFormatChanged = false;
 
     sws_scale(ctx, inputTex.data, inputTex.linesize, 0, inputHeight, outputTex.data, outputTex.linesize);
 }
