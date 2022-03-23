@@ -20,8 +20,6 @@ TLS-DHE-RSA-WITH-CHACHA20-POLY1305-SHA256:\
 TLS-DHE-RSA-WITH-AES-128-GCM-SHA256:\
 TLS-DHE-RSA-WITH-AES-256-GCM-SHA384";
 
-#define TWILIGHT_WRITE_SSLKEYLOG
-
 #ifdef TWILIGHT_WRITE_SSLKEYLOG
 static int exportKeysCb(void *p_expkey, const unsigned char *ms, const unsigned char *kb, size_t maclen, size_t keylen,
                         size_t ivlen, const unsigned char client_random[32], const unsigned char server_random[32],
