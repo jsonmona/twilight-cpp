@@ -193,7 +193,7 @@ void StreamViewerD3D::init_() {
     cursorTexSize = 128;
     recreateCursorTexture_();
 
-    decoder = std::make_unique<DecoderOpenH264>(clock);
+    decoder = std::make_unique<DecoderFFmpeg>(clock);
     decoder->setOutputResolution(width, height);
     decoder->start();
 
@@ -253,9 +253,8 @@ void StreamViewerD3D::renderLoop_() {
     check_quit(FAILED(hr), log, "Failed to create framebuffer RTV");
 
     while (flagRunRender.load(std::memory_order_acquire)) {
-        DesktopFrame<TextureSoftware> frame = decoder->popData();
-
-        if (frame.desktop.isEmpty())
+        DesktopFrame<TextureSoftware> frame;
+        if (!decoder->readFrame(&frame))
             continue;
 
         frame.timePresented = clock.time();

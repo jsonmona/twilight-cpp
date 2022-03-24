@@ -57,7 +57,7 @@ std::unique_ptr<CapturePipeline> CapturePipelineFactoryWin32::createPipeline(Loc
     if (encoderIdx == 0)
         return std::make_unique<CapturePipelineD3DSoft>(clock, dxgiHelper);
     if (encoderIdx == 1)
-        return std::make_unique<CapturePipelineD3DMF>(clock, dxgiHelper);
+        return std::make_unique<CapturePipelineD3DSoft>(clock, dxgiHelper);
 
     return nullptr;
 }

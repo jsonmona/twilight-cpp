@@ -51,8 +51,6 @@ void CapturePipelineD3DSoft::start() {
     if (encodeThread.joinable())
         encodeThread.join();
 
-    encoder.setDataAvailableCallback(writeOutput);
-
     capture.start();
     encoder.start();
 
@@ -79,7 +77,7 @@ bool CapturePipelineD3DSoft::setCaptureMode(int width, int height, Rational fram
 
 bool CapturePipelineD3DSoft::setEncoderMode(int width, int height, Rational framerate) {
     scale.setOutputFormat(width, height, scale2avpixfmt(scaleType));
-    encoder.setResolution(width, height);
+    encoder.setMode(width, height, framerate);
 
     this->framerate = framerate;
 
@@ -87,6 +85,9 @@ bool CapturePipelineD3DSoft::setEncoderMode(int width, int height, Rational fram
 }
 
 void CapturePipelineD3DSoft::loopCapture_() {
+    StatisticMixer mixer(120);
+    std::chrono::steady_clock::time_point t = std::chrono::steady_clock::now();
+    std::chrono::steady_clock::time_point p = std::chrono::steady_clock::now();
     while (flagRun.load(std::memory_order_acquire)) {
         DesktopFrame<TextureSoftware> frame = capture.readSoftware();
 
@@ -129,6 +130,7 @@ void CapturePipelineD3DSoft::loopEncoder_() {
 
             firstFrameProvided = true;
             frame = lastFrame.getOtherType(scale.popOutput());
+            lastFrame.desktop = false;
 
             if (frame.cursorPos && frame.cursorPos->visible) {
                 frame.cursorPos = std::make_shared<CursorPos>(*frame.cursorPos);
@@ -139,6 +141,9 @@ void CapturePipelineD3DSoft::loopEncoder_() {
             }
         }
 
-        encoder.pushData(std::move(frame));
+        encoder.pushFrame(std::move(frame));
+        DesktopFrame<ByteBuffer> output;
+        if (encoder.readData(&output))
+            writeOutput(std::move(output));
     }
 }

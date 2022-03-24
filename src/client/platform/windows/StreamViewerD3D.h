@@ -16,6 +16,7 @@
 #include "client/StreamViewerBase.h"
 
 #include "client/platform/software/DecoderOpenH264.h"
+#include "client/platform/software/DecoderFFmpeg.h"
 
 class StreamViewerD3D : public StreamViewerBase {
     Q_OBJECT;
@@ -50,7 +51,7 @@ private:
 
     std::thread renderThread;
 
-    std::unique_ptr<DecoderOpenH264> decoder;
+    std::unique_ptr<DecoderFFmpeg> decoder;
     std::shared_ptr<CursorShape> pendingCursorChange;
 
     DxgiHelper dxgiHelper;
