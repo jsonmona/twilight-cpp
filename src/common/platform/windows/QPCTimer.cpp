@@ -19,14 +19,14 @@ QPCTimer::QPCTimer() {
 }
 
 void QPCTimer::setFrequency(Rational freq) {
-    setInterval(freq.inv());
+    referencePoint = qpc();
+    ticks = 0;
+    intervalNumerator = freq.num();
+    intervalDenominator = freq.den() * qpcFreq;
 }
 
 void QPCTimer::setInterval(Rational interval) {
-    referencePoint = qpc();
-    ticks = 0;
-    intervalNumerator = interval.num() * qpcFreq;
-    intervalDenominator = interval.den();
+    setFrequency(interval.inv());
 }
 
 bool QPCTimer::checkInterval() {

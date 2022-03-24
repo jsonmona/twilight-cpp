@@ -181,10 +181,14 @@ void CapturePipelineD3DMF::encodeLoop_() {
     bool started = false;
 
     while (flagRunning.load(std::memory_order_relaxed)) {
-        while (!timer.checkInterval() && flagRunning.load(std::memory_order_relaxed)) {
-            encoder.poll();
-            if (!timer.checkInterval())
-                Sleep(1);
+        if (!timer.checkInterval()) {
+            while (flagRunning.load(std::memory_order_relaxed)) {
+                encoder.poll();
+                if (!timer.checkInterval())
+                    Sleep(1);
+                else
+                    break;
+            }
         }
 
         DesktopFrame<bool> frame;

@@ -110,7 +110,7 @@ void CapturePipelineD3DSoft::loopEncoder_() {
     bool firstFrameProvided = false;
 
     while (flagRun.load(std::memory_order_acquire)) {
-        while (!timer.checkInterval())
+        while (!timer.checkInterval() && flagRun.load(std::memory_order_relaxed))
             Sleep(1);
 
         DesktopFrame<TextureSoftware> frame;
