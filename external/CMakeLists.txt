@@ -10,26 +10,34 @@ add_subdirectory(cubeb EXCLUDE_FROM_ALL)
 # FFmpeg
 
 if(WIN32)
-    # Get a prebuilt package from somewhere and name it ffmpeg-windows-prebuilt
-    # I'm using one from https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-full-shared.7z
-    # Directory structure should look like: bin/*.dll, include/, lib/*.lib
+    # I have included a "patent-free" build of ffmpeg (just including libvpx, vp8, vp9 and matroska).
+    # Will shortly find a way to build that using CMake ExternalProject.
+    # Note: I'm not a lawyer and I'm not sure if it really is patent-free.
+    #       However, at least it doesn't contain any MPEG-LA related codecs in it.
 
-    # This project depends only on swresample, swscale, avutil
-    # As far as I know, this should avoid any patent-related problem
+    if(NOT(CMAKE_SIZEOF_VOID_P EQUAL 8))
+        message(FATAL_ERROR "Only 64-bit ffmpeg prebuilt package is provided")
+    endif()
 
-    set(FFMPEG_LIBS swresample swscale avutil)
+    file(REMOVE_RECURSE ${CMAKE_CURRENT_BINARY_DIR}/ffmpeg-win64-prebuilt)
+    execute_process(
+        COMMAND ${CMAKE_COMMAND} -E tar xzf ${CMAKE_CURRENT_SOURCE_DIR}/ffmpeg-win64-prebuilt.tar.gz
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/
+    )
+
+    file(GLOB FFMPEG_DLLS "${CMAKE_CURRENT_BINARY_DIR}/ffmpeg-win64-prebuilt/bin/*.dll")
+    file(COPY ${FFMPEG_DLLS} DESTINATION "${CMAKE_BINARY_DIR}/bin/server/")
+    file(COPY ${FFMPEG_DLLS} DESTINATION "${CMAKE_BINARY_DIR}/bin/client/")
+
+    set(FFMPEG_LIBS avcodec avformat swresample swscale avutil)
     set(FFMPEG_LIBS ${FFMPEG_LIBS} PARENT_SCOPE)
     
     foreach(LIB IN LISTS FFMPEG_LIBS)
-        file(GLOB DLL_PATH "${CMAKE_CURRENT_SOURCE_DIR}/ffmpeg-windows-prebuilt/bin/${LIB}*.dll")
-        file(COPY ${DLL_PATH} DESTINATION ${CMAKE_BINARY_DIR}/bin/client/)
-        file(COPY ${DLL_PATH} DESTINATION ${CMAKE_BINARY_DIR}/bin/server/)
-
         # They are in fact shared libraries, but IMPORTED_IMPLIB seems to be broken.
         add_library(${LIB} STATIC IMPORTED GLOBAL)
         set_target_properties(${LIB} PROPERTIES
-                IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/ffmpeg-windows-prebuilt/lib/${LIB}.lib"
-                INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/ffmpeg-windows-prebuilt/include/")
+                IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/ffmpeg-win64-prebuilt/bin/${LIB}.lib"
+                INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_BINARY_DIR}/ffmpeg-win64-prebuilt/include/")
     endforeach()
 else()
     MESSAGE(FATAL_ERROR "Detecting FFmpeg in other platforms not supported yet.")

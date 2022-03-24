@@ -3,12 +3,16 @@
 
 #include <cstdint>
 
+// clang-format disable
+
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable : 4819)
 #endif
 
 extern "C" {
+#include <libavcodec/avcodec.h>
+#include <libavformat/avformat.h>
 #include <libswresample/swresample.h>
 #include <libswscale/swscale.h>
 
@@ -18,5 +22,7 @@ extern "C" {
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
+
+// clang-format enable
 
 #endif
