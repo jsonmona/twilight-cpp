@@ -12,8 +12,8 @@ When that works quite well, I'll start working on Android client.
 
 Now it can stream desktop with audio over internet using TLS.
 
-Streaming in localhost lags by 6 frames (100 ms) on average.
-I'm investigating why, but I'm not sure yet.
+Streaming on localhost lags around 30ms to 50ms (2~4 frames in 60fps) depending on scene complexity.
+Frame drop may occur with a rapidly updating scene.
 
 ### How to clone
 This project uses git submodule.
