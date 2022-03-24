@@ -81,6 +81,8 @@ set(CLIENT_SRC
     ./client/StreamWindow.h
     ./client/StreamWindow.cpp
 
+    ./client/platform/software/DecoderFFmpeg.h
+    ./client/platform/software/DecoderFFmpeg.cpp
     ./client/platform/software/DecoderOpenH264.h
     ./client/platform/software/DecoderOpenH264.cpp
 )
@@ -108,6 +110,8 @@ set(SERVER_SRC
     ./server/StreamServer.h
     ./server/StreamServer.cpp
 
+    ./server/platform/software/EncoderFFmpeg.h
+    ./server/platform/software/EncoderFFmpeg.cpp
     ./server/platform/software/EncoderOpenH264.h
     ./server/platform/software/EncoderOpenH264.cpp
 )

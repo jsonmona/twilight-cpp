@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -12,6 +13,8 @@
 
 // TODO: Move this to a more proper place
 enum class ScaleType { AYUV, NV12 };
+
+enum class CodecType { INVALID, H264_BASELINE, VP8 };
 
 enum class CursorShapeFormat { RGBA, RGBA_XOR };
 
