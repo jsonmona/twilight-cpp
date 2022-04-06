@@ -160,7 +160,7 @@ void EncoderFFmpeg::run_() {
     stream->time_base.num = framerate.inv().num();
     stream->time_base.den = framerate.inv().den();
 
-    err = avio_open(&fmt->pb, "C:/Users/min05/desktop/dump.mkv", AVIO_FLAG_WRITE);
+    err = avio_open(&fmt->pb, "dump.mkv", AVIO_FLAG_WRITE);
     check_quit(err < 0, log, "Failed to open output");
 
     AVDictionary* opt = nullptr;
