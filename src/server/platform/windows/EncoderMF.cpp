@@ -3,6 +3,8 @@
 #include <chrono>
 #include <deque>
 
+TWILIGHT_DEFINE_LOGGER(EncoderMF);
+
 static std::string intoUTF8(std::wstring_view wideStr) {
     static_assert(sizeof(wchar_t) == sizeof(WCHAR), "Expects wchar_t == WCHAR (from winnt)");
 
@@ -30,7 +32,7 @@ static std::string intoUTF8(std::wstring_view wideStr) {
     }
 }
 
-static MFTransform getVideoEncoder(const MFDxgiDeviceManager& deviceManager, const LoggerPtr& log) {
+static MFTransform getVideoEncoder(const MFDxgiDeviceManager& deviceManager, const NamedLogger& log) {
     HRESULT hr;
     MFTransform transform;
     IMFActivate** mftActivate;
@@ -85,7 +87,7 @@ static MFTransform getVideoEncoder(const MFDxgiDeviceManager& deviceManager, con
             mftActivate[i]->GetAllocatedString(MFT_FRIENDLY_NAME_Attribute, &friendlyName, &friendlyNameLen);
             if (friendlyName != nullptr) {
                 std::wstring_view strView(friendlyName, friendlyNameLen);
-                log->info("Selecting MFT codec: {}", intoUTF8(strView));
+                log.info("Selecting MFT codec: {}", intoUTF8(strView));
             }
             CoTaskMemFree(friendlyName);
 
@@ -104,12 +106,7 @@ static MFTransform getVideoEncoder(const MFDxgiDeviceManager& deviceManager, con
 }
 
 EncoderMF::EncoderMF(LocalClock& clock)
-    : log(createNamedLogger("EncoderMF")),
-      clock(clock),
-      width(-1),
-      height(-1),
-      waitingInput(false),
-      initialized(false) {}
+    : clock(clock), width(-1), height(-1), waitingInput(false), initialized(false) {}
 
 EncoderMF::~EncoderMF() {}
 
@@ -121,10 +118,10 @@ void EncoderMF::open(D3D11Device device, D3D11DeviceContext context) {
     mfDeviceManager.release();
 
     hr = MFCreateDXGIDeviceManager(&resetToken, mfDeviceManager.data());
-    check_quit(FAILED(hr), log, "Failed to create MF DXGI device manager");
+    log.assert_quit(SUCCEEDED(hr), "Failed to create MF DXGI device manager");
 
     hr = mfDeviceManager->ResetDevice(device.ptr(), resetToken);
-    check_quit(FAILED(hr), log, "Failed to reset DXGI device for MF");
+    log.assert_quit(SUCCEEDED(hr), "Failed to reset DXGI device for MF");
 }
 
 void EncoderMF::start() {
@@ -144,7 +141,7 @@ void EncoderMF::init_() {
     HRESULT hr;
 
     encoder = getVideoEncoder(mfDeviceManager, log);
-    check_quit(encoder.isInvalid(), log, "Failed to create encoder");
+    log.assert_quit(encoder.isValid(), "Failed to create encoder");
 
     VARIANT value;
     ComWrapper<ICodecAPI> codec = encoder.castTo<ICodecAPI>();
@@ -154,43 +151,43 @@ void EncoderMF::init_() {
 
     InitVariantFromUInt32(eAVEncVideoSourceScan_Progressive, &value);
     hr = codec->SetValue(&CODECAPI_AVEncVideoForceSourceScanType, &value);
-    // check_quit(FAILED(hr), log, "Failed to set video to progressive scan");
+    // log.assert_quit(SUCCEEDED(hr), "Failed to set video to progressive scan");
 
     InitVariantFromUInt32(eAVEncCommonRateControlMode_LowDelayVBR, &value);
     hr = codec->SetValue(&CODECAPI_AVEncCommonRateControlMode, &value);
-    check_quit(FAILED(hr), log, "Failed to set low delay vbr mode");
+    log.assert_quit(SUCCEEDED(hr), "Failed to set low delay vbr mode");
 
     InitVariantFromUInt32(8 * 1000 * 1000, &value);
     hr = codec->SetValue(&CODECAPI_AVEncCommonMeanBitRate, &value);
-    check_quit(FAILED(hr), log, "Failed to set bitrate to 8Mbps");
+    log.assert_quit(SUCCEEDED(hr), "Failed to set bitrate to 8Mbps");
 
     InitVariantFromBoolean(true, &value);
     hr = codec->SetValue(&CODECAPI_AVEncCommonRealTime, &value);
-    // check_quit(FAILED(hr), log, "Failed to enable real time mode");
+    // log.assert_quit(SUCCEEDED(hr), "Failed to enable real time mode");
 
     InitVariantFromBoolean(true, &value);
     hr = codec->SetValue(&CODECAPI_AVEncCommonLowLatency, &value);
-    // check_quit(FAILED(hr), log, "Failed to enable low latency mode");
+    // log.assert_quit(SUCCEEDED(hr), "Failed to enable low latency mode");
 
     InitVariantFromUInt32(eAVEncVideoOutputFrameRateConversion_Disable, &value);
     hr = codec->SetValue(&CODECAPI_AVEncVideoOutputFrameRateConversion, &value);
-    // check_quit(FAILED(hr), log, "Failed to disable frame rate conversion");
+    // log.assert_quit(SUCCEEDED(hr), "Failed to disable frame rate conversion");
 
     DWORD inputStreamCnt, outputStreamCnt;
     hr = encoder->GetStreamCount(&inputStreamCnt, &outputStreamCnt);
-    check_quit(FAILED(hr), log, "Failed to get stream count");
+    log.assert_quit(SUCCEEDED(hr), "Failed to get stream count");
     if (inputStreamCnt != 1 || outputStreamCnt != 1)
-        error_quit(log, "Invalid number of stream: input={} output={}", inputStreamCnt, outputStreamCnt);
+        log.error_quit("Invalid number of stream: input={} output={}", inputStreamCnt, outputStreamCnt);
 
     hr = encoder->GetStreamIDs(1, &inputStreamId, 1, &outputStreamId);
     if (hr == E_NOTIMPL) {
         inputStreamId = 0;
         outputStreamId = 0;
     } else
-        check_quit(FAILED(hr), log, "Failed to duplicate output");
+        log.assert_quit(SUCCEEDED(hr), "Failed to duplicate output");
 
     if (inputStreamCnt < 1 || outputStreamCnt < 1)
-        error_quit(log, "Adding stream manually is not implemented");
+        log.error_quit("Adding stream manually is not implemented");
 
     MFMediaType mediaType;
     GUID videoFormat;
@@ -210,7 +207,7 @@ void EncoderMF::init_() {
         // TODO: Is there any way to find out if encoder DOES support low latency mode?
         // TODO: Test if using main + low latency gives nicer output
         hr = encoder->SetOutputType(outputStreamId, mediaType.ptr(), 0);
-        check_quit(FAILED(hr), log, "Failed to set output type");
+        log.assert_quit(SUCCEEDED(hr), "Failed to set output type");
     }
 
     GUID acceptableCodecList[] = {MFVideoFormat_NV12};
@@ -223,7 +220,7 @@ void EncoderMF::init_() {
             break;
         if (SUCCEEDED(hr)) {
             hr = mediaType->GetGUID(MF_MT_SUBTYPE, &videoFormat);
-            check_quit(FAILED(hr), log, "Failed to query input type");
+            log.assert_quit(SUCCEEDED(hr), "Failed to query input type");
 
             for (int j = 0; j < sizeof(acceptableCodecList) / sizeof(GUID); j++) {
                 if (memcmp(&videoFormat, &acceptableCodecList[j], sizeof(GUID)) == 0) {
@@ -234,13 +231,13 @@ void EncoderMF::init_() {
 
             if (chosenType != -1) {
                 hr = encoder->SetInputType(inputStreamId, mediaType.ptr(), 0);
-                check_quit(FAILED(hr), log, "Failed to set input type");
+                log.assert_quit(SUCCEEDED(hr), "Failed to set input type");
                 break;
             }
         }
     }
 
-    check_quit(chosenType == -1, log, "No supported input type found");
+    log.assert_quit(chosenType != -1, "No supported input type found");
 }
 
 void EncoderMF::poll() {
@@ -255,7 +252,7 @@ void EncoderMF::poll() {
         hr = eventGen->GetEvent(MF_EVENT_FLAG_NO_WAIT, ev.data());
         if (hr == MF_E_SHUTDOWN || hr == MF_E_NO_EVENTS_AVAILABLE)
             break;
-        check_quit(FAILED(hr), log, "Failed to get next event ({})", hr);
+        log.assert_quit(SUCCEEDED(hr), "Failed to get next event ({})", hr);
 
         MediaEventType evType;
         ev->GetType(&evType);
@@ -279,8 +276,8 @@ void EncoderMF::poll() {
                 }
             }
 
-            check_quit(toRemove == extraData.end(), log, "Failed to find matching ExtraData (size={}, sampleTime={})",
-                       extraData.size(), sampleTime);
+            log.assert_quit(toRemove != extraData.end(), "Failed to find matching ExtraData (size={}, sampleTime={})",
+                            extraData.size(), sampleTime);
 
             extraData.erase(toRemove);
 
@@ -288,7 +285,7 @@ void EncoderMF::poll() {
             now.isIDR = isIDR;
             onDataAvailable(now.getOtherType(std::move(encoded)));
         } else {
-            log->warn("Ignoring unknown MediaEventType {}", static_cast<DWORD>(evType));
+            log.warn("Ignoring unknown MediaEventType {}", static_cast<DWORD>(evType));
         }
     }
 }
@@ -331,11 +328,11 @@ void EncoderMF::pushEncoderTexture_(const D3D11Texture2D& tex, long long sampleD
 
     MFMediaBuffer mediaBuffer;
     hr = MFCreateDXGISurfaceBuffer(tex.guid(), tex.ptr(), 0, false, mediaBuffer.data());
-    check_quit(FAILED(hr), log, "Failed to create media buffer containing D3D11 texture");
+    log.assert_quit(SUCCEEDED(hr), "Failed to create media buffer containing D3D11 texture");
 
     MFSample sample;
     hr = MFCreateSample(sample.data());
-    check_quit(FAILED(hr), log, "Failed to create a sample");
+    log.assert_quit(SUCCEEDED(hr), "Failed to create a sample");
 
     sample->AddBuffer(mediaBuffer.ptr());
     sample->SetSampleDuration(sampleDur);
@@ -344,7 +341,7 @@ void EncoderMF::pushEncoderTexture_(const D3D11Texture2D& tex, long long sampleD
     hr = encoder->ProcessInput(0, sample.ptr(), 0);
     if (hr == MF_E_NOTACCEPTING)
         return;
-    check_quit(FAILED(hr), log, "Failed to put input into encoder");
+    log.assert_quit(SUCCEEDED(hr), "Failed to put input into encoder");
 }
 
 ByteBuffer EncoderMF::popEncoderData_(long long* sampleTime, bool* isIDR) {
@@ -352,18 +349,18 @@ ByteBuffer EncoderMF::popEncoderData_(long long* sampleTime, bool* isIDR) {
 
     MFT_OUTPUT_STREAM_INFO outputStreamInfo;
     hr = encoder->GetOutputStreamInfo(0, &outputStreamInfo);
-    check_quit(FAILED(hr), log, "Failed to get output stream info");
+    log.assert_quit(SUCCEEDED(hr), "Failed to get output stream info");
 
     bool shouldAllocateOutput =
         !(outputStreamInfo.dwFlags & (MFT_OUTPUT_STREAM_PROVIDES_SAMPLES | MFT_OUTPUT_STREAM_CAN_PROVIDE_SAMPLES));
     int allocSize = outputStreamInfo.cbSize + outputStreamInfo.cbAlignment * 2;
-    check_quit(shouldAllocateOutput, log, "Allocating output is not implemented yet");
+    log.assert_quit(!shouldAllocateOutput, "Allocating output is not implemented yet");
 
     DWORD status;
     MFT_OUTPUT_DATA_BUFFER outputBuffer = {};
     outputBuffer.dwStreamID = outputStreamId;
     hr = encoder->ProcessOutput(0, 1, &outputBuffer, &status);
-    check_quit(FAILED(hr), log, "Failed to retrieve output from encoder");
+    log.assert_quit(SUCCEEDED(hr), "Failed to retrieve output from encoder");
 
     if (sampleTime)
         outputBuffer.pSample->GetSampleTime(sampleTime);
@@ -373,11 +370,11 @@ ByteBuffer EncoderMF::popEncoderData_(long long* sampleTime, bool* isIDR) {
 
     DWORD bufferCount = 0;
     hr = outputBuffer.pSample->GetBufferCount(&bufferCount);
-    check_quit(FAILED(hr), log, "Failed to get buffer count");
+    log.assert_quit(SUCCEEDED(hr), "Failed to get buffer count");
 
     DWORD totalLen = 0;
     hr = outputBuffer.pSample->GetTotalLength(&totalLen);
-    check_quit(FAILED(hr), log, "Failed to query total length of sample");
+    log.assert_quit(SUCCEEDED(hr), "Failed to query total length of sample");
 
     ByteBuffer data(totalLen);
     size_t idx = 0;
@@ -385,18 +382,18 @@ ByteBuffer EncoderMF::popEncoderData_(long long* sampleTime, bool* isIDR) {
     for (int j = 0; j < bufferCount; j++) {
         MFMediaBuffer mediaBuffer;
         hr = outputBuffer.pSample->GetBufferByIndex(j, mediaBuffer.data());
-        check_quit(FAILED(hr), log, "Failed to get buffer");
+        log.assert_quit(SUCCEEDED(hr), "Failed to get buffer");
 
         BYTE* ptr;
         DWORD len;
         hr = mediaBuffer->Lock(&ptr, nullptr, &len);
-        check_quit(FAILED(hr), log, "Failed to lock buffer");
+        log.assert_quit(SUCCEEDED(hr), "Failed to lock buffer");
 
         memcpy(data.data() + idx, ptr, len);
         idx += len;
 
         hr = mediaBuffer->Unlock();
-        check_quit(FAILED(hr), log, "Failed to unlock buffer");
+        log.assert_quit(SUCCEEDED(hr), "Failed to unlock buffer");
     }
 
     outputBuffer.pSample->Release();

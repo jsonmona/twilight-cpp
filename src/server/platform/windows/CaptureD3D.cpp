@@ -1,12 +1,14 @@
 #include "CaptureD3D.h"
 
-#include "CaptureWin32.h"
-
 #include "common/platform/windows/winheaders.h"
+
+#include "server/platform/windows/CaptureWin32.h"
 
 #include <cassert>
 #include <deque>
 #include <utility>
+
+TWILIGHT_DEFINE_LOGGER(CaptureD3D);
 
 static uint64_t qpc() {
     LARGE_INTEGER val;
@@ -21,12 +23,7 @@ static uint64_t getQpcFreq() {
 }
 
 CaptureD3D::CaptureD3D(LocalClock& clock)
-    : log(createNamedLogger("CaptureD3D")),
-      frameAcquired(false),
-      sentFirstFrame(false),
-      supportsMapping(false),
-      clock(clock),
-      qpcFreq(getQpcFreq()) {}
+    : frameAcquired(false), sentFirstFrame(false), supportsMapping(false), clock(clock), qpcFreq(getQpcFreq()) {}
 
 CaptureD3D::~CaptureD3D() {}
 
@@ -51,16 +48,16 @@ bool CaptureD3D::open(DxgiOutput output_) {
         return false;
 
     device = dxgiHelper.createDevice(dxgiHelper.getAdapterFromOutput(output).ptr(), false);
-    check_quit(device.isInvalid(), log, "Failed to create D3D device from output");
+    log.assert_quit(device.isValid(), "Failed to create D3D device from output");
 
     context.release();
     device->GetImmediateContext(context.data());
-    check_quit(context.isInvalid(), log, "Failed to get immediate context");
+    log.assert_quit(context.isValid(), "Failed to get immediate context");
 
     auto oldTime = std::chrono::steady_clock::now();
     while (!openDuplication_()) {
         if (std::chrono::steady_clock::now() - oldTime > std::chrono::milliseconds(5000)) {
-            log->warn("Failed to open duplication before timeout");
+            log.warn("Failed to open duplication before timeout");
             return false;
         }
     }
@@ -80,7 +77,7 @@ void CaptureD3D::stop() {
     if (frameAcquired) {
         HRESULT hr = outputDuplication->ReleaseFrame();
         if (hr != DXGI_ERROR_ACCESS_LOST)
-            check_quit(FAILED(hr), log, "Failed to release frame ({})", hr);
+            log.assert_quit(SUCCEEDED(hr), "Failed to release frame ({})", hr);
         frameAcquired = false;
     }
 
@@ -90,7 +87,7 @@ void CaptureD3D::stop() {
 }
 
 void CaptureD3D::getCurrentMode(int* width, int* height, Rational* framerate) {
-    check_quit(output.isInvalid(), log, "Queried current mode before open");
+    log.assert_quit(output.isValid(), "Queried current mode before open");
 
     // TODO: Add timeout (or make it async?)
     while (!openDuplication_())
@@ -130,7 +127,7 @@ DesktopFrame<TextureSoftware> CaptureD3D::readSoftware() {
         desc.MipLevels = 1;
 
         hr = device->CreateTexture2D(&desc, nullptr, staging.data());
-        check_quit(FAILED(hr), log, "Failed to create staging texture");
+        log.assert_quit(SUCCEEDED(hr), "Failed to create staging texture");
 
         context->CopyResource(staging.ptr(), frame.desktop.ptr());
 
@@ -138,7 +135,7 @@ DesktopFrame<TextureSoftware> CaptureD3D::readSoftware() {
 
         D3D11_MAPPED_SUBRESOURCE mapInfo;
         hr = context->Map(staging.ptr(), 0, D3D11_MAP_READ, 0, &mapInfo);
-        check_quit(FAILED(hr), log, "Failed to map staging texture");
+        log.assert_quit(SUCCEEDED(hr), "Failed to map staging texture");
 
         void* data[4] = {mapInfo.pData, nullptr, nullptr, nullptr};
         int linesize[4] = {mapInfo.RowPitch, 0, 0, 0};
@@ -208,7 +205,7 @@ DesktopFrame<D3D11Texture2D> CaptureD3D::readD3D() {
 
             DXGI_OUTDUPL_POINTER_SHAPE_INFO cursorInfo;
             hr = outputDuplication->GetFramePointerShape(bufferSize, buffer.data(), &bufferSize, &cursorInfo);
-            check_quit(FAILED(hr), log, "Failed to fetch frame pointer shape");
+            log.assert_quit(SUCCEEDED(hr), "Failed to fetch frame pointer shape");
 
             frame.cursorShape->hotspotX = cursorInfo.HotSpot.x;
             frame.cursorShape->hotspotY = cursorInfo.HotSpot.y;
@@ -219,7 +216,7 @@ DesktopFrame<D3D11Texture2D> CaptureD3D::readD3D() {
     } else if (hr == DXGI_ERROR_ACCESS_LOST)
         outputDuplication.release();
     else
-        error_quit(log, "Failed to acquire next frame ({})", hr);
+        log.error_quit("Failed to acquire next frame ({})", hr);
 
     return frame;
 }
@@ -237,7 +234,7 @@ bool CaptureD3D::tryReleaseFrame_() {
     if (hr == DXGI_ERROR_ACCESS_LOST)
         return openDuplication_();
     else
-        check_quit(FAILED(hr), log, "Failed to release frame ({})", hr);
+        log.assert_quit(SUCCEEDED(hr), "Failed to release frame ({})", hr);
 
     return false;
 }
@@ -258,7 +255,7 @@ bool CaptureD3D::openDuplication_() {
     if (hr == E_ACCESSDENIED)
         return false;
     else if (FAILED(hr))
-        error_quit(log, "Failed to duplicate output ({:#x})", hr);
+        log.error_quit("Failed to duplicate output ({:#x})", hr);
 
     DXGI_OUTDUPL_DESC desc = {};
     outputDuplication->GetDesc(&desc);
@@ -311,7 +308,7 @@ void CaptureD3D::parseCursor_(CursorShape* cursorShape, const DXGI_OUTDUPL_POINT
             }
         }
     } else {
-        log->warn("Unknown cursor type: {}", cursorInfo.Type);
+        log.warn("Unknown cursor type: {}", cursorInfo.Type);
         cursorShape->image.resize(0);
         cursorShape->height = 0;
         cursorShape->width = 0;

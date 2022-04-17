@@ -27,7 +27,8 @@ public:
 private:
     void convert_();
 
-    LoggerPtr log;
+    static NamedLogger log;
+
     std::shared_ptr<TextureAllocArena> outputArena;
 
     bool hasTexture;

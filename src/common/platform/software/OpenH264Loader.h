@@ -1,12 +1,12 @@
 #ifndef TWILIGHT_COMMON_PLATFORM_SOFTWARE_OPENH264LOADER_H
 #define TWILIGHT_COMMON_PLATFORM_SOFTWARE_OPENH264LOADER_H
 
-#include <memory>
-#include <mutex>
+#include "common/log.h"
 
 #include <openh264/codec_api.h>
 
-#include <common/log.h>
+#include <memory>
+#include <mutex>
 
 class OpenH264Loader {
 public:
@@ -28,9 +28,10 @@ public:
     virtual void GetCodecVersionEx(OpenH264Version *pVersion) const = 0;
 
 protected:
-    bool checkVersion(const LoggerPtr &log) const;
+    bool checkVersion() const;
 
 private:
+    static NamedLogger log;
     static std::weak_ptr<OpenH264Loader> instance;
     static std::mutex instanceLock;
 };

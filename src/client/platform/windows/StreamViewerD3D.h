@@ -1,10 +1,6 @@
 #ifndef TWILIGHT_CLIENT_PLATFORM_WINDOWS_STREAMVIEWERD3D_H
 #define TWILIGHT_CLIENT_PLATFORM_WINDOWS_STREAMVIEWERD3D_H
 
-#include <thread>
-
-#include <packet.pb.h>
-
 #include "common/ByteBuffer.h"
 #include "common/log.h"
 #include "common/util.h"
@@ -15,8 +11,12 @@
 #include "client/NetworkClock.h"
 #include "client/StreamViewerBase.h"
 
-#include "client/platform/software/DecoderOpenH264.h"
 #include "client/platform/software/DecoderFFmpeg.h"
+#include "client/platform/software/DecoderOpenH264.h"
+
+#include <packet.pb.h>
+
+#include <thread>
 
 class StreamViewerD3D : public StreamViewerBase {
     Q_OBJECT;
@@ -40,7 +40,8 @@ private:
     void recreateCursorTexture_();
     void renderLoop_();
 
-    LoggerPtr log;
+    static NamedLogger log;
+
     NetworkClock &clock;
 
     std::atomic<bool> flagInitialized;

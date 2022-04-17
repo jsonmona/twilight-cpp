@@ -4,6 +4,8 @@
 
 #include "common/platform/software/TextureSoftware.h"
 
+TWILIGHT_DEFINE_LOGGER(TextureAllocArena);
+
 void ensureFormat(std::shared_ptr<TextureAllocArena>* arena, int w, int h, AVPixelFormat fmt) {
     if (*arena == nullptr || !(*arena)->checkConfig(w, h, fmt))
         *arena = TextureAllocArena::getArena(w, h, fmt);
@@ -22,20 +24,10 @@ void swap(TextureAllocArena& a, TextureAllocArena& b) noexcept {
 }
 
 TextureAllocArena::TextureAllocArena()
-    : log(createNamedLogger("TextureAllocArena")),
-      width(-1),
-      height(-1),
-      format(AV_PIX_FMT_NONE),
-      lastBlockId(0),
-      textureSize(0) {}
+    : width(-1), height(-1), format(AV_PIX_FMT_NONE), lastBlockId(0), textureSize(0) {}
 
 TextureAllocArena::TextureAllocArena(TextureAllocArena&& move) noexcept
-    : log(createNamedLogger("TextureAllocArena")),
-      width(-1),
-      height(-1),
-      format(AV_PIX_FMT_NONE),
-      lastBlockId(0),
-      textureSize(0) {
+    : width(-1), height(-1), format(AV_PIX_FMT_NONE), lastBlockId(0), textureSize(0) {
     swap(*this, move);
 }
 
@@ -58,7 +50,7 @@ std::shared_ptr<TextureAllocArena> TextureAllocArena::getArena(int w, int h, AVP
 
     int linesize[4];
     err = av_image_fill_linesizes(linesize, fmt, w);
-    check_quit(err < 0, ret->log, "Failed to fill linesize");
+    log.assert_quit(0 <= err, "Failed to fill linesize");
 
     ptrdiff_t linesizes[4];
     for (int i = 0; i < 4; i++)
@@ -66,14 +58,13 @@ std::shared_ptr<TextureAllocArena> TextureAllocArena::getArena(int w, int h, AVP
 
     size_t planeSize[4];
     err = av_image_fill_plane_sizes(planeSize, fmt, h, linesizes);
-    check_quit(err < 0, ret->log, "Failed to get plane sizes");
+    log.assert_quit(0 <= err, "Failed to get plane sizes");
 
     size_t totalSize = 0;
     for (int i = 0; i < 4; i++)
         totalSize += planeSize[i];
 
     ret->textureSize = totalSize;
-
     return ret;
 }
 
@@ -93,7 +84,7 @@ TextureSoftware TextureAllocArena::alloc() {
     int err;
 
     ret.arena = self.lock();
-    check_quit(!ret.arena, log, "self pointer destructed!");
+    log.assert_quit(!!ret.arena, "self pointer destructed!");
 
     Block* blk = nullptr;
 
@@ -128,7 +119,7 @@ TextureSoftware TextureAllocArena::alloc() {
         abort();  // A block should be assigned at this point
 
     err = av_image_fill_linesizes(ret.linesize, ret.format, ret.width);
-    check_quit(err < 0, log, "Failed to fill linesize");
+    log.assert_quit(0 <= err, "Failed to fill linesize");
 
     ptrdiff_t linesizes[4];
     for (int i = 0; i < 4; i++)
@@ -136,12 +127,12 @@ TextureSoftware TextureAllocArena::alloc() {
 
     size_t planeSize[4];
     err = av_image_fill_plane_sizes(planeSize, ret.format, ret.height, linesizes);
-    check_quit(err < 0, log, "Failed to get plane sizes");
+    log.assert_quit(0 <= err, "Failed to get plane sizes");
 
     size_t totalSize = 0;
     for (int i = 0; i < 4; i++)
         totalSize += planeSize[i];
-    check_quit(textureSize != totalSize, log, "Wrong textureSize!");
+    log.assert_quit(textureSize == totalSize, "Wrong textureSize!");
 
     uint8_t* p = (*blk)[ret.blockSlot];
     for (int i = 0; i < 4; i++) {

@@ -21,7 +21,8 @@ public:
     std::unique_ptr<CapturePipeline> createPipeline(LocalClock& clock, size_t captureIdx, size_t encoderIdx) override;
 
 private:
-    LoggerPtr log;
+    static NamedLogger log;
+
     DxgiHelper dxgiHelper;
 };
 

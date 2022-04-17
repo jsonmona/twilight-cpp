@@ -1,14 +1,14 @@
 #ifndef TWILIGHT_CLIENT_NETWORKCLOCK_H
 #define TWILIGHT_CLIENT_NETWORKCLOCK_H
 
+#include "common/StatisticMixer.h"
+#include "common/log.h"
+
+#include <atomic>
 #include <chrono>
 #include <map>
 #include <mutex>
 #include <random>
-#include <atomic>
-
-#include "common/log.h"
-#include "common/StatisticMixer.h"
 
 class NetworkClock {
 public:
@@ -31,7 +31,7 @@ public:
     bool generatePing(uint32_t* pingId, std::chrono::milliseconds* sleepAmount);
 
 private:
-    LoggerPtr log;
+    static NamedLogger log;
 
     std::atomic<std::chrono::steady_clock::time_point::rep> epoch;
 

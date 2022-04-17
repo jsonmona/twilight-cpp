@@ -32,7 +32,7 @@ public:
     void GetCodecVersionEx(OpenH264Version *pVersion) const override;
 
 private:
-    LoggerPtr log;
+    static NamedLogger log;
 
     std::atomic<bool> ready = false;
 

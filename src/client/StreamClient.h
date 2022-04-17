@@ -1,6 +1,14 @@
 #ifndef TWILIGHT_CLIENT_STREAMCLIENT_H
 #define TWILIGHT_CLIENT_STREAMCLIENT_H
 
+#include "common/CertStore.h"
+#include "common/log.h"
+
+#include "common/net/NetworkSocket.h"
+
+#include "client/HostList.h"
+#include "client/NetworkClock.h"
+
 #include <packet.pb.h>
 
 #include <atomic>
@@ -9,14 +17,6 @@
 #include <mutex>
 #include <string>
 #include <thread>
-
-#include "common/CertStore.h"
-#include "common/log.h"
-
-#include "common/net/NetworkSocket.h"
-
-#include "client/HostList.h"
-#include "client/NetworkClock.h"
 
 class StreamClient {
 public:
@@ -47,7 +47,13 @@ public:
     bool send(const msg::Packet &pkt, const uint8_t *extraData);
 
 private:
-    LoggerPtr log;
+    void runRecv_();
+    void runPing_();
+    bool doIntro_(const HostListEntry &host, bool forceAuth);
+    bool doAuth_(const HostListEntry &host);
+    
+    static NamedLogger log;
+
     NetworkClock &clock;
 
     NetworkSocket conn;
@@ -61,11 +67,6 @@ private:
 
     std::thread recvThread;
     std::thread pingThread;
-
-    void runRecv_();
-    void runPing_();
-    bool doIntro_(const HostListEntry &host, bool forceAuth);
-    bool doAuth_(const HostListEntry &host);
 };
 
 #endif

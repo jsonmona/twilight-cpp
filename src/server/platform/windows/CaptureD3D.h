@@ -39,7 +39,7 @@ public:
     const D3D11DeviceContext& ctx() const { return context; }
 
 private:
-    LoggerPtr log;
+    static NamedLogger log;
 
     bool frameAcquired;
     bool sentFirstFrame;

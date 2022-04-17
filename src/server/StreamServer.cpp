@@ -4,15 +4,12 @@
 
 #include <mbedtls/sha256.h>
 
+TWILIGHT_DEFINE_LOGGER(StreamServer);
+
 constexpr uint16_t SERVICE_PORT = 6495;
 constexpr int32_t PROTOCOL_VERSION = 1;
 
-StreamServer::StreamServer()
-    : log(createNamedLogger("StreamServer")),
-      requestedWidth(0),
-      requestedHeight(0),
-      flagRunDeleter(true),
-      streaming(false) {
+StreamServer::StreamServer() : requestedWidth(0), requestedHeight(0), flagRunDeleter(true), streaming(false) {
     knownClients.loadFile("clients.toml");
 
     deleterThread = std::thread([this]() {
@@ -88,7 +85,7 @@ void StreamServer::stop() {
 }
 
 void StreamServer::getNativeMode(int* w, int* h, Rational* fps) {
-    check_quit(!capture->init(), log, "Failed to initialize CapturePipeline");
+    log.assert_quit(capture->init(), "Failed to initialize CapturePipeline");
     capture->getNativeMode(w, h, fps);
 }
 
@@ -148,7 +145,7 @@ void StreamServer::processOutput_(DesktopFrame<ByteBuffer>&& cap) {
             m->set_format(msg::CursorShape_Format_RGBA_XOR);
             break;
         default:
-            error_quit(log, "Unknown cursor shape format: {}", (int)cap.cursorShape->format);
+            log.error_quit("Unknown cursor shape format: {}", (int)cap.cursorShape->format);
         }
 
         pkt.set_extra_data_len(cap.cursorShape->image.size());

@@ -1,6 +1,8 @@
 #include "OpenH264LoaderWin32.h"
 
-OpenH264LoaderWin32::OpenH264LoaderWin32() : log(createNamedLogger("OpenH264LoaderWin32")) {}
+TWILIGHT_DEFINE_LOGGER(OpenH264LoaderWin32);
+
+OpenH264LoaderWin32::OpenH264LoaderWin32() {}
 
 OpenH264LoaderWin32::~OpenH264LoaderWin32() {
     if (hInst != 0)
@@ -9,28 +11,28 @@ OpenH264LoaderWin32::~OpenH264LoaderWin32() {
 
 void OpenH264LoaderWin32::prepare() {
     hInst = LoadLibrary(TEXT("openh264-2.1.1-win64.dll"));
-    check_quit(hInst == 0, log, "Failed to load openh264-2.1.1-win64.dll library!");
-    log->critical("LICENSE NOTICE: OpenH264 Video Codec provided by Cisco Systems, Inc.");
+    log.assert_quit(hInst != 0, "Failed to load openh264-2.1.1-win64.dll library!");
+    log.critical("LICENSE NOTICE: OpenH264 Video Codec provided by Cisco Systems, Inc.");
 
     CreateSVCEncoderProc = (decltype(CreateSVCEncoderProc))GetProcAddress(hInst, "WelsCreateSVCEncoder");
-    check_quit(CreateSVCEncoderProc == nullptr, log, "Failed to load CreateSVCEncoder!");
+    log.assert_quit(CreateSVCEncoderProc != nullptr, "Failed to load WelsCreateSVCEncoder!");
 
     DestroySVCEncoderProc = (decltype(DestroySVCEncoderProc))GetProcAddress(hInst, "WelsDestroySVCEncoder");
-    check_quit(DestroySVCEncoderProc == nullptr, log, "Failed to load DestroySVCEncoder!");
+    log.assert_quit(DestroySVCEncoderProc != nullptr, "Failed to load WelsDestroySVCEncoder!");
 
     CreateDecoderProc = (decltype(CreateDecoderProc))GetProcAddress(hInst, "WelsCreateDecoder");
-    check_quit(CreateDecoderProc == nullptr, log, "Failed to load CreateDecoder!");
+    log.assert_quit(CreateDecoderProc != nullptr, "Failed to load WelsCreateDecoder!");
 
     DestroyDecoderProc = (decltype(DestroyDecoderProc))GetProcAddress(hInst, "WelsDestroyDecoder");
-    check_quit(DestroyDecoderProc == nullptr, log, "Failed to load DestroyDecoder!");
+    log.assert_quit(DestroyDecoderProc != nullptr, "Failed to load WelsDestroyDecoder!");
 
     GetCodecVersionProc = (decltype(GetCodecVersionProc))GetProcAddress(hInst, "WelsGetCodecVersion");
-    check_quit(GetCodecVersionProc == nullptr, log, "Failed to load GetCodecVersion!");
+    log.assert_quit(GetCodecVersionProc != nullptr, "Failed to load WelsGetCodecVersion!");
 
     GetCodecVersionExProc = (decltype(GetCodecVersionExProc))GetProcAddress(hInst, "WelsGetCodecVersionEx");
-    check_quit(GetCodecVersionExProc == nullptr, log, "Failed to load GetCodecVersionEx!");
+    log.assert_quit(GetCodecVersionExProc != nullptr, "Failed to load WelsGetCodecVersionEx!");
 
-    checkVersion(log);
+    checkVersion();
 
     ready.store(true, std::memory_order_release);
 }

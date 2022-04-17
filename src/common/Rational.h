@@ -1,6 +1,8 @@
 #ifndef TWILIGHT_COMMON_RATIONAL_H
 #define TWILIGHT_COMMON_RATIONAL_H
 
+#include "common/log.h"
+
 class Rational {
 public:
     Rational();
@@ -21,13 +23,13 @@ public:
     double toDouble() const { return (double)num_ / den_; }
 
     Rational reduce() const;
-
     Rational inv() const;
 
-    int imul(int factor) const;
     long long imul(long long factor) const;
 
 private:
+    static NamedLogger log;
+
     int num_, den_;
 };
 

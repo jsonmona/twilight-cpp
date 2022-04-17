@@ -29,7 +29,7 @@ public:
     }
 
 private:
-    LoggerPtr log;
+    static NamedLogger log;
 
     std::function<void(AVSampleFormat, int, int)> onConfigured;  // (format, samplingRate, channels)
     std::function<void(const uint8_t*, size_t)> onAudioData;     // (data, len_bytes)

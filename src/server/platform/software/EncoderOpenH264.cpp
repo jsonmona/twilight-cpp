@@ -7,13 +7,10 @@
 
 using namespace std::chrono_literals;
 
+TWILIGHT_DEFINE_LOGGER(EncoderOpenH264);
+
 EncoderOpenH264::EncoderOpenH264(LocalClock& clock)
-    : log(createNamedLogger("EncoderOpenH264")),
-      clock(clock),
-      width(-1),
-      height(-1),
-      nextFrameAvailable(false),
-      flagRun(false) {}
+    : clock(clock), width(-1), height(-1), nextFrameAvailable(false), flagRun(false) {}
 
 EncoderOpenH264::~EncoderOpenH264() {
     /* acquire data lock */ {
@@ -26,7 +23,7 @@ EncoderOpenH264::~EncoderOpenH264() {
 }
 
 void EncoderOpenH264::start() {
-    check_quit(flagRun.load(std::memory_order_acquire), log, "Encoder is already started");
+    log.assert_quit(!flagRun.load(std::memory_order_acquire), "Encoder is already started");
     if (runThread.joinable())
         runThread.join();
 
@@ -50,12 +47,12 @@ void EncoderOpenH264::run_() {
     if (loader == nullptr) {
         loader = OpenH264Loader::getInstance();
         loader->prepare();
-        check_quit(!loader->isReady(), log, "Not ready");
+        log.assert_quit(loader->isReady(), "OpenH264 not ready after prepare()!");
     }
 
     ISVCEncoder* encoder = nullptr;
     err = loader->CreateSVCEncoder(&encoder);
-    check_quit(err != 0, log, "Failed to create encoder instance!");
+    log.assert_quit(err == 0, "Failde to create encoder instance");
 
     // TODO: Configure encoder not to skip frame
     SEncParamBase paramBase = {};
@@ -67,11 +64,11 @@ void EncoderOpenH264::run_() {
     paramBase.iRCMode = RC_BITRATE_MODE;
 
     err = encoder->Initialize(&paramBase);
-    check_quit(err != 0, log, "Failed to initialize encoder");
+    log.assert_quit(err == 0, "Failed to initialize encoder");
 
     int videoFormat = videoFormatI420;
     err = encoder->SetOption(ENCODER_OPTION_DATAFORMAT, &videoFormat);
-    check_quit(err != 0, log, "Failed to set dataformat to {}", videoFormat);
+    log.assert_quit(err == 0, "Failed to set dataformat to {}", videoFormat);
 
     while (flagRun.load(std::memory_order_acquire)) {
         DesktopFrame<TextureSoftware> cap;
@@ -101,11 +98,11 @@ void EncoderOpenH264::run_() {
         pic.pData[1] = cap.desktop.data[1];
         pic.pData[2] = cap.desktop.data[2];
 
-        check_quit(pic.pData[1] != pic.pData[0] + (width * height), log, "Requirement #1 unsatisfied");
-        check_quit(pic.pData[2] != pic.pData[1] + (width * height / 4), log, "Requirement #2 unsatisfied");
+        log.assert_quit(pic.pData[1] == pic.pData[0] + (width * height), "Requirement #1 unsatisfied");
+        log.assert_quit(pic.pData[2] == pic.pData[1] + (width * height / 4), "Requirement #2 unsatisfied");
 
         err = encoder->EncodeFrame(&pic, &info);
-        check_quit(err != 0, log, "Failed to encode a frame");
+        log.assert_quit(err == 0, "Failed to encode a frame");
 
         if (info.eFrameType != videoFrameTypeSkip) {
             ByteBuffer combined;
@@ -126,13 +123,13 @@ void EncoderOpenH264::run_() {
             onDataAvailable(cap.getOtherType(std::move(combined)));
         } else {
             // FIXME: What happens to sidedata when the frame is skipped?
-            log->warn("Encoder decided to skip a frame");
+            log.warn("Encoder decided to skip a frame");
         }
     }
 
     err = encoder->Uninitialize();
     if (err != 0)
-        log->error("Failed to uninitialize encoder");
+        log.error("Failed to uninitialize encoder");
 
     loader->DestroySVCEncoder(encoder);
 }

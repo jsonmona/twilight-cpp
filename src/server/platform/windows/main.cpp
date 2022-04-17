@@ -1,4 +1,5 @@
 #include "common/log.h"
+
 #include "common/platform/windows/ComWrapper.h"
 
 #include "server/StreamServer.h"
@@ -39,25 +40,25 @@ int main() {
     GOOGLE_PROTOBUF_VERIFY_VERSION;
     HRESULT hr;
 
-    auto log = createNamedLogger("main");
+    NamedLogger log("name");
 
     if (!setDpiAwareness())
-        log->warn("Unable to set dpi awareness");
+        log.warn("Unable to set dpi awareness");
 
     hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
-    check_quit(FAILED(hr), log, "Failed to initialize COM");
+    log.assert_quit(SUCCEEDED(hr), "Failed to initialize COM");
 
     hr = MFStartup(MF_VERSION, MFSTARTUP_LITE);
-    check_quit(FAILED(hr), log, "Failed to start MediaFoundation");
+    log.assert_quit(SUCCEEDED(hr), "Failed to start MediaFoundation");
 
     StreamServer stream;
 
-    log->info("Starting twilight remote desktop server...");
+    log.info("Starting twilight remote desktop server...");
 
     stream.start();
     Sleep(3600 * 1000);
 
-    log->info("Stopping twilight remote desktop server...");
+    log.info("Stopping twilight remote desktop server...");
     stream.stop();
 
     MFShutdown();

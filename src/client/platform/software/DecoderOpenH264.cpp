@@ -2,16 +2,13 @@
 
 #include <map>
 
+TWILIGHT_DEFINE_LOGGER(DecoderOpenH264);
+
 DecoderOpenH264::DecoderOpenH264(NetworkClock &clock)
-    : log(createNamedLogger("DecoderSoftware")),
-      clock(clock),
-      idrPacketInQueue(false),
-      outputWidth(-1),
-      outputHeight(-1),
-      flagRun(false) {}
+    : clock(clock), idrPacketInQueue(false), outputWidth(-1), outputHeight(-1), flagRun(false) {}
 
 DecoderOpenH264::~DecoderOpenH264() {
-    check_quit(flagRun.load(std::memory_order_relaxed), log, "Being destructed without stopping");
+    log.assert_quit(!flagRun.load(std::memory_order_relaxed), "Being destructed without stopping");
 
     if (looper.joinable())
         looper.join();
@@ -23,7 +20,7 @@ void DecoderOpenH264::pushData(DesktopFrame<ByteBuffer> &&nextData) {
     if (nextData.isIDR) {
         if (idrPacketInQueue) {
             // Two IDR packets in queue. Skip all remaining packets
-            log->warn("Skipping {} frames! Is decoder overloaded?", packetQueue.size());
+            log.warn("Skipping {} frames! Is decoder overloaded?", packetQueue.size());
 
             std::shared_ptr<CursorPos> lastPos;
             std::shared_ptr<CursorShape> lastShape;
@@ -95,14 +92,14 @@ void DecoderOpenH264::run_() {
     ISVCDecoder *decoder;
 
     err = loader->CreateDecoder(&decoder);
-    check_quit(err != 0 || decoder == nullptr, log, "Failed to create decoder instance");
+    log.assert_quit(err == 0 && decoder != nullptr, "Failed to create decoder instance");
 
     SDecodingParam decParam = {};
     decParam.sVideoProperty.eVideoBsType = VIDEO_BITSTREAM_AVC;
     decParam.bParseOnly = false;
 
     err = decoder->Initialize(&decParam);
-    check_quit(err != 0, log, "Failed to initialize decoder");
+    log.assert_quit(err == 0, "Failed to initialize decoder");
 
     while (flagRun.load(std::memory_order_acquire)) {
         DesktopFrame<ByteBuffer> data;
@@ -125,7 +122,7 @@ void DecoderOpenH264::run_() {
         uint8_t *framebuffer[3] = {};
         SBufferInfo decBufferInfo = {};
         err = decoder->DecodeFrameNoDelay(data.desktop.data(), data.desktop.size(), framebuffer, &decBufferInfo);
-        check_quit(err != 0, log, "Failed to decode frame");
+        log.assert_quit(err == 0, "Failed to decode frame");
 
         if (decBufferInfo.iBufferStatus == 1) {
             int w = decBufferInfo.UsrData.sSystemBuffer.iWidth;
@@ -133,19 +130,19 @@ void DecoderOpenH264::run_() {
 
             EVideoFormatType openH264Format = (EVideoFormatType)decBufferInfo.UsrData.sSystemBuffer.iFormat;
             AVPixelFormat fmt = openH264Format == videoFormatI420 ? AV_PIX_FMT_YUV420P : AV_PIX_FMT_NONE;
-            check_quit(fmt == AV_PIX_FMT_NONE, log, "Unknown OpenH264 video format {}",
-                       decBufferInfo.UsrData.sSystemBuffer.iFormat);
+            log.assert_quit(fmt != AV_PIX_FMT_NONE, "Unknown OpenH264 video format {}",
+                            decBufferInfo.UsrData.sSystemBuffer.iFormat);
 
             int linesize[4] = {decBufferInfo.UsrData.sSystemBuffer.iStride[0],
                                decBufferInfo.UsrData.sSystemBuffer.iStride[1],
                                decBufferInfo.UsrData.sSystemBuffer.iStride[1], 0};
             if (framebuffer[0] != decBufferInfo.pDst[0] || framebuffer[1] != decBufferInfo.pDst[1] ||
                 framebuffer[2] != decBufferInfo.pDst[2]) {
-                log->info("linesize: {} {} {}", linesize[0], linesize[1], linesize[2]);
-                log->info("framebuffer: {} {} {}", (uintptr_t)framebuffer[0], (uintptr_t)framebuffer[1],
-                          (uintptr_t)framebuffer[2]);
-                log->info("bufferinfo: {} {} {}", (uintptr_t)decBufferInfo.pDst[0], (uintptr_t)decBufferInfo.pDst[1],
-                          (uintptr_t)decBufferInfo.pDst[2]);
+                log.info("linesize: {} {} {}", linesize[0], linesize[1], linesize[2]);
+                log.info("framebuffer: {} {} {}", (uintptr_t)framebuffer[0], (uintptr_t)framebuffer[1],
+                         (uintptr_t)framebuffer[2]);
+                log.info("bufferinfo: {} {} {}", (uintptr_t)decBufferInfo.pDst[0], (uintptr_t)decBufferInfo.pDst[1],
+                         (uintptr_t)decBufferInfo.pDst[2]);
             }
 
             TextureSoftware yuv = TextureSoftware::reference(framebuffer, linesize, w, h, fmt);
@@ -165,11 +162,11 @@ void DecoderOpenH264::run_() {
             frameQueue.push_back(std::move(frame));
             frameCV.notify_one();
         } else
-            log->info("No frame provided");
+            log.info("No frame provided");
     }
 
     err = decoder->Uninitialize();
     if (err != 0)
-        log->warn("Failed to uninitialize decoder");
+        log.warn("Failed to uninitialize decoder");
     loader->DestroyDecoder(decoder);
 }

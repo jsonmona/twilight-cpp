@@ -22,11 +22,12 @@ public:
     const std::vector<CertHash>& list() const { return clients; }
 
 private:
-    LoggerPtr log;
-    std::vector<CertHash> clients;
-
     void load_(toml::array& arr);
     bool save_(std::ostream& out);
+
+    static NamedLogger log;
+
+    std::vector<CertHash> clients;
 };
 
 #endif

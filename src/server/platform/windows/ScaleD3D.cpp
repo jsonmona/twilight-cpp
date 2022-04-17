@@ -1,12 +1,15 @@
 #include "ScaleD3D.h"
 
-#include "common/platform/windows/ComWrapper.h"
 #include "common/util.h"
+
+#include "common/platform/windows/ComWrapper.h"
 
 #include <cassert>
 #include <limits>
 #include <string>
 #include <vector>
+
+TWILIGHT_DEFINE_LOGGER(ScaleD3D);
 
 static const float quadVertex[] = {-1, -1, -1, 1, 1, -1, 1, 1};
 static const UINT quadVertexStride = 2 * sizeof(quadVertex[0]);
@@ -14,32 +17,42 @@ static const UINT quadVertexOffset = 0;
 static const UINT quadVertexCount = 4;
 
 class ScaleD3D_AYUV : public ScaleD3D {
-    D3D11RenderTargetView rtOutput;
-    D3D11PixelShader pixelShader;
+public:
+    ScaleD3D_AYUV(int w, int h) : ScaleD3D(w, h, ScaleType::AYUV) {}
+
+    void init(const D3D11Device& device, const D3D11DeviceContext& context) override;
 
 protected:
     void convert_(const D3D11Texture2D& inputTex) override;
 
-public:
-    ScaleD3D_AYUV(int w, int h) : ScaleD3D(createNamedLogger("ScaleD3D_AYUV"), w, h, ScaleType::AYUV) {}
+private:
+    static NamedLogger log;
 
-    void init(const D3D11Device& device, const D3D11DeviceContext& context) override;
+    D3D11RenderTargetView rtOutput;
+    D3D11PixelShader pixelShader;
 };
 
+TWILIGHT_DEFINE_LOGGER(ScaleD3D_AYUV);
+
 class ScaleD3D_NV12 : public ScaleD3D {
+public:
+    ScaleD3D_NV12(int w, int h) : ScaleD3D(w, h, ScaleType::NV12) {}
+
+    void init(const D3D11Device& device, const D3D11DeviceContext& context) override;
+
+protected:
+    void convert_(const D3D11Texture2D& inputTex) override;
+
+private:
+    static NamedLogger log;
+
     D3D11Texture2D chromaLargeTex;
     D3D11ShaderResourceView srChromaLarge;
     D3D11RenderTargetView rtLuma, rtChroma, rtChromaLarge;
     D3D11PixelShader pixelShaderY, pixelShaderUV, pixelShaderCopy;
-
-protected:
-    void convert_(const D3D11Texture2D& inputTex) override;
-
-public:
-    ScaleD3D_NV12(int w, int h) : ScaleD3D(createNamedLogger("ScaleD3D_NV12"), w, h, ScaleType::NV12) {}
-
-    void init(const D3D11Device& device, const D3D11DeviceContext& context) override;
 };
+
+TWILIGHT_DEFINE_LOGGER(ScaleD3D_NV12);
 
 std::unique_ptr<ScaleD3D> ScaleD3D::createInstance(int w, int h, ScaleType type) {
     std::unique_ptr<ScaleD3D> ret;
@@ -49,18 +62,13 @@ std::unique_ptr<ScaleD3D> ScaleD3D::createInstance(int w, int h, ScaleType type)
     else if (type == ScaleType::NV12)
         ret = std::make_unique<ScaleD3D_NV12>(w, h);
     else
-        error_quit(createNamedLogger("ScaleD3D"), "Invalid surface type requested");
+        log.error_quit("Invalid surface type requested");
 
     return ret;
 }
 
-ScaleD3D::ScaleD3D(LoggerPtr logger, int w, int h, ScaleType type)
-    : log(logger),
-      outType(type),
-      outWidth(w),
-      outHeight(h),
-      inFormat(DXGI_FORMAT_UNKNOWN),
-      outFormat(DXGI_FORMAT_UNKNOWN) {}
+ScaleD3D::ScaleD3D(int w, int h, ScaleType type)
+    : outType(type), outWidth(w), outHeight(h), inFormat(DXGI_FORMAT_UNKNOWN), outFormat(DXGI_FORMAT_UNKNOWN) {}
 
 ScaleD3D::~ScaleD3D() {}
 
@@ -136,7 +144,7 @@ void ScaleD3D::init(const D3D11Device& device, const D3D11DeviceContext& context
     // FIXME: Unchecked std::optional unwrapping
     ByteBuffer vertexBlob = loadEntireFile("rgb2yuv-vs_main.fxc").value();
     hr = device->CreateVertexShader(vertexBlob.data(), vertexBlob.size(), nullptr, vertexShader.data());
-    check_quit(FAILED(hr), log, "Failed to create vertex shader");
+    log.assert_quit(SUCCEEDED(hr), "Failed to create vertex shader");
 
     D3D11_INPUT_ELEMENT_DESC inputLayoutDesc[] = {
         {"POS", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0}};
@@ -154,8 +162,8 @@ void ScaleD3D::pushInput(const D3D11Texture2D& inputTex) {
     inWidth = desc.Width;
     inHeight = desc.Height;
     inFormat = desc.Format;
-    check_quit((desc.BindFlags & D3D11_BIND_SHADER_RESOURCE) == 0, log,
-               "Input texture does not have D3D11_BIND_SHADER_RESOURCE");
+    log.assert_quit((desc.BindFlags & D3D11_BIND_SHADER_RESOURCE) != 0,
+                    "Input texture does not have D3D11_BIND_SHADER_RESOURCE");
 
     srInput.release();
 
@@ -225,7 +233,7 @@ void ScaleD3D_AYUV::convert_(const D3D11Texture2D& inputTex) {
 void ScaleD3D_NV12::init(const D3D11Device& device, const D3D11DeviceContext& context) {
     outFormat = DXGI_FORMAT_NV12;
     if (outWidth % 2 != 0 || outHeight % 2 != 0)
-        error_quit(log, "Dimension not multiple of 2 when using NV12 format");
+        log.error_quit("Dimension not multiple of 2 when using NV12 format");
 
     ScaleD3D::init(device, context);
 

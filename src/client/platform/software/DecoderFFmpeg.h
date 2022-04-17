@@ -1,9 +1,6 @@
 #ifndef TWILIGHT_CLIENT_PLATFORM_SOFTWARE_DECODERFFMPEG_H
 #define TWILIGHT_CLIENT_PLATFORM_SOFTWARE_DECODERFFMPEG_H
 
-#include <queue>
-#include <thread>
-
 #include "common/DesktopFrame.h"
 #include "common/ffmpeg-headers.h"
 #include "common/log.h"
@@ -12,6 +9,9 @@
 #include "common/platform/software/TextureSoftware.h"
 
 #include "client/NetworkClock.h"
+
+#include <queue>
+#include <thread>
 
 class DecoderFFmpeg {
 public:
@@ -29,10 +29,9 @@ public:
 private:
     void run_();
 
-    LoggerPtr log;
-    NetworkClock& clock;
+    static NamedLogger log;
 
-    std::atomic<bool> flagRun;
+    NetworkClock& clock;
 
     CodecType codecType;
     int width, height;
@@ -51,6 +50,7 @@ private:
     std::condition_variable frameCV;
     DesktopFrame<TextureSoftware> nextFrame;
 
+    std::atomic<bool> flagRun;
     bool flagKeyInPacket;
     bool flagNextFrameAvailable;
 };

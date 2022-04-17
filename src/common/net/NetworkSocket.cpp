@@ -10,6 +10,8 @@
 
 #include <string>
 
+TWILIGHT_DEFINE_LOGGER(NetworkSocket);
+
 // FIXME: Deduplicate from NetworkServer.cpp
 // Mozilla Intermediate SSL but prefers chacha20 over AES
 constexpr static std::string_view ALLOWED_CIPHERS =
@@ -45,8 +47,7 @@ private:
     Fn onError;
 };
 
-NetworkSocket::NetworkSocket()
-    : log(createNamedLogger("NetworkSocket")), connected(false), localCert(nullptr), localPrivkey(nullptr) {
+NetworkSocket::NetworkSocket() : connected(false), localCert(nullptr), localPrivkey(nullptr) {
     mbedtls_net_init(&ctx);
     mbedtls_ssl_init(&ssl);
     mbedtls_ssl_config_init(&conf);
@@ -59,17 +60,17 @@ NetworkSocket::NetworkSocket()
         if (ptr != nullptr)
             allowedCiphersuites.push_back(ptr->id);
         else
-            log->warn("Unknown cipher suite name {}", name);
+            log.warn("Unknown cipher suite name {}", name);
     });
     allowedCiphersuites.push_back(0);  // Terminator
     allowedCiphersuites.shrink_to_fit();
 
     int stat = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy, nullptr, 0);
-    check_quit(stat < 0, log, "Failed to seed ctr_drbg: {}", interpretMbedtlsError(stat));
+    log.assert_quit(0 <= stat, "Failed to seed ctr_drbg: {}", mbedtls_error{stat});
 
     stat = mbedtls_ssl_config_defaults(&conf, MBEDTLS_SSL_IS_CLIENT, MBEDTLS_SSL_TRANSPORT_STREAM,
                                        MBEDTLS_SSL_PRESET_DEFAULT);
-    check_quit(stat < 0, log, "Failed to set defaults for SSL: {}", interpretMbedtlsError(stat));
+    log.assert_quit(0 <= stat, "Failed to set defaults for SSL: {}", mbedtls_error{stat});
 
     mbedtls_ssl_conf_authmode(&conf, MBEDTLS_SSL_VERIFY_OPTIONAL);
     mbedtls_ssl_conf_rng(&conf, mbedtls_ctr_drbg_random, &ctr_drbg);
@@ -78,11 +79,7 @@ NetworkSocket::NetworkSocket()
 }
 
 NetworkSocket::NetworkSocket(mbedtls_net_context initCtx, const mbedtls_ssl_config *ssl_conf)
-    : log(createNamedLogger("NetworkSocket")),
-      connected(true),
-      ctx(initCtx),
-      localCert(nullptr),
-      localPrivkey(nullptr) {
+    : connected(true), ctx(initCtx), localCert(nullptr), localPrivkey(nullptr) {
     mbedtls_ssl_init(&ssl);
     mbedtls_ssl_config_init(&conf);
     mbedtls_entropy_init(&entropy);
@@ -91,7 +88,7 @@ NetworkSocket::NetworkSocket(mbedtls_net_context initCtx, const mbedtls_ssl_conf
     int stat;
     stat = mbedtls_ssl_setup(&ssl, ssl_conf);
     if (stat != 0) {
-        log->warn("Failed to setup SSL context: {}", interpretMbedtlsError(stat));
+        log.warn("Failed to setup SSL context: {}", mbedtls_error{stat});
         connected.store(false, std::memory_order_relaxed);
     }
 
@@ -99,7 +96,7 @@ NetworkSocket::NetworkSocket(mbedtls_net_context initCtx, const mbedtls_ssl_conf
 
     stat = mbedtls_ssl_handshake(&ssl);
     if (stat != 0) {
-        log->warn("Failed to perform SSL handshake: {}", interpretMbedtlsError(stat));
+        log.warn("Failed to perform SSL handshake: {}", mbedtls_error{stat});
         connected.store(false, std::memory_order_relaxed);
     }
 }
@@ -108,7 +105,7 @@ NetworkSocket::~NetworkSocket() {
     bool prev = connected.exchange(false, std::memory_order_acq_rel);
 
     if (prev) {
-        log->warn("Socket deconstructed while connected");
+        log.warn("Socket deconstructed while connected");
         disconnect();
     }
 
@@ -137,15 +134,15 @@ bool NetworkSocket::connect(const char *addr, uint16_t port) {
         return false;  // FIXME: Memory leak (this and other check_quit's)
 
     stat = mbedtls_ssl_setup(&ssl, &conf);
-    check_quit(stat < 0, log, "Failed to setup SSL context: {}", interpretMbedtlsError(stat));
+    log.assert_quit(0 <= stat, "Failed to setup SSL context: {}", mbedtls_error{stat});
 
     mbedtls_ssl_set_bio(&ssl, &ctx, mbedtls_net_send, mbedtls_net_recv, nullptr);
 
     stat = mbedtls_ssl_handshake(&ssl);
-    check_quit(stat < 0, log, "Failed to perform SSL handshake: {}", interpretMbedtlsError(stat));
+    log.assert_quit(0 <= stat, "Failed to perform SSL handshake: {}", mbedtls_error{stat});
 
     connected.store(true, std::memory_order_release);
-    log->info("Connected to tls:{}:{}", addr, port);
+    log.info("Connected to tls:{}:{}", addr, port);
 
     return true;
 }
@@ -173,7 +170,7 @@ bool NetworkSocket::verifyCert() {
     }
 
     // TODO: It might be a good idea to return something different when faced with unknwon error
-    log->info("SSL verification error: {:08x}", flags);
+    log.info("SSL verification error: {:08x}", flags);
     return false;
 }
 
@@ -205,12 +202,12 @@ bool NetworkSocket::send(const msg::Packet &pkt, const uint8_t *extraData) {
 
         cout.WriteVarint64(packetLen);
         if (sendBuffer.size() - cout.ByteCount() < packetLen) {
-            log->critical("Packet length takes too much space: {} bytes used", cout.ByteCount());
+            log.critical("Packet length takes too much space: {} bytes used", cout.ByteCount());
             return false;
         }
 
         if (!pkt.SerializeToCodedStream(&cout)) {
-            log->critical("Failed to serialize to coded stream");
+            log.critical("Failed to serialize to coded stream");
             return false;
         }
 
@@ -229,7 +226,7 @@ bool NetworkSocket::send(const msg::Packet &pkt, const uint8_t *extraData) {
     }
 
     if (extraDataLen > 0) {
-        check_quit(extraData == nullptr, log, "Extra data is nullptr (expected {} bytes)", extraDataLen);
+        log.assert_quit(extraData != nullptr, "Extra data is nullptr (expected {} bytes)", extraDataLen);
         offset = 0;
         while (offset < extraDataLen) {
             ret = mbedtls_ssl_write(&ssl, extraData + offset, extraDataLen - offset);
@@ -317,7 +314,7 @@ ByteBuffer NetworkSocket::getRemotePubkey() {
         arr.shiftTowardBegin(arr.size() - ret);
         arr.resize(ret);
     } else {
-        log->warn("Failed to serialize remote pubkey: {}", interpretMbedtlsError(ret));
+        log.warn("Failed to serialize remote pubkey: {}", mbedtls_error{ret});
         arr.resize(0);
     }
 

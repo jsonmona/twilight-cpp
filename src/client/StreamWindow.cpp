@@ -1,21 +1,20 @@
 #include "StreamWindow.h"
 
-#include <QtGui/qevent.h>
-#include <QtWidgets/qmessagebox.h>
-#include <cubeb/cubeb.h>
-#include <opus.h>
-
-#include "client/platform/windows/StreamViewerD3D.h"
 #include "common/RingBuffer.h"
 #include "common/platform/windows/winheaders.h"
 
+#include "client/platform/windows/StreamViewerD3D.h"
+
+#include <cubeb/cubeb.h>
+#include <opus.h>
+
+#include <QtGui/qevent.h>
+#include <QtWidgets/qmessagebox.h>
+
+TWILIGHT_DEFINE_LOGGER(StreamWindow);
+
 StreamWindow::StreamWindow(HostListEntry host, bool playAudio)
-    : QWidget(),
-      log(createNamedLogger("StreamWindow")),
-      sc(clock),
-      viewer(new StreamViewerD3D(clock)),
-      boxLayout(this),
-      flagPlayAudio(playAudio) {
+    : QWidget(), sc(clock), viewer(new StreamViewerD3D(clock)), boxLayout(this), flagPlayAudio(playAudio) {
     connect(this, &StreamWindow::showLater, this, &StreamWindow::show);
     connect(this, &StreamWindow::closeLater, this, &StreamWindow::close);
     connect(this, &StreamWindow::displayPinLater, this, &StreamWindow::displayPin_);
@@ -73,11 +72,11 @@ void StreamWindow::displayPin_(int pin) {
 void StreamWindow::processStateChange_(StreamClient::State newState, std::string_view msg) {
     switch (newState) {
     case StreamClient::State::CONNECTED:
-        log->debug("State changed to CONNECTED; {}", msg);
+        log.debug("State changed to CONNECTED; {}", msg);
         showLater();
         break;
     case StreamClient::State::DISCONNECTED:
-        log->debug("State changed to DISCONNECTED; {}", msg);
+        log.debug("State changed to DISCONNECTED; {}", msg);
         closeLater();  // TODO: Add a dialog showing reason (unless it was user operation)
         break;
     }
@@ -108,16 +107,19 @@ void StreamWindow::processNewPacket_(const msg::Packet &pkt, uint8_t *extraData)
         break;
     }
     default:
-        log->warn("Unknown packet type: {}", pkt.msg_case());
+        log.warn("Unknown packet type: {}", pkt.msg_case());
     }
 }
 
 struct CubebUserData {
-    LoggerPtr log;
+    static NamedLogger log;
+
     std::mutex dataLock;
     RingBuffer<float, 5760 * 4> data;
     std::atomic<bool> flagBufferUnderrun;
 };
+
+TWILIGHT_DEFINE_LOGGER(CubebUserData);
 
 static long data_cb(cubeb_stream *stm, void *user, const void *input_buffer, void *output_buffer, long nframes) {
     CubebUserData *self = reinterpret_cast<CubebUserData *>(user);
@@ -149,19 +151,18 @@ void StreamWindow::runAudio_() {
     int stat;
 
     hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    check_quit(FAILED(hr), log, "Failed to initialize COM in multithreaded mode");
+    log.assert_quit(SUCCEEDED(hr), "Failed to initialize COM in multithreaded mode");
 
     OpusDecoder *opusDecoder = opus_decoder_create(48000, 2, &stat);
-    check_quit(stat < 0, log, "Failed to create opus decoder");
+    log.assert_quit(stat == OPUS_OK, "Failed to create opus decoder");
 
     std::vector<float> pcm(5760 * 2);
 
     std::unique_ptr<CubebUserData> self = std::make_unique<CubebUserData>();
-    self->log = log;
 
     cubeb *cubebCtx = nullptr;
     stat = cubeb_init(&cubebCtx, "Twilight Remote Desktop Client", nullptr);
-    check_quit(stat != CUBEB_OK, log, "Failed to intialize cubeb");
+    log.assert_quit(stat == CUBEB_OK, "Failed to intialize cubeb");
 
     cubeb_stream_params outParam = {};
     outParam.format = CUBEB_SAMPLE_FLOAT32NE;
@@ -172,15 +173,15 @@ void StreamWindow::runAudio_() {
 
     uint32_t latencyFrames;
     stat = cubeb_get_min_latency(cubebCtx, &outParam, &latencyFrames);
-    check_quit(stat != CUBEB_OK, log, "Failed to get minimum latency of cubeb");
+    log.assert_quit(stat == CUBEB_OK, "Failed to get minimum latency of cubeb");
 
     cubeb_stream *stm;
     stat = cubeb_stream_init(cubebCtx, &stm, "Remote desktop speaker", nullptr, nullptr, nullptr, &outParam,
                              latencyFrames, data_cb, state_cb, reinterpret_cast<void *>(self.get()));
-    check_quit(stat != CUBEB_OK, log, "Failed to init a cubeb stream");
+    log.assert_quit(stat == CUBEB_OK, "Failed to init a cubeb stream");
 
     stat = cubeb_stream_start(stm);
-    check_quit(stat != CUBEB_OK, log, "Failed to start cubeb stream");
+    log.assert_quit(stat == CUBEB_OK, "Failed to start cubeb stream");
 
     while (flagPlayAudio.load(std::memory_order_relaxed)) {
         ByteBuffer nowData;
@@ -199,7 +200,7 @@ void StreamWindow::runAudio_() {
         }
 
         stat = opus_decode_float(opusDecoder, nowData.data(), nowData.size(), pcm.data(), 5760, 0);
-        check_quit(stat < 0, log, "Failed to decode opus stream");
+        log.assert_quit(0 <= stat, "Failed to decode opus stream");
         int decodedFrames = stat;
 
         std::lock_guard lock(self->dataLock);
@@ -209,7 +210,7 @@ void StreamWindow::runAudio_() {
     }
 
     stat = cubeb_stream_stop(stm);
-    check_quit(stat != CUBEB_OK, log, "Failed to stop cubeb stream");
+    log.assert_quit(stat == CUBEB_OK, "Failed to stop cubeb stream");
 
     cubeb_stream_destroy(stm);
     cubeb_destroy(cubebCtx);

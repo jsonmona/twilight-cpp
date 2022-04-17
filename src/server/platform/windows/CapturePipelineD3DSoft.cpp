@@ -1,5 +1,7 @@
 #include "CapturePipelineD3DSoft.h"
 
+TWILIGHT_DEFINE_LOGGER(CapturePipelineD3DSoft);
+
 static AVPixelFormat dxgi2avpixfmt(DXGI_FORMAT fmt) {
     switch (fmt) {
     case DXGI_FORMAT_B8G8R8A8_UNORM:
@@ -7,7 +9,7 @@ static AVPixelFormat dxgi2avpixfmt(DXGI_FORMAT fmt) {
     case DXGI_FORMAT_R8G8B8A8_UNORM:
         return AV_PIX_FMT_RGBA;
     default:
-        error_quit(createNamedLogger("CapturePipelineD3DSoft"), "No matching AVPixelFormat for DXGI_FORMAT {}", fmt);
+        NamedLogger("CapturePipelineD3DSoft").error_quit("No matching AVPixelFormat for DXGI_FORMAT {}", fmt);
     }
 }
 
@@ -18,23 +20,18 @@ static AVPixelFormat scale2avpixfmt(ScaleType type) {
     case ScaleType::NV12:
         return AV_PIX_FMT_YUV420P;
     default:
-        error_quit(createNamedLogger("CapturePipelineD3DSoft"), "No matching AVPixelFormat for ScaleType {}", type);
+        NamedLogger("CapturePipelineD3DSoft").error_quit("No matching AVPixelFormat for ScaleType {}", type);
     }
 }
 
 CapturePipelineD3DSoft::CapturePipelineD3DSoft(LocalClock& clock, DxgiHelper dxgiHelper)
-    : log(createNamedLogger("CapturePipelineD3DSoft")),
-      dxgiHelper(dxgiHelper),
-      scaleType(ScaleType::NV12),
-      flagRun(false),
-      capture(clock),
-      encoder(clock) {}
+    : dxgiHelper(dxgiHelper), scaleType(ScaleType::NV12), flagRun(false), capture(clock), encoder(clock) {}
 
 CapturePipelineD3DSoft::~CapturePipelineD3DSoft() {}
 
 bool CapturePipelineD3DSoft::init() {
     auto outputs = dxgiHelper.findAllOutput();
-    check_quit(outputs.empty(), log, "No output available");
+    log.assert_quit(!outputs.empty(), "No output available!");
 
     capture.init(dxgiHelper);
     capture.open(outputs[0].castTo<IDXGIOutput>());
@@ -44,7 +41,7 @@ bool CapturePipelineD3DSoft::init() {
 
 void CapturePipelineD3DSoft::start() {
     bool wasRunning = flagRun.exchange(true, std::memory_order_acq_rel);
-    check_quit(wasRunning, log, "Starting without stopping first!");
+    log.assert_quit(!wasRunning, "Starting without stopping first!");
 
     if (captureThread.joinable())
         captureThread.join();
@@ -61,7 +58,8 @@ void CapturePipelineD3DSoft::start() {
 }
 
 void CapturePipelineD3DSoft::stop() {
-    flagRun.store(false, std::memory_order_release);
+    bool wasRunning = flagRun.exchange(false, std::memory_order_acq_rel);
+    log.assert_quit(wasRunning, "Stopping when not running!");
 
     encoder.stop();
     capture.stop();

@@ -2,7 +2,9 @@
 
 #include <fstream>
 
-KnownClients::KnownClients() : log(createNamedLogger("KnownClients")) {}
+TWILIGHT_DEFINE_LOGGER(KnownClients);
+
+KnownClients::KnownClients() {}
 
 // TODO: Some functions are duplicated from HostList.cpp
 //       It might be good to deduplicate them (or get a proper serialization library)
@@ -12,12 +14,12 @@ bool KnownClients::loadFile(const char* filename) {
         if (root["clients"].is_array())
             load_(root["clients"].as_array());
         else if (!root["clients"].is_uninitialized())  // Warn if not empty; An empty file IS valid
-            log->warn("`clients` is not an array. Is it a valid file? --> {}", filename);
+            log.warn("`clients` is not an array. Is it a valid file? --> {}", filename);
     } catch (std::runtime_error err) {
-        log->warn("Failed to deserialize from file: {}", err.what());
+        log.warn("Failed to deserialize from file: {}", err.what());
         return false;
     } catch (toml::syntax_error err) {
-        log->warn("Failed to deserialize from file: {}", err.what());
+        log.warn("Failed to deserialize from file: {}", err.what());
         return false;
     }
 

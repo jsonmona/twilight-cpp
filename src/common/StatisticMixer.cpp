@@ -4,8 +4,9 @@
 #include <cmath>
 #include <limits>
 
-StatisticMixer::StatisticMixer(size_t initialSize)
-    : log(createNamedLogger("StatisticMixer")), arr(initialSize), arrIdx(0) {
+TWILIGHT_DEFINE_LOGGER(StatisticMixer);
+
+StatisticMixer::StatisticMixer(size_t initialSize) : arr(initialSize), arrIdx(0) {
     std::fill(arr.begin(), arr.end(), std::numeric_limits<float>::quiet_NaN());
 }
 

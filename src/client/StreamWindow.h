@@ -1,17 +1,6 @@
 #ifndef TWILIGHT_CLIENT_STREAMWINDOW_H
 #define TWILIGHT_CLIENT_STREAMWINDOW_H
 
-#include <condition_variable>
-#include <deque>
-#include <memory>
-#include <mutex>
-#include <thread>
-
-#include <QtWidgets/qboxlayout.h>
-#include <QtWidgets/qwidget.h>
-
-#include <packet.pb.h>
-
 #include "common/ByteBuffer.h"
 #include "common/log.h"
 #include "common/util.h"
@@ -20,6 +9,17 @@
 #include "client/NetworkClock.h"
 #include "client/StreamClient.h"
 #include "client/StreamViewerBase.h"
+
+#include <packet.pb.h>
+
+#include <QtWidgets/qboxlayout.h>
+#include <QtWidgets/qwidget.h>
+
+#include <condition_variable>
+#include <deque>
+#include <memory>
+#include <mutex>
+#include <thread>
 
 class StreamClient;
 
@@ -39,7 +39,8 @@ private slots:
     void displayPin_(int pin);
 
 private:
-    LoggerPtr log;
+    static NamedLogger log;
+
     NetworkClock clock;
     StreamClient sc;
 

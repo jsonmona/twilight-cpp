@@ -25,17 +25,8 @@ public:
     bool send(const msg::Packet& pkt, const ByteBuffer& extraData) { return sock->send(pkt, extraData); }
 
 private:
-    LoggerPtr log;
-    StreamServer* server;
-    std::unique_ptr<NetworkSocket> sock;
-    std::unique_ptr<AuthState> authState;
-
-    std::thread runThread;
-
-    bool authorized;
-    bool streaming;
-
     void run_();
+
     void msg_clientIntro_(const msg::ClientIntro& req);
     void msg_pingRequest_(const msg::PingRequest& req);
     void msg_queryHostCapsRequest_(const msg::QueryHostCapsRequest& req);
@@ -45,6 +36,17 @@ private:
 
     void msg_authRequest_(const msg::AuthRequest& req, const ByteBuffer& extraData);
     void msg_clientNonceNotify_(const msg::ClientNonceNotify& req, const ByteBuffer& extraData);
+
+    static NamedLogger log;
+
+    StreamServer* server;
+    std::unique_ptr<NetworkSocket> sock;
+    std::unique_ptr<AuthState> authState;
+
+    std::thread runThread;
+
+    bool authorized;
+    bool streaming;
 };
 
 #endif

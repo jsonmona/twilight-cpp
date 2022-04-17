@@ -1,23 +1,24 @@
 #ifndef TWILIGHT_CLIENT_PLATFORM_SOFTWARE_DECODEROPENH264_H
 #define TWILIGHT_CLIENT_PLATFORM_SOFTWARE_DECODEROPENH264_H
 
+#include "common/ByteBuffer.h"
+#include "common/DesktopFrame.h"
+#include "common/ffmpeg-headers.h"
+#include "common/log.h"
+#include "common/util.h"
+
+#include "common/platform/software/OpenH264Loader.h"
+#include "common/platform/software/ScaleSoftware.h"
+#include "common/platform/software/TextureSoftware.h"
+
+#include "client/NetworkClock.h"
+
 #include <atomic>
 #include <deque>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <thread>
-
-#include "common/ByteBuffer.h"
-#include "common/DesktopFrame.h"
-#include "common/ffmpeg-headers.h"
-#include "common/log.h"
-#include "common/platform/software/OpenH264Loader.h"
-#include "common/platform/software/ScaleSoftware.h"
-#include "common/platform/software/TextureSoftware.h"
-#include "common/util.h"
-
-#include "client/NetworkClock.h"
 
 class DecoderOpenH264 {
 public:
@@ -33,7 +34,7 @@ public:
     DesktopFrame<TextureSoftware> popData();
 
 private:
-    LoggerPtr log;
+    static NamedLogger log;
 
     NetworkClock& clock;
     std::shared_ptr<OpenH264Loader> loader;

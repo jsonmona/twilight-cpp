@@ -3,8 +3,10 @@
 #include <algorithm>
 #include <cassert>
 
+TWILIGHT_DEFINE_LOGGER(Rational);
+
 // TODO: Use binary GCD
-template<typename T>
+template <typename T>
 static T gcd(T u, T v) {
     if (u <= 0)
         return v;
@@ -36,8 +38,8 @@ Rational& Rational::operator*=(const Rational& other) {
     long long k = gcd(n, d);
     num_ = n / k;
     den_ = d / k;
-    assert(num_ == n / k);
-    assert(den_ == d / k);
+    log.assert_quit(num_ == n / k, "Overflow while multiplying");
+    log.assert_quit(den_ == d / k, "Overflow while multiplying");
     return *this;
 }
 
@@ -48,10 +50,6 @@ Rational Rational::reduce() const {
 
 Rational Rational::inv() const {
     return Rational(den(), num());
-}
-
-int Rational::imul(int factor) const {
-    return factor * num() / den();
 }
 
 long long Rational::imul(long long factor) const {

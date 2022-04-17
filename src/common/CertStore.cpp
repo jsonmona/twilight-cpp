@@ -5,7 +5,9 @@
 #include <cstdio>
 #include <ctime>
 
-CertStore::CertStore() : log(createNamedLogger("CertStore")) {
+TWILIGHT_DEFINE_LOGGER(CertStore);
+
+CertStore::CertStore() {
     mbedtls_x509_crt_init(&cert_);
 }
 
@@ -20,17 +22,17 @@ void CertStore::loadKey(std::unique_ptr<Keypair> &&pk) {
 void CertStore::loadCert(const char *filename) {
     int ret;
 
-    check_quit(keypair_ == nullptr, log, "Unable to generate certificate from an empty keypair!");
+    log.assert_quit(keypair_ != nullptr, "Unable to generate certificate from an empty keypair!");
 
     ret = mbedtls_x509_crt_parse_file(&cert_, filename);
     if (ret == 0) {
         // Test if certificate matches private key
         ret = mbedtls_pk_check_pair(&cert_.pk, keypair_->pk());
         if (ret != 0)
-            log->warn("Certificate does not match private key! Is key regenerated?");
+            log.warn("Certificate does not match private key! Is key regenerated?");
     }
     if (ret < 0) {
-        log->info("Generating certificate... (Reason: {})", interpretMbedtlsError(ret));
+        log.info("Generating certificate... (Reason: {})", mbedtls_error{ret});
 
         mbedtls_x509_crt_free(&cert_);
         mbedtls_x509_crt_init(&cert_);
@@ -44,7 +46,7 @@ void CertStore::loadCert(const char *filename) {
         ByteBuffer der = genCert_(subjectName.c_str(), subjectName.c_str(), keypair_->pk(), keypair_->pk());
 
         ret = mbedtls_x509_crt_parse_der(&cert_, der.data(), der.size());
-        check_quit(ret < 0, log, "Failed to read generated certificate");
+        log.assert_quit(0 <= ret, "Failed to read generated certificate");
 
         writeByteBuffer("cert.der", der);
     }
@@ -57,7 +59,7 @@ ByteBuffer CertStore::signCert(const char *subjectName, mbedtls_pk_context *subj
 
     while (true) {
         ret = mbedtls_x509_dn_gets(issuerName.data_char(), issuerName.size(), &cert()->subject);
-        check_quit(ret < 0, log, "Failed to get DN");
+        log.assert_quit(0 <= ret, "Failed to get DN");
 
         if (ret >= issuerName.size() - 1)
             issuerName.resize(issuerName.size() * 2);
@@ -102,14 +104,14 @@ ByteBuffer CertStore::genCert_(const char *subjectName, const char *issuerName, 
     mbedtls_mpi_init(&serial);
     mbedtls_mpi_read_string(&serial, 10, "1");
     ret = mbedtls_x509write_crt_set_serial(&ctx, &serial);
-    check_quit(ret < 0, log, "Failed to set serial");
+    log.assert_quit(0 <= ret, "Failed to set serial: {}", mbedtls_error{ret});
     mbedtls_mpi_free(&serial);
 
     ret = mbedtls_x509write_crt_set_subject_name(&ctx, subjectName);
-    check_quit(ret < 0, log, "Failed to set subject name: {}", interpretMbedtlsError(ret));
+    log.assert_quit(0 <= ret, "Failed to set subject name: {}", mbedtls_error{ret});
 
     ret = mbedtls_x509write_crt_set_issuer_name(&ctx, issuerName);
-    check_quit(ret < 0, log, "Failed to set issuer name: {}", interpretMbedtlsError(ret));
+    log.assert_quit(0 <= ret, "Failed to set issuer name: {}", mbedtls_error{ret});
 
     const time_t nowTimestamp = time(nullptr);
     tm *timeInfo = gmtime(&nowTimestamp);
@@ -121,13 +123,14 @@ ByteBuffer CertStore::genCert_(const char *subjectName, const char *issuerName, 
     timeInfo->tm_year += 500;
     strftime(notAfter, sizeof(notAfter), "%Y%m%d%H%M%S", timeInfo);
     ret = mbedtls_x509write_crt_set_validity(&ctx, notBefore, notAfter);
-    check_quit(ret < 0, log, "Failed to set validity: {}", interpretMbedtlsError(ret));
+    log.assert_quit(0 <= ret, "Failed to set validity: {}", mbedtls_error{ret});
 
     if (isSelfsign)
         ret = mbedtls_x509write_crt_set_basic_constraints(&ctx, 1, 2);
     else
         ret = mbedtls_x509write_crt_set_basic_constraints(&ctx, 0, -1);
-    check_quit(ret < 0, log, "Failed to set basic constraints: {}", interpretMbedtlsError(ret));
+
+    log.assert_quit(0 <= ret, "Failed to set basic constraints: {}", mbedtls_error{ret});
 
     ByteBuffer der;
     der.resize(512);
@@ -137,7 +140,7 @@ ByteBuffer CertStore::genCert_(const char *subjectName, const char *issuerName, 
             der.resize(der.size() * 2);
             continue;
         }
-        check_quit(ret < 0, log, "Failed to serialize X.509 certificate: {}", interpretMbedtlsError(ret));
+        log.assert_quit(0 <= ret, "Failed to serialize X.509 certificate: {}", mbedtls_error{ret});
         break;
     }
 

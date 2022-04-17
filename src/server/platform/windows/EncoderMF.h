@@ -37,7 +37,7 @@ public:
     bool pushFrame(DesktopFrame<D3D11Texture2D>* cap);
 
 private:
-    LoggerPtr log;
+    static NamedLogger log;
 
     LocalClock& clock;
 

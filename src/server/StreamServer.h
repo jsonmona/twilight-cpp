@@ -44,7 +44,7 @@ public:
     KnownClients knownClients;
 
 private:
-    LoggerPtr log;
+    static NamedLogger log;
 
     NetworkServer server;
 

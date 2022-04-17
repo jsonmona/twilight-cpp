@@ -7,6 +7,8 @@
 
 #include <string>
 
+TWILIGHT_DEFINE_LOGGER(NetworkServer);
+
 // Mozilla Intermediate SSL but prefers chacha20 over AES
 constexpr static std::string_view ALLOWED_CIPHERS =
     "\
@@ -38,7 +40,7 @@ static int exportKeysCb(void *p_expkey, const unsigned char *ms, const unsigned 
 }
 #endif
 
-NetworkServer::NetworkServer() : log(createNamedLogger("NetworkServer")) {
+NetworkServer::NetworkServer() {
     mbedtls_net_init(&ctx);
     mbedtls_ssl_config_init(&ssl);
     mbedtls_entropy_init(&entropy);
@@ -55,7 +57,7 @@ NetworkServer::NetworkServer() : log(createNamedLogger("NetworkServer")) {
         if (ptr != nullptr)
             allowedCiphersuites.push_back(ptr->id);
         else
-            log->warn("Unknown cipher suite name {}", name);
+            log.warn("Unknown cipher suite name in allowed cipher list: {}", name);
     });
     allowedCiphersuites.push_back(0);  // Terminator
     allowedCiphersuites.shrink_to_fit();
@@ -64,7 +66,7 @@ NetworkServer::NetworkServer() : log(createNamedLogger("NetworkServer")) {
     const char *pers = "twilight-server";
     stat = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy, reinterpret_cast<const uint8_t *>(pers),
                                  strlen(pers));
-    check_quit(stat < 0, log, "Failed to seed ctr_drbg: {}", interpretMbedtlsError(stat));
+    log.assert_quit(0 <= stat, "Failed to seed ctr_drbg: {}", mbedtls_error{stat});
 
     mbedtls_ssl_config_defaults(&ssl, MBEDTLS_SSL_IS_SERVER, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT);
     mbedtls_ssl_conf_authmode(&ssl, MBEDTLS_SSL_VERIFY_OPTIONAL);
@@ -79,7 +81,7 @@ NetworkServer::NetworkServer() : log(createNamedLogger("NetworkServer")) {
     // TODO: Setup session cache
 
     stat = mbedtls_ssl_conf_own_cert(&ssl, certStore.cert(), certStore.keypair().pk());
-    check_quit(stat < 0, log, "Failed to set own cert: {}", interpretMbedtlsError(stat));
+    log.assert_quit(0 <= stat, "Failde to set own cert: {}", mbedtls_error{stat});
 }
 
 NetworkServer::~NetworkServer() {
@@ -96,7 +98,7 @@ NetworkServer::~NetworkServer() {
 
 void NetworkServer::startListen(uint16_t port) {
     bool prev = flagListen.exchange(true, std::memory_order_acq_rel);
-    check_quit(prev, log, "Starting listening again when already listening");
+    log.assert_quit(!prev, "Starting listening again when already listening");
 
     char portString[8] = {};
     sprintf(portString, "%d", port);
@@ -104,7 +106,7 @@ void NetworkServer::startListen(uint16_t port) {
 
     // FIXME: Can socket be bound twice?
     int stat = mbedtls_net_bind(&ctx, "0.0.0.0", portString, MBEDTLS_NET_PROTO_TCP);
-    check_quit(stat != 0, log, "Failed to bind socket");
+    log.assert_quit(0 <= stat, "Failed to bind socket");
 
     // FIXME: Is this really needed?
     if (listenThread.joinable())

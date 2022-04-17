@@ -28,7 +28,8 @@ public:
     mbedtls_pk_context *operator->() { return pk(); }
 
 private:
-    LoggerPtr log;
+    static NamedLogger log;
+
     mbedtls_pk_context ctx;
 };
 

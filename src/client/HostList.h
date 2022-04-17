@@ -2,6 +2,7 @@
 #define TWILIGHT_CLIENT_HOSTLIST_H
 
 #include "common/CertHash.h"
+#include "common/log.h"
 
 #include <mbedtls/pk.h>
 
@@ -10,8 +11,6 @@
 #include <string>
 #include <toml.hpp>
 #include <vector>
-
-#include "common/log.h"
 
 class HostList {
 public:
@@ -43,7 +42,7 @@ public:
     std::vector<std::shared_ptr<Entry>> hosts;
 
 private:
-    LoggerPtr log;
+    static NamedLogger log;
 };
 
 using HostListEntry = std::shared_ptr<HostList::Entry>;

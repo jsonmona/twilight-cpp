@@ -3,10 +3,12 @@
 #include <openh264/codec_ver.h>
 
 #ifdef WIN32
-#include <common/platform/windows/OpenH264LoaderWin32.h>
+#include "common/platform/windows/OpenH264LoaderWin32.h"
 #else
 #error OpenH264 Unsupported platform
 #endif
+
+TWILIGHT_DEFINE_LOGGER(OpenH264Loader);
 
 // static member out-of-class definition
 std::weak_ptr<OpenH264Loader> OpenH264Loader::instance;
@@ -33,15 +35,15 @@ std::shared_ptr<OpenH264Loader> OpenH264Loader::getInstance() {
     return ptr;
 }
 
-bool OpenH264Loader::checkVersion(const LoggerPtr &log) const {
+bool OpenH264Loader::checkVersion() const {
     OpenH264Version version = {};
     GetCodecVersionEx(&version);
-    log->info("Compiled with API for {}", g_strCodecVer);
-    log->info("Loaded OpenH264 {}.{}.{}", version.uMajor, version.uMinor, version.uRevision);
+    log.info("Compiled with API for {}", g_strCodecVer);
+    log.info("Loaded OpenH264 {}.{}.{}", version.uMajor, version.uMinor, version.uRevision);
 
     if (version.uMajor != OPENH264_MAJOR || version.uMinor < OPENH264_MINOR ||
         (version.uMinor == OPENH264_MINOR && version.uRevision < OPENH264_REVISION))
-        error_quit(log, "OpenH264 loaded is incompatible with API!");
+        log.error_quit("OpenH264 loaded is incompatible with API!");
 
     return true;
 }

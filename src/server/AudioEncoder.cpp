@@ -1,14 +1,16 @@
 #include "AudioEncoder.h"
 
-AudioEncoder::AudioEncoder() : log(createNamedLogger("AudioEncoder")), cap(std::make_unique<AudioCaptureWASAPI>()) {
+TWILIGHT_DEFINE_LOGGER(AudioEncoder);
+
+AudioEncoder::AudioEncoder() : cap(std::make_unique<AudioCaptureWASAPI>()) {
     cap->setOnConfigured([this](AVSampleFormat fmt, int sr, int ch) {
         samplingRate = sr;
         channels = ch;
 
         if (fmt != AV_SAMPLE_FMT_FLT)
-            log->error("Some code assumes float input");
+            log.error("Some code assumes float input");
 
-        check_quit(ch < 1 || 2 < ch, log, "Unsupported audio channel count: {}", ch);
+        log.assert_quit(ch == 1 || ch == 2, "Unsupported audio channel count: {}", ch);
 
         int64_t layout = channels == 1 ? AV_CH_LAYOUT_MONO : AV_CH_LAYOUT_STEREO;
 
@@ -18,7 +20,7 @@ AudioEncoder::AudioEncoder() : log(createNamedLogger("AudioEncoder")), cap(std::
 
         int err;
         enc = opus_encoder_create(48000, 2, OPUS_APPLICATION_AUDIO, &err);
-        check_quit(err < 0, log, "Failed to create opus encoder");
+        log.assert_quit(enc != nullptr && err == OPUS_OK, "Failed to create opus encoder");
     });
     cap->setOnAudioData([this](const uint8_t* data, size_t len) {
         // FIXME: Assumes input to be float
@@ -28,7 +30,7 @@ AudioEncoder::AudioEncoder() : log(createNamedLogger("AudioEncoder")), cap(std::
 
         uint8_t* outPtr = now.data();
         int stat = swr_convert(swrCtx, &outPtr, maxOutput, &data, len / channels / sizeof(float));
-        check_quit(stat < 0, log, "Failed to call swr_convert");
+        log.assert_quit(0 <= stat, "Failed to call swr_convert");
         if (stat != maxOutput) {
             // log->warn("Resizing output buffer");
             now.resize(stat * channels * sizeof(float));
@@ -110,7 +112,7 @@ void AudioEncoder::runWorker_() {
                 writeIdx = 0;
                 int stat = opus_encode_float(enc, reinterpret_cast<float*>(buf.data()), frameSize, output.data(),
                                              output.size());
-                check_quit(stat < 0, log, "Failed to call opus_encode_float");
+                log.assert_quit(0 <= stat, "Failed to call opus_encode_float");
                 onAudioData(output.data(), stat);
             }
         }

@@ -1,8 +1,9 @@
 #include "ScaleSoftware.h"
 
+TWILIGHT_DEFINE_LOGGER(ScaleSoftware);
+
 ScaleSoftware::ScaleSoftware()
-    : log(createNamedLogger("ScaleSoftware")),
-      hasTexture(false),
+    : hasTexture(false),
       inputFormatChanged(false),
       outputFormatChanged(false),
       dirty(false),
@@ -54,7 +55,7 @@ void ScaleSoftware::pushInput(TextureSoftware&& tex) {
 }
 
 TextureSoftware ScaleSoftware::popOutput() {
-    check_quit(!hasTexture, log, "Tried to pop output when empty");
+    log.assert_quit(hasTexture, "Tried to pop output when empty");
 
     if (dirty)
         convert_();

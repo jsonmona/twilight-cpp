@@ -30,7 +30,7 @@ public:
     bool setEncoderMode(int width, int height, Rational framerate) override;
 
 private:
-    LoggerPtr log;
+    static NamedLogger log;
 
     std::thread captureThread;
     std::thread encodeThread;

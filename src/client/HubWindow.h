@@ -1,6 +1,15 @@
 #ifndef TWILIGHT_CLIENT_HUBWINDOW_H
 #define TWILIGHT_CLIENT_HUBWINDOW_H
 
+#include "common/CertStore.h"
+#include "common/log.h"
+
+#include "client/FlowLayout.h"
+#include "client/HostList.h"
+#include "client/HubWindowHostItem.h"
+
+#include "ui_HubWindow.h"
+
 #include <QtCore/qpointer.h>
 #include <QtWidgets/qboxlayout.h>
 #include <QtWidgets/qlineedit.h>
@@ -9,13 +18,6 @@
 
 #include <atomic>
 #include <vector>
-
-#include "client/FlowLayout.h"
-#include "client/HostList.h"
-#include "client/HubWindowHostItem.h"
-#include "common/CertStore.h"
-#include "common/log.h"
-#include "ui_HubWindow.h"
 
 class HubWindow : public QWidget {
     Q_OBJECT;
@@ -33,7 +35,7 @@ private slots:
     void on_btnAddHost_clicked(bool checked);
 
 private:
-    LoggerPtr log;
+    static NamedLogger log;
 
     Ui::HubWindow ui;
     QWidget *layoutWidget;

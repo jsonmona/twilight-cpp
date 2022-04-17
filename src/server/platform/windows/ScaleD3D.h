@@ -22,7 +22,7 @@ public:
     D3D11Texture2D popOutput();
 
 protected:
-    LoggerPtr log;
+    static NamedLogger log;
 
     D3D11Device device;
     D3D11DeviceContext context;
@@ -41,7 +41,7 @@ protected:
     D3D11SamplerState clampSampler;
     D3D11Texture2D outputTex;
 
-    explicit ScaleD3D(LoggerPtr logger, int w, int h, ScaleType _outType);
+    explicit ScaleD3D(int w, int h, ScaleType _outType);
 
     virtual void convert_(const D3D11Texture2D& inputTex) = 0;
 };

@@ -1,8 +1,6 @@
 #ifndef TWILIGHT_SERVER_PLATFORM_SOFTWARE_ENCODERFFMPEG_H
 #define TWILIGHT_SERVER_PLATFORM_SOFTWARE_ENCODERFFMPEG_H
 
-#include <queue>
-
 #include "common/DesktopFrame.h"
 #include "common/ffmpeg-headers.h"
 #include "common/log.h"
@@ -10,6 +8,8 @@
 #include "common/platform/software/TextureSoftware.h"
 
 #include "server/LocalClock.h"
+
+#include <queue>
 
 class EncoderFFmpeg {
 public:
@@ -27,7 +27,8 @@ public:
 private:
     void run_();
 
-    LoggerPtr log;
+    static NamedLogger log;
+
     LocalClock& clock;
 
     std::atomic<bool> flagRun;

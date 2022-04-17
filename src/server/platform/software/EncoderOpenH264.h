@@ -32,7 +32,9 @@ public:
     void pushData(DesktopFrame<TextureSoftware>&& newData);
 
 private:
-    LoggerPtr log;
+    void run_();
+
+    static NamedLogger log;
 
     LocalClock& clock;
     std::function<void(DesktopFrame<ByteBuffer>&&)> onDataAvailable;
@@ -48,8 +50,6 @@ private:
     std::condition_variable dataCV;
 
     DesktopFrame<TextureSoftware> nextFrame;
-
-    void run_();
 };
 
 #endif

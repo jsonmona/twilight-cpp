@@ -1,5 +1,7 @@
 #include "DxgiHelper.h"
 
+TWILIGHT_DEFINE_LOGGER(DxgiHelper);
+
 static std::string intoUTF8(const std::wstring_view &wideStr) {
     static_assert(sizeof(wchar_t) == sizeof(WCHAR), "Expects wchar_t == WCHAR (from winnt)");
 
@@ -35,7 +37,7 @@ static std::string intoString(const GUID &guid) {
     return intoUTF8(std::wstring_view(buf, len - 1));
 }
 
-DxgiHelper::DxgiHelper() : log(createNamedLogger("DxgiHelper")) {
+DxgiHelper::DxgiHelper() {
     HRESULT hr;
 
     UINT flags = 0;
@@ -44,7 +46,7 @@ DxgiHelper::DxgiHelper() : log(createNamedLogger("DxgiHelper")) {
 #endif
 
     hr = CreateDXGIFactory2(flags, factory.guid(), (void **)factory.data());
-    check_quit(FAILED(hr), log, "Failed to create DXGI factory 5");
+    log.assert_quit(SUCCEEDED(hr), "Failed to create DXGI factory 5");
 }
 
 DxgiHelper::~DxgiHelper() {}
@@ -118,7 +120,7 @@ D3D11Device DxgiHelper::createDevice(IDXGIAdapter *adapter, bool requireVideo) {
         DXGI_ADAPTER_DESC desc;
         adapter->GetDesc(&desc);
 
-        log->warn("Failed to create D3D device for {} (requireVideo={})", intoUTF8(desc.Description), requireVideo);
+        log.warn("Failed to create D3D device for {} (requireVideo={})", intoUTF8(desc.Description), requireVideo);
         device.release();
         if (releaseAdapter)
             adapter->Release();
@@ -139,7 +141,7 @@ DxgiAdapter1 DxgiHelper::getAdapterFromOutput(const DxgiOutput5 &output) {
 
     hr = output->GetParent(adapter.guid(), adapter.data());
     if (FAILED(hr)) {
-        log->error("Failed to get adapter from output (GUID={})", intoString(output.guid()));
+        log.error("Failed to get adapter from output (GUID={})", intoString(output.guid()));
         adapter.release();
     }
     return adapter;

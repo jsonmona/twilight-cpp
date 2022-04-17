@@ -29,7 +29,8 @@ public:
     ByteBuffer der();
 
 private:
-    LoggerPtr log;
+    static NamedLogger log;
+
     mbedtls_x509_crt cert_;
     std::unique_ptr<Keypair> keypair_;
 

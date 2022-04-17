@@ -2,6 +2,7 @@
 #define TWILIGHT_COMMON_PLATFORM_SOFTWARE_TEXTURESOFTWARE_H
 
 #include "common/ffmpeg-headers.h"
+#include "common/log.h"
 
 #include "common/platform/software/TextureAllocArena.h"
 
@@ -23,7 +24,7 @@ public:
 
     static TextureSoftware reference(uint8_t **data, const int *linesize, int w, int h, AVPixelFormat fmt);
 
-    TextureSoftware clone(TextureAllocArena* targetArena) const;
+    TextureSoftware clone(TextureAllocArena *targetArena) const;
     TextureSoftware clone(TextureAllocArena &targetArena) const { return clone(&targetArena); }
     TextureSoftware clone(std::shared_ptr<TextureAllocArena> &targetArena) const { return clone(targetArena.get()); }
 
@@ -36,6 +37,8 @@ public:
     uint8_t *data[4];
 
 private:
+    static NamedLogger log;
+
     std::shared_ptr<TextureAllocArena> arena;
     size_t blockId;
     int blockSlot;

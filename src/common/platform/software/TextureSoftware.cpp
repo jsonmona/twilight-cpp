@@ -1,13 +1,14 @@
 #include "TextureSoftware.h"
 
+#include "common/util.h"
+
 #include <algorithm>
 #include <atomic>
 #include <deque>
 #include <mutex>
 #include <unordered_map>
 
-#include "common/log.h"
-#include "common/util.h"
+TWILIGHT_DEFINE_LOGGER(TextureSoftware);
 
 void swap(TextureSoftware &a, TextureSoftware &b) {
     using std::swap;
@@ -79,12 +80,11 @@ TextureSoftware TextureSoftware::reference(uint8_t **data, const int *linesize, 
 }
 
 TextureSoftware TextureSoftware::clone(TextureAllocArena *targetArena) const {
-    if (targetArena == nullptr)
-        abort();  // nullptr not supported at this moment
+    log.assert_quit(targetArena != nullptr, "Anonymous arena not supported at this moment");
 
     if (arena.get() != targetArena &&
         (targetArena->width != width || targetArena->height != height || targetArena->format != format))
-        error_quit(targetArena->log, "Format mismatch while cloning!");
+        log.error_quit("Format mismatch while cloning!");
 
     TextureSoftware ret = targetArena->alloc();
 

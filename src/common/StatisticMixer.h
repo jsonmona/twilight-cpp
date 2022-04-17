@@ -1,10 +1,10 @@
 #ifndef TWILIGHT_COMMON_STATISTICMIXER_H
 #define TWILIGHT_COMMON_STATISTICMIXER_H
 
+#include "common/log.h"
+
 #include <cstdint>
 #include <vector>
-
-#include "common/log.h"
 
 class StatisticMixer {
 public:
@@ -24,7 +24,7 @@ public:
     Stat calcStat(bool skipNaN = false);
 
 private:
-    LoggerPtr log;
+    static NamedLogger log;
 
     std::vector<float> arr;
     size_t arrIdx;

@@ -1,14 +1,12 @@
 #include "CapturePipelineD3DMF.h"
 
+TWILIGHT_DEFINE_LOGGER(CapturePipelineD3DMF);
+
 CapturePipelineD3DMF::CapturePipelineD3DMF(LocalClock& clock, DxgiHelper dxgiHelper)
-    : log(createNamedLogger("CapturePipelineD3DMF")),
-      dxgiHelper(dxgiHelper),
-      captureStagingTexHandle(INVALID_HANDLE_VALUE),
-      capture(clock),
-      encoder(clock) {}
+    : dxgiHelper(dxgiHelper), captureStagingTexHandle(INVALID_HANDLE_VALUE), capture(clock), encoder(clock) {}
 
 CapturePipelineD3DMF::~CapturePipelineD3DMF() {
-    check_quit(flagRunning.load(std::memory_order_relaxed), log, "Destructing without stopping first!");
+    log.assert_quit(!flagRunning.load(std::memory_order_relaxed), "Destructing without stopping first!");
 
     if (encodeThread.joinable())
         encodeThread.join();
@@ -21,7 +19,7 @@ CapturePipelineD3DMF::~CapturePipelineD3DMF() {
 bool CapturePipelineD3DMF::init() {
     auto outputs = dxgiHelper.findAllOutput();
     if (outputs.empty()) {
-        log->error("No display detected");
+        log.error("No display detected");
         return false;
     }
 
@@ -29,7 +27,7 @@ bool CapturePipelineD3DMF::init() {
 
     device = dxgiHelper.createDevice(dxgiHelper.getAdapterFromOutput(output).ptr(), true);
     if (device.isInvalid()) {
-        log->error("Failed to create video D3D11 context");
+        log.error("Failed to create video D3D11 context");
         return false;
     }
 
@@ -48,7 +46,7 @@ bool CapturePipelineD3DMF::init() {
 
 void CapturePipelineD3DMF::start() {
     bool wasRunning = flagRunning.exchange(true, std::memory_order_relaxed);
-    check_quit(wasRunning, log, "Starting again without stopping first!");
+    log.assert_quit(!wasRunning, "Starting again without stopping first!");
 
     if (captureThread.joinable())
         captureThread.join();
@@ -81,14 +79,14 @@ void CapturePipelineD3DMF::start() {
     desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
     desc.MiscFlags = D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
     hr = device->CreateTexture2D(&desc, nullptr, captureStagingTex.data());
-    check_quit(FAILED(hr), log, "Failed to create capture staging texture");
+    log.assert_quit(SUCCEEDED(hr), "Failed to create capture staging texture");
 
     captureStagingTexMutex = captureStagingTex.castTo<IDXGIKeyedMutex>();
-    check_quit(captureStagingTexMutex.isInvalid(), log, "Failed to get keyed mutex from texture");
+    log.assert_quit(captureStagingTexMutex.isValid(), "Failed to get keyed mutex from texture");
 
     hr = captureStagingTex.castTo<IDXGIResource1>()->CreateSharedHandle(
         nullptr, DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE, nullptr, &captureStagingTexHandle);
-    check_quit(FAILED(hr), log, "Failed to get shared handle for capture staging texture");
+    log.assert_quit(SUCCEEDED(hr), "Failed to get shared handle for capture staging texture");
 
     lastFrame = DesktopFrame<bool>();
 
@@ -116,7 +114,7 @@ bool CapturePipelineD3DMF::setCaptureMode(int width, int height, Rational framer
 
 bool CapturePipelineD3DMF::setEncoderMode(int width, int height, Rational framerate_) {
     // TODO: Make it possible to change mode while running
-    check_quit(flagRunning, log, "Can't change mode while running yet");
+    log.assert_quit(!flagRunning, "Can't change mode while running yet");
     scale = ScaleD3D::createInstance(width, height, ScaleType::NV12);
     framerate = framerate_;
     return true;
@@ -132,13 +130,13 @@ void CapturePipelineD3DMF::captureLoop_() {
         capture.ctx()->GetDevice(olddev.data());
 
         auto dev = olddev.castTo<ID3D11Device1>();
-        check_quit(dev.isInvalid(), log, "Capture context device does not implement ID3D11Device1");
+        log.assert_quit(dev.isValid(), "Capture context device does not implement ID3D11Device1");
 
         hr = dev->OpenSharedResource1(captureStagingTexHandle, __uuidof(ID3D11Texture2D), stagingTex.data());
-        check_quit(FAILED(hr), log, "Failed to open capture staging texture");
+        log.assert_quit(SUCCEEDED(hr), "Failed to open capture staging texture");
 
         stagingTexMutex = stagingTex.castTo<IDXGIKeyedMutex>();
-        check_quit(stagingTexMutex.isInvalid(), log, "Failed to cast stagingTex into IDXGIKeyedMutex");
+        log.assert_quit(stagingTexMutex.isValid(), "Failed to cast stagingTex into IDXGIKeyedMutex");
     }
 
     while (flagRunning.load(std::memory_order_acquire)) {
@@ -155,12 +153,12 @@ void CapturePipelineD3DMF::captureLoop_() {
             if (frame.desktop.isValid()) {
                 // open mutex if needed
                 hr = stagingTexMutex->AcquireSync(0, INFINITE);
-                check_quit(FAILED(hr), log, "Failed to acquire sync for staging texture");
+                log.assert_quit(SUCCEEDED(hr), "Failed to acquire sync for staging texture");
 
                 capture.ctx()->CopyResource(stagingTex.ptr(), frame.desktop.ptr());
 
                 hr = stagingTexMutex->ReleaseSync(0);
-                check_quit(FAILED(hr), log, "Failed to release sync for staging texture");
+                log.assert_quit(SUCCEEDED(hr), "Failed to release sync for staging texture");
 
                 lastFrame.desktop = true;
                 lastFrame.timeCaptured = frame.timeCaptured;
@@ -203,12 +201,12 @@ void CapturePipelineD3DMF::encodeLoop_() {
             if (frame.desktop) {
                 started = true;
                 hr = captureStagingTexMutex->AcquireSync(0, INFINITE);
-                check_quit(FAILED(hr), log, "Failed to acquire sync for staging texture");
+                log.assert_quit(SUCCEEDED(hr), "Failed to acquire sync for staging texture");
 
                 scale->pushInput(captureStagingTex);
 
                 hr = captureStagingTexMutex->ReleaseSync(0);
-                check_quit(FAILED(hr), log, "Failed to release sync for staging texture");
+                log.assert_quit(SUCCEEDED(hr), "Failed to release sync for staging texture");
             }
         }
 

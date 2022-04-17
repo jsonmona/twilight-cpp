@@ -1,13 +1,15 @@
 #ifndef TWILIGHT_COMMON_BYTEBUFFER_H
 #define TWILIGHT_COMMON_BYTEBUFFER_H
 
+#include "common/log.h"
+
+#include <mbedtls/base64.h>
+
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <string>
 #include <type_traits>
-
-#include <mbedtls/base64.h>
 
 class ByteBuffer {
 public:
@@ -65,7 +67,7 @@ public:
                 newPtr = malloc(newCapacity);
 
             if (newPtr == nullptr)
-                abort();  // FIXME: Use of abort
+                NamedLogger("ByteBuffer").error_quit("Failed to allocate memory");
             ptr = reinterpret_cast<uint8_t *>(newPtr);
             capacity_ = newCapacity;
         }
@@ -91,7 +93,7 @@ public:
 
         void *newPtr = realloc(ptr, size_);
         if (newPtr == nullptr)
-            abort();  // FIXME: Use of abort
+            NamedLogger("ByteBuffer").error_quit("Failed to allocate memory");
 
         ptr = reinterpret_cast<uint8_t *>(newPtr);
         capacity_ = size_;

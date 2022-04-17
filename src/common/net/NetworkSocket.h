@@ -55,7 +55,7 @@ public:
     ByteBuffer getRemoteCert();
 
 private:
-    LoggerPtr log;
+    static NamedLogger log;
 
     mbedtls_net_context ctx;
     mbedtls_ssl_context ssl;

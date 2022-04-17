@@ -10,7 +10,9 @@
 #include <cstdio>
 #include <cstring>
 
-Keypair::Keypair() : log(createNamedLogger("Keypair")) {
+TWILIGHT_DEFINE_LOGGER(Keypair);
+
+Keypair::Keypair() {
     mbedtls_pk_init(&ctx);
 }
 
@@ -24,7 +26,7 @@ void Keypair::loadOrGenerate(const char *filename) {
 
     ret = mbedtls_pk_parse_keyfile(&ctx, filename, nullptr);
     if (ret < 0) {
-        log->info("Generating keypair... (Reason: {})", interpretMbedtlsError(ret));
+        log.info("Generating keypair... (Reason: {})", mbedtls_error{ret});
 
         mbedtls_entropy_context entropy;
         mbedtls_ctr_drbg_context ctr_drbg;
@@ -37,10 +39,10 @@ void Keypair::loadOrGenerate(const char *filename) {
 
         const mbedtls_pk_info_t *info = mbedtls_pk_info_from_type(MBEDTLS_PK_RSA);
         ret = mbedtls_pk_setup(&ctx, info);
-        check_quit(ret < 0, log, "Failed to setup pk: {}", interpretMbedtlsError(ret));
+        log.assert_quit(0 <= ret, "Failed to setup pk: {}", mbedtls_error{ret});
 
         ret = mbedtls_rsa_gen_key(mbedtls_pk_rsa(ctx), mbedtls_ctr_drbg_random, &ctr_drbg, 2048, 65537);
-        check_quit(ret < 0, log, "Failed to generate RSA keypair: {}", interpretMbedtlsError(ret));
+        log.assert_quit(0 <= ret, "Failed to generate RSA keypair: {}", mbedtls_error{ret});
 
         mbedtls_ctr_drbg_free(&ctr_drbg);
         mbedtls_entropy_free(&entropy);
@@ -54,7 +56,7 @@ void Keypair::loadOrGenerate(const char *filename) {
                 der.resize(der.size() * 2);
                 continue;
             }
-            check_quit(ret < 0, log, "Failed to serialize pk: {}", interpretMbedtlsError(ret));
+            log.assert_quit(0 <= ret, "Failed to serialize pk: {}", mbedtls_error{ret});
             break;
         }
 
@@ -63,7 +65,7 @@ void Keypair::loadOrGenerate(const char *filename) {
 
         status = writeByteBuffer(filename, der);
         if (!status)
-            log->error("There was an error writing private key");
+            log.error("Unknown error while writing private key");
     }
 }
 
@@ -72,7 +74,7 @@ bool Keypair::parse(const ByteBuffer &key) {
 
     ret = mbedtls_pk_parse_key(&ctx, key.data(), key.size(), nullptr, 0);
     if (ret < 0) {
-        log->error("Failed to parse key: {}", interpretMbedtlsError(ret));
+        log.error("Failed to parse private key: {}", mbedtls_error{ret});
         return false;
     }
     return true;
@@ -83,7 +85,7 @@ bool Keypair::parsePubkey(const ByteBuffer &key) {
 
     ret = mbedtls_pk_parse_public_key(&ctx, key.data(), key.size());
     if (ret < 0) {
-        log->error("Failed to parse key: {}", interpretMbedtlsError(ret));
+        log.error("Failed to parse public key: {}", mbedtls_error{ret});
         return false;
     }
     return true;
@@ -102,7 +104,7 @@ ByteBuffer Keypair::privkey() const {
             data.resize(data.size() * 2);
             continue;
         }
-        check_quit(ret < 0, log, "Failed to serialize privkey: {}", interpretMbedtlsError(ret));
+        log.assert_quit(0 <= ret, "Failed to serialize private key: {}", mbedtls_error{ret});
         break;
     }
 
@@ -126,7 +128,7 @@ ByteBuffer Keypair::pubkey() const {
             data.resize(data.size() * 2);
             continue;
         }
-        check_quit(ret < 0, log, "Failed to serialize pubkey: {}", interpretMbedtlsError(ret));
+        log.assert_quit(0 <= ret, "Failed to serialize public key: {}", mbedtls_error{ret});
         break;
     }
 
@@ -146,7 +148,7 @@ ByteBuffer Keypair::fingerprintSHA256() const {
     ByteBuffer key = pubkey();
 
     ret = mbedtls_sha256_ret(key.data(), key.size(), hash.data(), 0);
-    check_quit(ret < 0, log, "Failed to compute SHA256");
+    log.assert_quit(0 <= ret, "Failed to compute SHA-265 fingerprint: {}", mbedtls_error{ret});
 
     return hash;
 }

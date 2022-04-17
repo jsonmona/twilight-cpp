@@ -2,6 +2,8 @@
 
 #include <fstream>
 
+TWILIGHT_DEFINE_LOGGER(HostList);
+
 HostList::Entry::Entry() : lastConnected(std::chrono::system_clock::from_time_t(0)) {}
 
 HostList::Entry::~Entry() {}
@@ -14,7 +16,7 @@ void HostList::Entry::updateLastConnected() {
     lastConnected = std::chrono::system_clock::now();
 }
 
-HostList::HostList() : log(createNamedLogger("HostList")) {}
+HostList::HostList() {}
 
 bool HostList::save(std::ostream &out) {
     for (const std::shared_ptr<Entry> &now : hosts) {
@@ -88,13 +90,13 @@ bool HostList::load(toml::array arr) {
     }
 
     if (warnNotTable)
-        log->warn("Error while parsing: An entry in `hosts` is not a table.");
+        log.warn("Error while parsing: An entry in `hosts` is not a table.");
 
     if (warnNoAddress)
-        log->warn("Error while parsing: An entry in `hosts` was dropped because it had no address.");
+        log.warn("Error while parsing: An entry in `hosts` was dropped because it had no address.");
 
     if (warnInvalidCert)
-        log->warn("Error while parsing: An entry in `hosts` had invalid certificate.");
+        log.warn("Error while parsing: An entry in `hosts` had invalid certificate.");
 
     return !warned;
 }
@@ -105,12 +107,12 @@ bool HostList::loadFromFile(const char *filename) {
         if (root["hosts"].is_array())
             load(root["hosts"].as_array());
         else if (!root["hosts"].is_uninitialized())  // Warn if not empty; An empty file IS valid
-            log->warn("`hosts` is not an array. Is it a valid file? --> {}", filename);
+            log.warn("`hosts` is not an array. Is it a valid file? --> {}", filename);
     } catch (std::runtime_error err) {
-        log->warn("Failed to deserialize from file: {}", err.what());
+        log.warn("Failed to deserialize from file: {}", err.what());
         return false;
     } catch (toml::syntax_error err) {
-        log->warn("Failed to deserialize from file: {}", err.what());
+        log.warn("Failed to deserialize from file: {}", err.what());
         return false;
     }
 

@@ -1,15 +1,18 @@
 #include "HubWindow.h"
 
+#include "client/StreamWindow.h"
+
+#include "ui_HubWindowAddHostDialog.h"
+
 #include <QtGui/qevent.h>
 #include <QtGui/qscreen.h>
 #include <QtWidgets/qapplication.h>
 #include <QtWidgets/qdialog.h>
 #include <QtWidgets/qmessagebox.h>
 
-#include "client/StreamWindow.h"
-#include "ui_HubWindowAddHostDialog.h"
+TWILIGHT_DEFINE_LOGGER(HubWindow);
 
-HubWindow::HubWindow() : QWidget(), log(createNamedLogger("HubWindow")) {
+HubWindow::HubWindow() : QWidget() {
     ui.setupUi(this);
 
     layoutWidget = new QWidget();

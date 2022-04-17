@@ -5,6 +5,8 @@
 
 #include "server/StreamServer.h"
 
+TWILIGHT_DEFINE_LOGGER(Connection);
+
 // FIXME: Deduplicate
 static constexpr int PROTOCOL_VERSION = 1;
 
@@ -59,17 +61,13 @@ struct AuthState {
 };
 
 Connection::Connection(StreamServer* parent, std::unique_ptr<NetworkSocket>&& sock_)
-    : log(createNamedLogger("Connection")),
-      server(parent),
-      sock(std::move(sock_)),
-      authorized(false),
-      streaming(false) {
+    : server(parent), sock(std::move(sock_)), authorized(false), streaming(false) {
     runThread = std::thread([this] { run_(); });
 }
 
 Connection::~Connection() {
     if (sock->isConnected()) {
-        log->warn("Deconstructed while connected");
+        log.warn("Deconstructed while connected");
         sock->disconnect();
     }
 
@@ -121,7 +119,7 @@ void Connection::run_() {
             msg_clientNonceNotify_(pkt.client_nonce_notify(), data);
             break;
         default:
-            log->warn("Received unexpected packet: {}", pkt.msg_case());
+            log.warn("Received unexpected packet: {}", pkt.msg_case());
             break;
         }
     }
@@ -156,7 +154,7 @@ void Connection::msg_pingRequest_(const msg::PingRequest& req) {
     pkt.set_extra_data_len(0);
 
     if (req.latency() != 0)
-        log->debug("Client estimated network ping: {}", req.latency());
+        log.debug("Client estimated network ping: {}", req.latency());
 
     auto* res = pkt.mutable_ping_response();
     res->set_id(req.id());
@@ -271,7 +269,7 @@ void Connection::msg_authRequest_(const msg::AuthRequest& req, const ByteBuffer&
     msg::Packet pkt;
 
     if (req.client_nonce_len() < 16) {
-        log->error("Aborting authentication because client nonce is too short");
+        log.error("Aborting authentication because client nonce is too short");
         pkt.set_extra_data_len(0);
         auto* res = pkt.mutable_auth_response();
         res->set_status(msg::AuthResponse_Status_NONCE_TOO_SHORT);
@@ -280,7 +278,7 @@ void Connection::msg_authRequest_(const msg::AuthRequest& req, const ByteBuffer&
     }
 
     if (extraData.size() != 48) {
-        log->error("Wrong hash size: {}", extraData.size());
+        log.error("Wrong hash size: {}", extraData.size());
         pkt.set_extra_data_len(0);
         auto* res = pkt.mutable_auth_response();
         res->set_status(msg::AuthResponse_Status_UNKNOWN_ERROR);
@@ -297,7 +295,7 @@ void Connection::msg_authRequest_(const msg::AuthRequest& req, const ByteBuffer&
 
     err = mbedtls_ctr_drbg_random(&authState->ctr_drbg, authState->nonce.data(), authState->nonce.size());
     if (err != 0) {
-        log->error("Failed to get random nonce: {}", interpretMbedtlsError(err));
+        log.error("Failed to get random nonce: {}", mbedtls_error{err});
         pkt.set_extra_data_len(0);
         auto* res = pkt.mutable_auth_response();
         res->set_status(msg::AuthResponse_Status_UNKNOWN_ERROR);
@@ -313,7 +311,7 @@ void Connection::msg_authRequest_(const msg::AuthRequest& req, const ByteBuffer&
 
     err = mbedtls_sha512_ret(partialContent.data(), partialContent.size(), partialHash.data(), 1);
     if (err != 0) {
-        log->error("Failed to compute SHA-384 partial hash: {}", interpretMbedtlsError(err));
+        log.error("Failed to compute SHA-384 partial hash: {}", mbedtls_error{err});
         pkt.set_extra_data_len(0);
         auto* res = pkt.mutable_auth_response();
         res->set_status(msg::AuthResponse_Status_UNKNOWN_ERROR);
@@ -335,7 +333,7 @@ void Connection::msg_clientNonceNotify_(const msg::ClientNonceNotify& req, const
     msg::Packet pkt;
 
     if (authState == nullptr) {
-        log->error("Received unexpected ClientNonceNotify packet");
+        log.error("Received unexpected ClientNonceNotify packet");
         pkt.set_extra_data_len(0);
         auto* res = pkt.mutable_auth_response();
         res->set_status(msg::AuthResponse_Status_UNKNOWN_ERROR);
@@ -344,7 +342,7 @@ void Connection::msg_clientNonceNotify_(const msg::ClientNonceNotify& req, const
     }
 
     if (extraData.size() != authState->clientNonce.size()) {
-        log->error("Client nonce size differs from previous statement");
+        log.error("Client nonce size differs from previous statement");
         pkt.set_extra_data_len(0);
         auto* res = pkt.mutable_auth_response();
         res->set_status(msg::AuthResponse_Status_UNKNOWN_ERROR);
@@ -363,7 +361,7 @@ void Connection::msg_clientNonceNotify_(const msg::ClientNonceNotify& req, const
 
     err = mbedtls_sha512_ret(partialContent.data(), partialContent.size(), partialHash.data(), 1);
     if (err != 0) {
-        log->error("Failed to calculate SHA-384 client partial hash");
+        log.error("Failed to calculate SHA-384 client partial hash");
         pkt.set_extra_data_len(0);
         auto* res = pkt.mutable_auth_response();
         res->set_status(msg::AuthResponse_Status_UNKNOWN_ERROR);
@@ -375,7 +373,7 @@ void Connection::msg_clientNonceNotify_(const msg::ClientNonceNotify& req, const
     partialHash.resize(48);
 
     if (!secureMemcmp(partialHash.data(), authState->clientPartialHash.data(), partialHash.size())) {
-        log->error("Client partial hash does not match");
+        log.error("Client partial hash does not match");
         pkt.set_extra_data_len(0);
         auto* res = pkt.mutable_auth_response();
         res->set_status(msg::AuthResponse_Status_UNKNOWN_ERROR);
@@ -408,14 +406,14 @@ void Connection::msg_clientNonceNotify_(const msg::ClientNonceNotify& req, const
     int truePin = computePin(authState->serverCert, authState->clientCert, authState->nonce, authState->clientNonce);
 
     if (truePin != enteredPin) {
-        log->error("Pin does not match! Expected {}, got {}", truePin, enteredPin);
+        log.error("Pin does not match! Expected {}, got {}", truePin, enteredPin);
         pkt.set_extra_data_len(0);
         auto* res = pkt.mutable_auth_response();
         res->set_status(msg::AuthResponse_Status_INCORRECT_PIN);
         sock->send(pkt, nullptr);
         return;
     } else {
-        log->info("Auth success.");
+        log.info("Auth success.");
     }
 
     server->knownClients.add(CertHash::digest(CertHash::HashType::SHA256, sock->getRemoteCert()));

@@ -1,5 +1,7 @@
 #include "AudioCaptureWASAPI.h"
 
+TWILIGHT_DEFINE_LOGGER(AudioCaptureWASAPI);
+
 static AVSampleFormat wave2avsample(const WAVEFORMATEXTENSIBLE& fmt) {
     if (fmt.Format.wFormatTag == WAVE_FORMAT_EXTENSIBLE) {
         if (fmt.SubFormat == KSDATAFORMAT_SUBTYPE_PCM) {
@@ -27,7 +29,7 @@ static AVSampleFormat wave2avsample(const WAVEFORMATEXTENSIBLE& fmt) {
     }
 }
 
-AudioCaptureWASAPI::AudioCaptureWASAPI() : log(createNamedLogger("AudioCaptureWASAPI")) {}
+AudioCaptureWASAPI::AudioCaptureWASAPI() {}
 
 AudioCaptureWASAPI::~AudioCaptureWASAPI() {}
 
@@ -51,18 +53,18 @@ void AudioCaptureWASAPI::runRecord_() {
     HRESULT hr;
 
     hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    check_quit(FAILED(hr), log, "Failed to initialize COM");
+    log.assert_quit(SUCCEEDED(hr), "Failed to initialize COM");
 
     ComWrapper<IMMDeviceEnumerator> devEnumerator;
 
     const CLSID CLSID_MMDeviceEnumerator = __uuidof(MMDeviceEnumerator);
     const IID IID_IMMDeviceEnumerator = __uuidof(IMMDeviceEnumerator);
     hr = CoCreateInstance(CLSID_MMDeviceEnumerator, nullptr, CLSCTX_ALL, IID_IMMDeviceEnumerator, devEnumerator.data());
-    check_quit(FAILED(hr), log, "Failed to create audio device enumerator");
+    log.assert_quit(SUCCEEDED(hr), "Failed to create audio device enumerator");
 
     ComWrapper<IMMDevice> endpoint;
     hr = devEnumerator->GetDefaultAudioEndpoint(eRender, ERole::eConsole, endpoint.data());
-    check_quit(FAILED(hr), log, "Failed to get default audio endpoint");
+    log.assert_quit(SUCCEEDED(hr), "Failed to get default audio endpoint");
     // TODO: Properly handle cases where no audio device is installed
 
     ComWrapper<IAudioClient> audioClient;
@@ -72,8 +74,8 @@ void AudioCaptureWASAPI::runRecord_() {
 
     WAVEFORMATEX* waveformatUsed;
     hr = audioClient->GetMixFormat(&waveformatUsed);
-    check_quit(FAILED(hr) || waveformatUsed == nullptr, log, "Failed to retrieve mix format");
-    check_quit(waveformatUsed->cbSize > 22, log, "Mix format larger than WAVEFORMATEXTENSIBLE");
+    log.assert_quit(SUCCEEDED(hr) && waveformatUsed != nullptr, "Failed to retrieve mix format");
+    log.assert_quit(22 <= waveformatUsed->cbSize, "Mix format larger than WAVEFORMATEXTENSIBLE");
     memcpy(&waveformat, waveformatUsed, sizeof(WAVEFORMATEX) + waveformatUsed->cbSize);
     CoTaskMemFree(waveformatUsed);
 
@@ -81,7 +83,7 @@ void AudioCaptureWASAPI::runRecord_() {
 
     hr = audioClient->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK, bufferTime, 0,
                                  &waveformat.Format, nullptr);
-    check_quit(FAILED(hr), log, "Failed to initialize audio client as loopback mode");
+    log.assert_quit(SUCCEEDED(hr), "Failed to initialize audio client as loopback mode");
 
     AVSampleFormat av_fmt = wave2avsample(waveformat);
     int sizeofSample = waveformat.Format.wBitsPerSample == 8    ? 1
@@ -89,8 +91,8 @@ void AudioCaptureWASAPI::runRecord_() {
                        : waveformat.Format.wBitsPerSample == 32 ? 4
                        : waveformat.Format.wBitsPerSample == 64 ? 8
                                                                 : 0;
-    check_quit(av_fmt == AV_SAMPLE_FMT_NONE || sizeofSample == 0, log,
-               "Failed to determine appropriate representation of waveformat");
+    log.assert_quit(av_fmt != AV_SAMPLE_FMT_NONE && sizeofSample != 0,
+                    "Failed to determine appropriate representation of waveformat");
     onConfigured(av_fmt, waveformat.Format.nSamplesPerSec, waveformat.Format.nChannels);
 
     bool receivedFirstFrame = false;
@@ -98,10 +100,10 @@ void AudioCaptureWASAPI::runRecord_() {
 
     ComWrapper<IAudioCaptureClient> audioCaptureClient;
     hr = audioClient->GetService(audioCaptureClient.guid(), audioCaptureClient.data());
-    check_quit(FAILED(hr), log, "Failed to get audio capture client");
+    log.assert_quit(SUCCEEDED(hr), "Failed to get audio capture client");
 
     hr = audioClient->Start();
-    check_quit(FAILED(hr), log, "Failed to start audio capture client");
+    log.assert_quit(SUCCEEDED(hr), "Failed to start audio capture client");
 
     while (flagRun.load(std::memory_order_acquire)) {
         BYTE* data;
@@ -112,7 +114,7 @@ void AudioCaptureWASAPI::runRecord_() {
         if (hr >= 0) {
             if (flags & AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR) {
                 if (receivedFirstFrame)
-                    log->error("Received another timestamp error!");
+                    log.error("Received another timestamp error!");
                 Sleep(1);
                 continue;
             } else {
@@ -136,7 +138,7 @@ void AudioCaptureWASAPI::runRecord_() {
 
             audioCaptureClient->ReleaseBuffer(numFramesToRead);
         } else {
-            error_quit(log, "Unknown error from GetBuffer: {:#x}", hr);
+            log.error_quit("Unknown error from GetBuffer: {:#x}", hr);
         }
 
         // TODO: increase sleep amount
@@ -144,7 +146,7 @@ void AudioCaptureWASAPI::runRecord_() {
     }
 
     hr = audioClient->Stop();
-    check_quit(FAILED(hr), log, "Failed to stop audio client");
+    log.assert_quit(SUCCEEDED(hr), "Failed to stop audio client");
 
     CoUninitialize();
 }
@@ -153,18 +155,18 @@ void AudioCaptureWASAPI::runPlayback_() {
     HRESULT hr;
 
     hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    check_quit(FAILED(hr), log, "Failed to initialize COM");
+    log.assert_quit(SUCCEEDED(hr), "Failed to initialize COM");
 
     ComWrapper<IMMDeviceEnumerator> devEnumerator;
 
     const CLSID CLSID_MMDeviceEnumerator = __uuidof(MMDeviceEnumerator);
     const IID IID_IMMDeviceEnumerator = __uuidof(IMMDeviceEnumerator);
     hr = CoCreateInstance(CLSID_MMDeviceEnumerator, nullptr, CLSCTX_ALL, IID_IMMDeviceEnumerator, devEnumerator.data());
-    check_quit(FAILED(hr), log, "Failed to create audio device enumerator");
+    log.assert_quit(SUCCEEDED(hr), "Failed to create audio device enumerator");
 
     ComWrapper<IMMDevice> endpoint;
     hr = devEnumerator->GetDefaultAudioEndpoint(eRender, ERole::eConsole, endpoint.data());
-    check_quit(FAILED(hr), log, "Failed to get default audio endpoint");
+    log.assert_quit(SUCCEEDED(hr), "Failed to get default audio endpoint");
     // TODO: Properly handle cases where no audio device is installed
 
     ComWrapper<IAudioClient> audioClient;
@@ -174,15 +176,15 @@ void AudioCaptureWASAPI::runPlayback_() {
 
     WAVEFORMATEX* waveformatUsed;
     hr = audioClient->GetMixFormat(&waveformatUsed);
-    check_quit(FAILED(hr) || waveformatUsed == nullptr, log, "Failed to retrieve mix format");
-    check_quit(waveformatUsed->cbSize > 22, log, "Mix format larger than WAVEFORMATEXTENSIBLE");
+    log.assert_quit(SUCCEEDED(hr) && waveformatUsed != nullptr, "Failed to retrieve mix format");
+    log.assert_quit(22 <= waveformatUsed->cbSize, "Mix format larger than WAVEFORMATEXTENSIBLE");
     memcpy(&waveformat, waveformatUsed, sizeof(WAVEFORMATEX) + waveformatUsed->cbSize);
     CoTaskMemFree(waveformatUsed);
 
     const REFERENCE_TIME bufferTime = 50'000;  // 50ms
 
     hr = audioClient->Initialize(AUDCLNT_SHAREMODE_SHARED, 0, bufferTime, 0, &waveformat.Format, nullptr);
-    check_quit(FAILED(hr), log, "Failed to initialize audio playback client");
+    log.assert_quit(SUCCEEDED(hr), "Failed to initialize audio playback client");
 
     AVSampleFormat av_fmt = wave2avsample(waveformat);
     int sizeofSample = waveformat.Format.wBitsPerSample == 8    ? 1
@@ -190,30 +192,30 @@ void AudioCaptureWASAPI::runPlayback_() {
                        : waveformat.Format.wBitsPerSample == 32 ? 4
                        : waveformat.Format.wBitsPerSample == 64 ? 8
                                                                 : 0;
-    check_quit(av_fmt == AV_SAMPLE_FMT_NONE || sizeofSample == 0, log,
-               "Failed to determine appropriate representation of waveformat");
+    log.assert_quit(av_fmt != AV_SAMPLE_FMT_NONE && sizeofSample != 0,
+                    "Failed to determine appropriate representation of waveformat");
 
     ComWrapper<IAudioRenderClient> audioRenderClient;
     hr = audioClient->GetService(audioRenderClient.guid(), audioRenderClient.data());
-    check_quit(FAILED(hr), log, "Failed to get audio render client");
+    log.assert_quit(SUCCEEDED(hr), "Failed to get audio render client");
 
     UINT32 bufferFrameCnt;
     audioClient->GetBufferSize(&bufferFrameCnt);
 
     BYTE* data;
     hr = audioRenderClient->GetBuffer(bufferFrameCnt, &data);
-    check_quit(FAILED(hr), log, "Failed to retrieve buffer for initial fill");
+    log.assert_quit(SUCCEEDED(hr), "Failed to retrieve buffer for initial fill");
     memset(data, 0, bufferFrameCnt * sizeofSample * waveformat.Format.nChannels);
     hr = audioRenderClient->ReleaseBuffer(bufferFrameCnt, 0);
-    check_quit(FAILED(hr), log, "Failed to release buffer for initial fill");
+    log.assert_quit(SUCCEEDED(hr), "Failed to release buffer for initial fill");
 
     hr = audioClient->Start();
-    check_quit(FAILED(hr), log, "Failed to start audio render client");
+    log.assert_quit(SUCCEEDED(hr), "Failed to start audio render client");
 
     while (flagRun.load(std::memory_order_acquire)) {
         UINT32 currPad;
         hr = audioClient->GetCurrentPadding(&currPad);
-        check_quit(FAILED(hr), log, "Failed to get current padding");
+        log.assert_quit(SUCCEEDED(hr), "Failed to get current padding");
 
         if (currPad < bufferFrameCnt) {
             int framesToWrite = bufferFrameCnt - currPad;
@@ -221,7 +223,7 @@ void AudioCaptureWASAPI::runPlayback_() {
             if (hr >= 0) {
                 audioRenderClient->ReleaseBuffer(framesToWrite, AUDCLNT_BUFFERFLAGS_SILENT);
             } else {
-                error_quit(log, "Unknown error from GetBuffer: {:#x}", hr);
+                log.error_quit("Unknown error from GetBuffer: {:#x}", hr);
             }
         }
 
@@ -230,7 +232,7 @@ void AudioCaptureWASAPI::runPlayback_() {
     }
 
     hr = audioClient->Stop();
-    check_quit(FAILED(hr), log, "Failed to stop audio client");
+    log.assert_quit(SUCCEEDED(hr), "Failed to stop audio client");
 
     CoUninitialize();
 }

@@ -9,8 +9,8 @@
 
 #include "server/CapturePipeline.h"
 
-#include "server/platform/software/EncoderOpenH264.h"
 #include "server/platform/software/EncoderFFmpeg.h"
+#include "server/platform/software/EncoderOpenH264.h"
 
 #include "server/platform/windows/CaptureD3D.h"
 
@@ -33,7 +33,8 @@ public:
     bool setEncoderMode(int width, int height, Rational framerate) override;
 
 private:
-    LoggerPtr log;
+    static NamedLogger log;
+
     ScaleType scaleType;
 
     DxgiHelper dxgiHelper;

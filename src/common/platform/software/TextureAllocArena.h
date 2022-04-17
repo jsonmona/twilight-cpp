@@ -5,8 +5,8 @@
 #include "common/log.h"
 
 #include <memory>
-#include <vector>
 #include <mutex>
+#include <vector>
 
 class TextureSoftware;
 class TextureAllocArena;
@@ -67,7 +67,7 @@ private:
         std::atomic<bool> available[BLOCK_SIZE];
     };
 
-    LoggerPtr log;
+    static NamedLogger log;
     std::weak_ptr<TextureAllocArena> self;
 
     int width, height;

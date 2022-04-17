@@ -1,23 +1,24 @@
 #include "DecoderFFmpeg.h"
 
+TWILIGHT_DEFINE_LOGGER(DecoderFFmpeg);
+
 DecoderFFmpeg::DecoderFFmpeg(NetworkClock& clock)
-    : log(createNamedLogger("DecoderFFmpeg")),
-      clock(clock),
-      flagRun(false),
+    : clock(clock),
       codecType(CodecType::VP8),
       width(-1),
       height(-1),
+      flagRun(false),
       codec(nullptr),
       avctx(nullptr),
       flagKeyInPacket(false),
       flagNextFrameAvailable(false) {
     codec = avcodec_find_decoder_by_name("vp8");
-    check_quit(codec == nullptr, log, "Failed to find ffvp8 encoder");
+    log.assert_quit(codec != nullptr, "Failed to find ffvp8 encoder");
 }
 
 DecoderFFmpeg::~DecoderFFmpeg() {
     bool wasRunning = flagRun.exchange(false, std::memory_order_relaxed);
-    check_quit(wasRunning, log, "Begin destructed while running!");
+    log.assert_quit(!wasRunning, "Begin destructed while running!");
 
     if (runThread.joinable())
         runThread.join();
@@ -32,8 +33,8 @@ void DecoderFFmpeg::setOutputResolution(int width_, int height_) {
 
 void DecoderFFmpeg::start() {
     int err;
-    check_quit(width <= 0 || height <= 0, log, "Not initialized before start!");
-    check_quit(flagRun.load(std::memory_order_relaxed), log, "Not stopped before start!");
+    log.assert_quit(0 < width && 0 < height, "Not initialized before start!");
+    log.assert_quit(!flagRun.load(std::memory_order_relaxed), "Not stopped before start!");
 
     if (runThread.joinable())
         runThread.join();
@@ -44,7 +45,7 @@ void DecoderFFmpeg::start() {
     avcodec_free_context(&avctx);
 
     avctx = avcodec_alloc_context3(codec);
-    check_quit(avctx == nullptr, log, "Failed to allocate codec context");
+    log.assert_quit(avctx != nullptr, "Failed to allocate codec context");
 
     avctx->thread_type = FF_THREAD_SLICE;
     avctx->thread_count = 4;
@@ -53,16 +54,16 @@ void DecoderFFmpeg::start() {
     AVDictionary* options = nullptr;
 
     err = avcodec_open2(avctx, codec, &options);
-    check_quit(err != 0, log, "Failed to open codec");
+    log.assert_quit(err == 0, "Failed to open codec");
 
     if (av_dict_count(options) != 0) {
-        log->error("Codec has rejected some options:");
+        log.error("Codec has rejected some options:");
         AVDictionaryEntry* entry = nullptr;
         while (true) {
             entry = av_dict_get(options, "", entry, AV_DICT_IGNORE_SUFFIX);
             if (entry == nullptr)
                 break;
-            log->error("    {} = {}", entry->key, entry->value);
+            log.error("    {} = {}", entry->key, entry->value);
         }
     }
 
@@ -74,7 +75,7 @@ void DecoderFFmpeg::start() {
 
 void DecoderFFmpeg::stop() {
     bool wasRunning = flagRun.exchange(false, std::memory_order_relaxed);
-    check_quit(!wasRunning, log, "Not started before stopping!");
+    log.assert_quit(wasRunning, "Not started before stopping!");
 
     frameCV.notify_all();
     packetCV.notify_all();
@@ -85,7 +86,7 @@ void DecoderFFmpeg::pushData(DesktopFrame<ByteBuffer>&& frame) {
     if (frame.isIDR) {
         if (flagKeyInPacket) {
             // Two IDR packets in queue. Skip all remaining packets
-            log->warn("Skipping {} frames! Is decoder overloaded?", packetQueue.size());
+            log.warn("Skipping {} frames! Is decoder overloaded?", packetQueue.size());
 
             std::shared_ptr<CursorPos> lastPos;
             std::shared_ptr<CursorShape> lastShape;
@@ -144,7 +145,7 @@ void DecoderFFmpeg::run_() {
                     break;
                 }
             }
-            check_quit(extraData.desktop == -1, log, "Failed to find matching extra data for {}", fr->pts);
+            log.assert_quit(0 <= extraData.desktop, "Failed to find matching extra data for {}", fr->pts);
 
             scale.setOutputFormat(width, height, AV_PIX_FMT_RGBA);
             scale.pushInput(
@@ -194,11 +195,11 @@ void DecoderFFmpeg::run_() {
             extraDataList.push_back(packet.getOtherType(std::move(pkt->pts)));
 
             err = avcodec_send_packet(avctx, pkt);
-            check_quit(err < 0, log, "Failed to send packet into decoder");
+            log.assert_quit(err == 0, "Failed to send packet into decoder");
 
             av_packet_unref(pkt);
         } else {
-            error_quit(log, "Unknown error from encoder!");
+            log.error_quit("Unknown error from encoder!");
         }
     }
 

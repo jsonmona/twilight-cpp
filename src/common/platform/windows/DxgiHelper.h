@@ -2,6 +2,7 @@
 #define TWILIGHT_COMMON_PLATFORM_WINDOWS_DXGIHELPER_H
 
 #include "common/log.h"
+
 #include "common/platform/windows/ComWrapper.h"
 
 class DxgiHelper {
@@ -17,7 +18,8 @@ public:
     DxgiAdapter1 getAdapterFromOutput(const DxgiOutput5& output);
 
 private:
-    LoggerPtr log;
+    static NamedLogger log;
+
     DxgiFactory5 factory;
 };
 

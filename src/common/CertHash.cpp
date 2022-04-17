@@ -36,10 +36,11 @@ static ByteBuffer decodeBase64(std::string_view content) {
     int err;
 
     err = mbedtls_base64_decode(nullptr, 0, &olen, src, content.size());
+
     ret.resize(olen);
     err = mbedtls_base64_decode(ret.data(), olen, &olen, src, content.size());
     if (err != 0)
-        abort();  // FIXME: Use of abort
+        NamedLogger("::decodeBase64").error_quit("Failed to call mbedtls_base64_decode");
 
     return ret;
 }

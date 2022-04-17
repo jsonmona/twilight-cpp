@@ -3,7 +3,9 @@
 #include "server/platform/windows/CapturePipelineD3DMF.h"
 #include "server/platform/windows/CapturePipelineD3DSoft.h"
 
-CapturePipelineFactoryWin32::CapturePipelineFactoryWin32() : log(createNamedLogger("CapturePipelineFactoryWin32")) {}
+TWILIGHT_DEFINE_LOGGER(CapturePipelineFactoryWin32);
+
+CapturePipelineFactoryWin32::CapturePipelineFactoryWin32() {}
 
 CapturePipelineFactoryWin32::~CapturePipelineFactoryWin32() {}
 
@@ -43,7 +45,7 @@ std::unique_ptr<CapturePipeline> CapturePipelineFactoryWin32::createPipeline(Loc
     case 0:
         break;
     default:
-        error_quit(log, "Invalid captureIdx {}", captureIdx);
+        log.error_quit("Invalid captureIdx {}", captureIdx);
     }
 
     switch (encoderIdx) {
@@ -51,7 +53,7 @@ std::unique_ptr<CapturePipeline> CapturePipelineFactoryWin32::createPipeline(Loc
     case 1:
         break;
     default:
-        error_quit(log, "Invalid encoderIdx {}", captureIdx);
+        log.error_quit("Invalid encoderIdx {}", captureIdx);
     }
 
     if (encoderIdx == 0)

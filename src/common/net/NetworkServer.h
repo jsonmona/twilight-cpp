@@ -34,7 +34,7 @@ public:
     }
 
 private:
-    LoggerPtr log;
+    static NamedLogger log;
 
     std::atomic<bool> flagListen;
     std::thread listenThread;

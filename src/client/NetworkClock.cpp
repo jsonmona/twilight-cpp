@@ -2,14 +2,15 @@
 
 #include <type_traits>
 
+TWILIGHT_DEFINE_LOGGER(NetworkClock);
+
 using namespace std::chrono_literals;
 
 static constexpr uint64_t PANIC_THRESHOLD = 300'000;  // 300 ms
 static constexpr uint64_t MINIMUM_THRESHOLD = 100;    // 0.1 ms
 
 NetworkClock::NetworkClock()
-    : log(createNamedLogger("NetworkClock")),
-      networkLatency(0),
+    : networkLatency(0),
       networkJitter(0),
       pingTimingIdx(0),
       epoch(std::chrono::steady_clock::now().time_since_epoch().count()),
@@ -64,7 +65,7 @@ void NetworkClock::adjust(uint32_t pingId, uint64_t clock) {
 
     std::chrono::microseconds diff = remoteClock - localClock;
     long long absDiff = std::abs(diff.count());
-    log->debug("Ping diff by {} us", diff.count());
+    log.debug("Ping diff by {} us", diff.count());
 
     auto adjustment = std::chrono::duration_cast<std::chrono::steady_clock::duration>(diff).count();
     if (PANIC_THRESHOLD <= absDiff) {

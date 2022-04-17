@@ -28,7 +28,7 @@ public:
     void stop();
 
 private:
-    LoggerPtr log;
+    static NamedLogger log;
 
     std::atomic<bool> flagRun;
 
