@@ -113,8 +113,8 @@ D3D11Device DxgiHelper::createDevice(IDXGIAdapter *adapter, bool requireVideo) {
 #endif
 
     D3D_FEATURE_LEVEL featureLevels[] = {D3D_FEATURE_LEVEL_10_0};
-    hr = D3D11CreateDevice(adapter, D3D_DRIVER_TYPE_UNKNOWN, nullptr, flag, featureLevels, 1, D3D11_SDK_VERSION,
-                           device.data(), nullptr, nullptr);
+    hr = D3D11CreateDevice(adapter, adapter != nullptr ? D3D_DRIVER_TYPE_UNKNOWN : D3D_DRIVER_TYPE_HARDWARE, nullptr,
+                           flag, featureLevels, 1, D3D11_SDK_VERSION, device.data(), nullptr, nullptr);
 
     if (FAILED(hr)) {
         DXGI_ADAPTER_DESC desc;
