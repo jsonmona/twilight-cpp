@@ -8,6 +8,9 @@
 
 #include "common/ByteBuffer.h"
 
+// expands into "arr, sizeof(arr) / sizeof(arr[0])" to be used in C-style function
+#define TWILIGHT_ARRAY_WITHLEN(X) (X), (sizeof(X) / sizeof((X)[0]))
+
 std::optional<ByteBuffer> loadEntireFile(const char *path);
 
 bool writeByteBuffer(const char *filename, const ByteBuffer &data);

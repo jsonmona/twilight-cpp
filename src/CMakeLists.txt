@@ -164,7 +164,7 @@ else()
 endif()
 
 add_library(common STATIC ${COMMON_SRC} ${COMMON_WINDOWS_SRC})
-target_include_directories(common PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+target_include_directories(common PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/hlsl")
 target_link_libraries(common PUBLIC
     git-info
     mbedtls openh264 opus spdlog::spdlog toml11
@@ -239,42 +239,71 @@ endif()
 
 
 # Compile HLSL shader
-if(WIN32)
-    set(FXC_FILES)
-
+function(fn_compile_hlsl_shaders)
     find_program(FXC fxc DOC "fx compiler")
     if(NOT FXC)
         message(FATAL_ERROR "Cannot find fxc.")
     endif(NOT FXC)
 
-    macro(FN_ADD_SHADER OUTDIR ENTRY PROFILE FILE)
-        get_filename_component(HLSL_PATH ${FILE} ABSOLUTE)
-        get_filename_component(FILE_WE ${FILE} NAME_WE)
-        set(FXC_OUTPUT "${CMAKE_BINARY_DIR}/bin/${OUTDIR}/${FILE_WE}-${ENTRY}.fxc")
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/hlsl/")
+    set(FXC_FILES_ACCUMULATED)
+
+    macro(fn_begin_hlsl FILE)
+        set(CURR_SHADER_FILE "${FILE}")
+        set(FXC_FILES)
+
+        get_filename_component(HLSL_PATH "${FILE}" ABSOLUTE)
+        file(TO_NATIVE_PATH "${HLSL_PATH}" HLSL_PATH_NATIVE)
+        get_filename_component(HLSL_BASENAME "${FILE}" NAME_WE)
+        file(RELATIVE_PATH HLSL_RELPATH "${CMAKE_SOURCE_DIR}" "${HLSL_PATH}")
+        get_filename_component(HLSL_RELDIR "${HLSL_RELPATH}" DIRECTORY)
+    endmacro()
+
+    macro(fn_compile_hlsl ENTRY PROFILE)
+        set(FXC_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/hlsl/hlsl-${HLSL_BASENAME}-${ENTRY}.h")
+        file(TO_NATIVE_PATH "${FXC_OUTPUT}" FXC_OUTPUT_NATIVE)
         add_custom_command(OUTPUT "${FXC_OUTPUT}"
-                           COMMAND ${FXC} /nologo /E "${ENTRY}" /T "${PROFILE}_4_0" /Fo "${FXC_OUTPUT}" "${HLSL_PATH}"
-                           MAIN_DEPENDENCY "${HLSL_PATH}"
-                           COMMENT "Compiling HLSL shader: ${FILE} for ${ENTRY}"
-                           WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-                           VERBATIM)
+                            COMMAND ${FXC} /nologo /Ges ${HLSL_OPT_LEVEL} /E "${ENTRY}" /T "${PROFILE}" /Fh "${FXC_OUTPUT_NATIVE}" "${HLSL_PATH_NATIVE}"
+                            MAIN_DEPENDENCY "${HLSL_PATH}"
+                            COMMENT "Compiling HLSL shader: ${HLSL_BASENAME} for ${ENTRY}"
+                            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+                            VERBATIM)
         list(APPEND FXC_FILES "${FXC_OUTPUT}")
+        list(APPEND FXC_FILES_ACCUMULATED "${FXC_OUTPUT}")
+    endmacro()
+
+    macro(fn_end_hlsl)
+        set(TARGET_FILE "${CMAKE_CURRENT_BINARY_DIR}/hlsl/hlsl-${HLSL_BASENAME}.h")
+        file(WRITE "${TARGET_FILE}" "")
+        foreach(FXC_FILE ${FXC_FILES})
+            file(APPEND "${TARGET_FILE}" "#include \"${FXC_FILE}\"\n")
+        endforeach()
     endmacro()
     
-    fn_add_shader("server" "vs_main" "vs" "./server/platform/windows/rgb2yuv.hlsl")
-    fn_add_shader("server" "ps_yuv" "ps" "./server/platform/windows/rgb2yuv.hlsl")
-    fn_add_shader("server" "ps_y" "ps" "./server/platform/windows/rgb2yuv.hlsl")
-    fn_add_shader("server" "ps_uv" "ps" "./server/platform/windows/rgb2yuv.hlsl")
-    fn_add_shader("server" "ps_copy" "ps" "./server/platform/windows/rgb2yuv.hlsl")
-    fn_add_shader("client" "vs_fullscreen" "vs" "./client/platform/windows/viewer.hlsl")
-    fn_add_shader("client" "ps_desktop" "ps" "./client/platform/windows/viewer.hlsl")
+    fn_begin_hlsl("./server/platform/windows/rgb2yuv.hlsl")
+    fn_compile_hlsl("vs_main" "vs_4_0")
+    fn_compile_hlsl("ps_yuv" "ps_4_0")
+    fn_compile_hlsl("ps_y" "ps_4_0")
+    fn_compile_hlsl("ps_uv" "ps_4_0")
+    fn_compile_hlsl("ps_copy" "ps_4_0")
+    fn_end_hlsl()
+
+    fn_begin_hlsl("./client/platform/windows/viewer.hlsl")
+    fn_compile_hlsl("vs_fullscreen" "vs_4_0")
+    fn_compile_hlsl("ps_desktop" "ps_4_0")
+    fn_end_hlsl()
     
-    add_custom_target(fxc DEPENDS ${FXC_FILES})
+    add_custom_target(fxc DEPENDS ${FXC_FILES_ACCUMULATED})
 
     add_dependencies(server fxc)
 
     if(TWILIGHT_BUILD_GUI)
         add_dependencies(client fxc)
     endif()
+endfunction()
+
+if(WIN32)
+    fn_compile_hlsl_shaders()
 endif()
 
 

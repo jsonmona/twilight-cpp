@@ -1,5 +1,7 @@
 #include "StreamViewerD3D.h"
 
+#include "hlsl-viewer.h"
+
 #include "common/StatisticMixer.h"
 #include "common/util.h"
 
@@ -134,13 +136,10 @@ void StreamViewerD3D::init_() {
     width = swapChainDesc.Width;
     height = swapChainDesc.Height;
 
-    // FIXME: Unchecked std::optional unwrapping
-    ByteBuffer vertexBlob = loadEntireFile("viewer-vs_fullscreen.fxc").value();
-    hr = device->CreateVertexShader(vertexBlob.data(), vertexBlob.size(), nullptr, vertexShaderFullscreen.data());
+    hr = device->CreateVertexShader(TWILIGHT_ARRAY_WITHLEN(g_vs_fullscreen), nullptr, vertexShaderFullscreen.data());
     log.assert_quit(SUCCEEDED(hr), "Failed to create vertex shader (full)");
 
-    ByteBuffer pixelBlob = loadEntireFile("viewer-ps_desktop.fxc").value();
-    hr = device->CreatePixelShader(pixelBlob.data(), pixelBlob.size(), nullptr, pixelShaderDesktop.data());
+    hr = device->CreatePixelShader(TWILIGHT_ARRAY_WITHLEN(g_ps_desktop), nullptr, pixelShaderDesktop.data());
     log.assert_quit(SUCCEEDED(hr), "Failed to create pixel shader");
 
     D3D11_BUFFER_DESC cbufferDesc = {};

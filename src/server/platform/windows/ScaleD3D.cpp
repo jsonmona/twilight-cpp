@@ -1,5 +1,7 @@
 #include "ScaleD3D.h"
 
+#include "hlsl-rgb2yuv.h"
+
 #include "common/util.h"
 
 #include "common/platform/windows/ComWrapper.h"
@@ -141,14 +143,12 @@ void ScaleD3D::init(const D3D11Device& device, const D3D11DeviceContext& context
     samplerDesc.MaxLOD = FLT_MAX;
     device->CreateSamplerState(&samplerDesc, clampSampler.data());
 
-    // FIXME: Unchecked std::optional unwrapping
-    ByteBuffer vertexBlob = loadEntireFile("rgb2yuv-vs_main.fxc").value();
-    hr = device->CreateVertexShader(vertexBlob.data(), vertexBlob.size(), nullptr, vertexShader.data());
+    hr = device->CreateVertexShader(TWILIGHT_ARRAY_WITHLEN(g_vs_main), nullptr, vertexShader.data());
     log.assert_quit(SUCCEEDED(hr), "Failed to create vertex shader");
 
     D3D11_INPUT_ELEMENT_DESC inputLayoutDesc[] = {
         {"POS", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0}};
-    device->CreateInputLayout(inputLayoutDesc, 1, vertexBlob.data(), vertexBlob.size(), inputLayout.data());
+    device->CreateInputLayout(inputLayoutDesc, 1, TWILIGHT_ARRAY_WITHLEN(g_vs_main), inputLayout.data());
 }
 
 void ScaleD3D::getRatio(Rational* xRatio, Rational* yRatio) {
@@ -201,9 +201,7 @@ void ScaleD3D_AYUV::init(const D3D11Device& device, const D3D11DeviceContext& co
     pixelShader.release();
     rtOutput.release();
 
-    // FIXME: Unchecked std::optional unwrapping
-    ByteBuffer blob = loadEntireFile("rgb2yuv-ps_yuv.fxc").value();
-    device->CreatePixelShader(blob.data(), blob.size(), nullptr, pixelShader.data());
+    device->CreatePixelShader(TWILIGHT_ARRAY_WITHLEN(g_ps_yuv), nullptr, pixelShader.data());
 
     D3D11_RENDER_TARGET_VIEW_DESC rtDesc = {};
     rtDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -246,15 +244,11 @@ void ScaleD3D_NV12::init(const D3D11Device& device, const D3D11DeviceContext& co
     rtLuma.release();
     rtChroma.release();
 
-    // FIXME: Unchecked std::optional unwrapping
-    ByteBuffer blob = loadEntireFile("rgb2yuv-ps_y.fxc").value();
-    device->CreatePixelShader(blob.data(), blob.size(), nullptr, pixelShaderY.data());
+    device->CreatePixelShader(TWILIGHT_ARRAY_WITHLEN(g_ps_y), nullptr, pixelShaderY.data());
 
-    blob = loadEntireFile("rgb2yuv-ps_uv.fxc").value();
-    device->CreatePixelShader(blob.data(), blob.size(), nullptr, pixelShaderUV.data());
+    device->CreatePixelShader(TWILIGHT_ARRAY_WITHLEN(g_ps_uv), nullptr, pixelShaderUV.data());
 
-    blob = loadEntireFile("rgb2yuv-ps_copy.fxc").value();
-    device->CreatePixelShader(blob.data(), blob.size(), nullptr, pixelShaderCopy.data());
+    device->CreatePixelShader(TWILIGHT_ARRAY_WITHLEN(g_ps_copy), nullptr, pixelShaderCopy.data());
 
     D3D11_TEXTURE2D_DESC chromaLargeDesc = {};
     chromaLargeDesc.Width = outWidth;
