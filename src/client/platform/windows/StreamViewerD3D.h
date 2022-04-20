@@ -9,6 +9,7 @@
 #include "common/platform/windows/DxgiHelper.h"
 
 #include "client/NetworkClock.h"
+#include "client/StreamClient.h"
 #include "client/StreamViewerBase.h"
 
 #include "client/platform/software/DecoderFFmpeg.h"
@@ -22,7 +23,7 @@ class StreamViewerD3D : public StreamViewerBase {
     Q_OBJECT;
 
 public:
-    explicit StreamViewerD3D(NetworkClock &clock);
+    StreamViewerD3D(NetworkClock &clock, StreamClient *client);
     ~StreamViewerD3D() override;
 
     QPaintEngine *paintEngine() const override { return nullptr; }
@@ -43,10 +44,12 @@ private:
     static NamedLogger log;
 
     NetworkClock &clock;
+    StreamClient *sc;
 
     std::atomic<bool> flagInitialized;
     std::atomic<bool> flagRunRender;
 
+    int captureWidth, captureHeight;
     int width, height;
     int cursorTexSize;
 

@@ -189,8 +189,6 @@ DesktopFrame<D3D11Texture2D> CaptureD3D::readD3D() {
             frame.cursorPos = std::make_shared<CursorPos>();
 
             frame.cursorPos->visible = frameInfo.PointerPosition.Visible;
-            frame.cursorPos->xScaler = Rational(1, 1);
-            frame.cursorPos->yScaler = Rational(1, 1);
             if (frameInfo.PointerPosition.Visible) {
                 frame.cursorPos->x = frameInfo.PointerPosition.Position.x;
                 frame.cursorPos->y = frameInfo.PointerPosition.Position.y;

@@ -18,9 +18,10 @@ struct CursorBox_cbuffer {
 };
 static_assert(sizeof(CursorBox_cbuffer) % 16 == 0, "cbuffer size must be multiple of 16");
 
-StreamViewerD3D::StreamViewerD3D(NetworkClock &clock)
+StreamViewerD3D::StreamViewerD3D(NetworkClock &clock, StreamClient *client)
     : StreamViewerBase(),
       clock(clock),
+      sc(client),
       flagInitialized(false),
       flagRunRender(false),
       width(-1),
@@ -70,8 +71,6 @@ void StreamViewerD3D::processDesktopFrame(const msg::Packet &pkt, uint8_t *extra
     if (now.cursorPos->visible) {
         now.cursorPos->x = res.cursor_x();
         now.cursorPos->y = res.cursor_y();
-        now.cursorPos->xScaler = Rational(res.cursor_x_scaler_num(), res.cursor_x_scaler_den());
-        now.cursorPos->yScaler = Rational(res.cursor_y_scaler_num(), res.cursor_y_scaler_den());
     } else {
         now.cursorPos->x = -1;
         now.cursorPos->y = -1;
@@ -109,6 +108,8 @@ void StreamViewerD3D::processCursorShape(const msg::Packet &pkt, uint8_t *extraD
 
 void StreamViewerD3D::init_() {
     HRESULT hr;
+
+    sc->getCaptureResolution(&captureWidth, &captureHeight);
 
     device = dxgiHelper.createDevice(nullptr, true);
     log.assert_quit(device.isValid(), "Failed to create D3D device");
@@ -337,13 +338,13 @@ void StreamViewerD3D::renderLoop_() {
             p->flagCursorVisible = !!(frame.cursorPos->visible && cursorLoaded);
 
             if (frame.cursorPos->visible) {
-                int cursorX = frame.cursorPos->xScaler.imul(frame.cursorPos->x);
-                int cursorY = frame.cursorPos->yScaler.imul(frame.cursorPos->y);
+                int cursorX = frame.cursorPos->x * width / captureWidth;
+                int cursorY = frame.cursorPos->y * height / captureHeight;
 
                 p->cursorPos[0] = (float)cursorX / width;
                 p->cursorPos[1] = (float)cursorY / height;
-                p->cursorSize[0] = (float)cursorTexSize / width * frame.cursorPos->xScaler.toFloat();
-                p->cursorSize[1] = (float)cursorTexSize / height * frame.cursorPos->yScaler.toFloat();
+                p->cursorSize[0] = (float)cursorTexSize / captureWidth;
+                p->cursorSize[1] = (float)cursorTexSize / captureHeight;
             } else {
                 p->cursorPos[0] = 0;
                 p->cursorPos[1] = 0;

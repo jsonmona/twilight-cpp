@@ -8,7 +8,7 @@
 TWILIGHT_DEFINE_LOGGER(Connection);
 
 // FIXME: Deduplicate
-static constexpr int PROTOCOL_VERSION = 1;
+static constexpr int PROTOCOL_VERSION = 2;
 
 // Deduplicate with StreamClient.cpp
 // Returns negative on error (mbedtls error code)
@@ -230,6 +230,15 @@ void Connection::msg_configureStreamRequest_(const msg::ConfigureStreamRequest& 
 
     server->configureStream(this, req.width(), req.height(), Rational(req.fps_num(), req.fps_den()));
     res->set_status(msg::ConfigureStreamResponse_Status_OK);
+    int capWidth, capHeight;
+    int videoWidth, videoHeight;
+    server->getCaptureResolution(&capWidth, &capHeight);
+    server->getVideoResolution(&videoWidth, &videoHeight);
+
+    res->set_capture_width(capWidth);
+    res->set_capture_height(capHeight);
+    res->set_video_width(videoWidth);
+    res->set_video_height(videoHeight);
     send(pkt, nullptr);
 }
 

@@ -6,13 +6,10 @@ package msg;
 // Extra data contains desktom image (encoded)
 message DesktopFrame {
     bool cursor_visible = 2;
+
+    // These coordinates are in capture resolution
     int32 cursor_x = 3;
     int32 cursor_y = 4;
-
-    int32 cursor_x_scaler_num = 8;
-    int32 cursor_x_scaler_den = 9;
-    int32 cursor_y_scaler_num = 10;
-    int32 cursor_y_scaler_den = 11;
 
     bool is_idr = 7;
 
@@ -33,6 +30,8 @@ message CursorShape {
     }
 
     Format format = 1;
+
+    // These coordinates are in capture resolution
     int32 width = 2;
     int32 height = 3;
 

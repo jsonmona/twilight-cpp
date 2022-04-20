@@ -2,6 +2,7 @@
 #define TWILIGHT_SERVER_PLATFORM_SOFTWARE_ENCODERFFMPEG_H
 
 #include "common/DesktopFrame.h"
+#include "common/Rational.h"
 #include "common/ffmpeg-headers.h"
 #include "common/log.h"
 

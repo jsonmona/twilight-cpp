@@ -43,6 +43,8 @@ public:
     void connect(HostListEntry host);
     void disconnect();
 
+    void getCaptureResolution(int *width, int *height);
+
     bool send(const msg::Packet &pkt, const ByteBuffer &extraData);
     bool send(const msg::Packet &pkt, const uint8_t *extraData);
 
@@ -51,10 +53,11 @@ private:
     void runPing_();
     bool doIntro_(const HostListEntry &host, bool forceAuth);
     bool doAuth_(const HostListEntry &host);
-    
+
     static NamedLogger log;
 
     NetworkClock &clock;
+    int captureWidth, captureHeight;
 
     NetworkSocket conn;
     CertStore cert;

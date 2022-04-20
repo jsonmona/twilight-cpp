@@ -28,6 +28,8 @@ public:
     void stop();
 
     void getNativeMode(int* w, int* h, Rational* fps);
+    void getCaptureResolution(int* w, int* h);
+    void getVideoResolution(int* w, int* h);
 
     void onDisconnected(Connection* conn);
     void configureStream(Connection* conn, int width, int height, Rational framerate);

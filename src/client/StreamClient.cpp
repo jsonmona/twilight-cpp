@@ -11,9 +11,9 @@
 TWILIGHT_DEFINE_LOGGER(StreamClient);
 
 constexpr uint16_t SERVICE_PORT = 6495;
-constexpr int32_t PROTOCOL_VERSION = 1;
+constexpr int32_t PROTOCOL_VERSION = 2;
 
-StreamClient::StreamClient(NetworkClock &clock) : clock(clock) {
+StreamClient::StreamClient(NetworkClock &clock) : clock(clock), captureWidth(-1), captureHeight(-1) {
     conn.setOnDisconnected([this](std::string_view msg) { onStateChange(State::DISCONNECTED, msg); });
 
     std::unique_ptr<Keypair> keypair = std::make_unique<Keypair>();
@@ -61,6 +61,14 @@ void StreamClient::disconnect() {
 
     conn.disconnect();
     recvThread.join();
+
+    captureWidth = captureHeight = -1;
+}
+
+void StreamClient::getCaptureResolution(int *width, int *height) {
+    log.assert_quit(0 < captureWidth && 0 < captureHeight, "Capture resolution not set!");
+    *width = captureWidth;
+    *height = captureHeight;
 }
 
 bool StreamClient::send(const msg::Packet &pkt, const ByteBuffer &extraData) {
@@ -232,6 +240,9 @@ bool StreamClient::doIntro_(const HostListEntry &host, bool forceAuth) {
             break;
         }
     }
+
+    captureWidth = configureStreamResponse.capture_width();
+    captureHeight = configureStreamResponse.capture_height();
 
     pkt.mutable_start_stream_request();
     if (!conn.send(pkt, nullptr))

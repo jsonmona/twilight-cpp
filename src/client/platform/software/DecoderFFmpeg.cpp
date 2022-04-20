@@ -163,12 +163,6 @@ void DecoderFFmpeg::run_() {
             flagNextFrameAvailable = true;
             nextFrame = extraData.getOtherType(std::move(rgbTex));
             nextFrame.timeDecoded = clock.time();
-            if (nextFrame.cursorPos && nextFrame.cursorPos->visible) {
-                Rational xScaler, yScaler;
-                scale.getRatio(&xScaler, &yScaler);
-                nextFrame.cursorPos->xScaler *= xScaler;
-                nextFrame.cursorPos->yScaler *= yScaler;
-            }
             frameCV.notify_one();
         } else if (err == AVERROR(EAGAIN)) {
             DesktopFrame<ByteBuffer> packet;

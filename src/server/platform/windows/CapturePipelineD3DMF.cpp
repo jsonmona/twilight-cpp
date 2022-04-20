@@ -214,14 +214,6 @@ void CapturePipelineD3DMF::encodeLoop_() {
 
         DesktopFrame<D3D11Texture2D> d3dFrame = frame.getOtherType(scale->popOutput());
 
-        if (d3dFrame.cursorPos && d3dFrame.cursorPos->visible) {
-            d3dFrame.cursorPos = std::make_shared<CursorPos>(*d3dFrame.cursorPos);
-            Rational xScaler, yScaler;
-            scale->getRatio(&xScaler, &yScaler);
-            d3dFrame.cursorPos->xScaler *= xScaler;
-            d3dFrame.cursorPos->yScaler *= yScaler;
-        }
-
         while (!encoder.pushFrame(&d3dFrame) && flagRunning.load(std::memory_order_relaxed))
             encoder.poll();
     }

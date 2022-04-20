@@ -129,14 +129,6 @@ void CapturePipelineD3DSoft::loopEncoder_() {
             firstFrameProvided = true;
             frame = lastFrame.getOtherType(scale.popOutput());
             lastFrame.desktop = false;
-
-            if (frame.cursorPos && frame.cursorPos->visible) {
-                frame.cursorPos = std::make_shared<CursorPos>(*frame.cursorPos);
-                Rational xScaler, yScaler;
-                scale.getRatio(&xScaler, &yScaler);
-                frame.cursorPos->xScaler *= xScaler;
-                frame.cursorPos->yScaler *= yScaler;
-            }
         }
 
         encoder.pushFrame(std::move(frame));

@@ -84,6 +84,10 @@ message ConfigureStreamResponse {
     }
 
     Status status = 1;
+    int32 capture_width = 2;
+    int32 capture_height = 3;
+    int32 video_width = 4;
+    int32 video_height = 5;
 }
 
 message StartStreamRequest {

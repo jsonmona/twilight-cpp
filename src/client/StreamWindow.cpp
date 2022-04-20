@@ -14,7 +14,7 @@
 TWILIGHT_DEFINE_LOGGER(StreamWindow);
 
 StreamWindow::StreamWindow(HostListEntry host, bool playAudio)
-    : QWidget(), sc(clock), viewer(new StreamViewerD3D(clock)), boxLayout(this), flagPlayAudio(playAudio) {
+    : QWidget(), sc(clock), viewer(new StreamViewerD3D(clock, &sc)), boxLayout(this), flagPlayAudio(playAudio) {
     connect(this, &StreamWindow::showLater, this, &StreamWindow::show);
     connect(this, &StreamWindow::closeLater, this, &StreamWindow::close);
     connect(this, &StreamWindow::displayPinLater, this, &StreamWindow::displayPin_);

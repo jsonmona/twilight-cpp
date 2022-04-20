@@ -89,6 +89,16 @@ void StreamServer::getNativeMode(int* w, int* h, Rational* fps) {
     capture->getNativeMode(w, h, fps);
 }
 
+void StreamServer::getCaptureResolution(int* w, int* h) {
+    Rational fps;
+    capture->getNativeMode(w, h, &fps);
+}
+
+void StreamServer::getVideoResolution(int* w, int* h) {
+    *w = requestedWidth;
+    *h = requestedHeight;
+}
+
 void StreamServer::onDisconnected(Connection* conn) {
     std::lock_guard lock(connectionsLock);
 
@@ -158,10 +168,6 @@ void StreamServer::processOutput_(DesktopFrame<ByteBuffer>&& cap) {
         if (cursorPos->visible) {
             m->set_cursor_x(cursorPos->x);
             m->set_cursor_y(cursorPos->y);
-            m->set_cursor_x_scaler_num(cursorPos->xScaler.num());
-            m->set_cursor_x_scaler_den(cursorPos->xScaler.den());
-            m->set_cursor_y_scaler_num(cursorPos->yScaler.num());
-            m->set_cursor_y_scaler_den(cursorPos->yScaler.den());
         }
     } else {
         m->set_cursor_visible(false);

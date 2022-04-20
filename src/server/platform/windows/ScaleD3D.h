@@ -16,8 +16,6 @@ public:
 
     virtual void init(const D3D11Device& device, const D3D11DeviceContext& context);
 
-    void getRatio(Rational* xRatio, Rational* yRatio);
-
     void pushInput(const D3D11Texture2D& tex);
     D3D11Texture2D popOutput();
 

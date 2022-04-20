@@ -1,15 +1,14 @@
 #ifndef TWILIGHT_COMMON_DESKTOPFRAME_H
 #define TWILIGHT_COMMON_DESKTOPFRAME_H
 
+#include "common/ByteBuffer.h"
+
 #include <chrono>
 #include <cstdint>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
-
-#include "common/ByteBuffer.h"
-#include "common/Rational.h"
 
 // TODO: Move this to a more proper place
 enum class ScaleType { AYUV, NV12 };
@@ -85,8 +84,6 @@ struct DesktopFrame {
 struct CursorPos {
     bool visible;
     int x, y;
-    Rational xScaler;
-    Rational yScaler;
 };
 
 struct CursorShape {
