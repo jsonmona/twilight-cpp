@@ -127,12 +127,12 @@ void DecoderFFmpeg::run_() {
     int err;
 
     long long pts = 0;
-    AVFrame* fr = av_frame_alloc();
-    AVPacket* pkt = av_packet_alloc();
+    AVFramePtr fr;
+    AVPacketPtr pkt;
     std::deque<DesktopFrame<long long>> extraDataList;
 
     while (flagRun.load(std::memory_order_acquire)) {
-        err = avcodec_receive_frame(avctx, fr);
+        err = avcodec_receive_frame(avctx, fr.get());
         if (err == AVERROR_EOF)
             break;
         else if (err == 0) {
@@ -152,7 +152,7 @@ void DecoderFFmpeg::run_() {
                 TextureSoftware::reference(fr->data, fr->linesize, fr->width, fr->height, (AVPixelFormat)fr->format));
             TextureSoftware rgbTex = scale.popOutput();
 
-            av_frame_unref(fr);
+            av_frame_unref(fr.get());
 
             std::unique_lock lock(frameLock);
             while (flagNextFrameAvailable && flagRun.load(std::memory_order_relaxed))
@@ -188,15 +188,12 @@ void DecoderFFmpeg::run_() {
 
             extraDataList.push_back(packet.getOtherType(std::move(pkt->pts)));
 
-            err = avcodec_send_packet(avctx, pkt);
+            err = avcodec_send_packet(avctx, pkt.get());
             log.assert_quit(err == 0, "Failed to send packet into decoder");
 
-            av_packet_unref(pkt);
+            av_packet_unref(pkt.get());
         } else {
             log.error_quit("Unknown error from encoder!");
         }
     }
-
-    av_packet_free(&pkt);
-    av_frame_free(&fr);
 }

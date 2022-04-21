@@ -127,8 +127,8 @@ void EncoderFFmpeg::run_() {
     std::deque<DesktopFrame<long long>> extraDataList;
 
     AVFormatContext* fmt = nullptr;
-    AVPacket* pkt = av_packet_alloc();
-    AVFrame* fr = av_frame_alloc();
+    AVPacketPtr pkt;
+    AVFramePtr fr;
 
     err = avformat_alloc_output_context2(&fmt, nullptr, "matroska", nullptr);
     log.assert_quit(0 <= err, "Failed to allocate avformat context");
@@ -166,7 +166,7 @@ void EncoderFFmpeg::run_() {
     av_dict_free(&opt);
 
     while (flagRun.load(std::memory_order_acquire)) {
-        err = avcodec_receive_packet(avctx, pkt);
+        err = avcodec_receive_packet(avctx, pkt.get());
         if (err == AVERROR_EOF)
             break;
         else if (err == 0) {
@@ -192,12 +192,12 @@ void EncoderFFmpeg::run_() {
             AVRational originalFramerate;
             originalFramerate.num = framerate.inv().num();
             originalFramerate.den = framerate.inv().den();
-            av_packet_rescale_ts(pkt, originalFramerate, stream->time_base);
+            av_packet_rescale_ts(pkt.get(), originalFramerate, stream->time_base);
             pkt->stream_index = 0;
-            err = av_interleaved_write_frame(fmt, pkt);
+            err = av_interleaved_write_frame(fmt, pkt.get());
             log.assert_quit(err == 0, "Failed to write frame to file");
 
-            av_packet_unref(pkt);
+            av_packet_unref(pkt.get());
 
             std::lock_guard lock(packetLock);
             packetQueue.push_back(std::move(output));
@@ -249,8 +249,8 @@ void EncoderFFmpeg::run_() {
 
             extraDataList.push_back(frame.getOtherType(std::move(fr->pts)));
 
-            err = avcodec_send_frame(avctx, fr);
-            av_frame_unref(fr);
+            err = avcodec_send_frame(avctx, fr.get());
+            av_frame_unref(fr.get());
 
             if (err != 0)
                 break;
@@ -266,7 +266,4 @@ void EncoderFFmpeg::run_() {
     log.assert_quit(0 <= err, "Failed to close avio context");
 
     avformat_free_context(fmt);
-
-    av_packet_free(&pkt);
-    av_frame_free(&fr);
 }
