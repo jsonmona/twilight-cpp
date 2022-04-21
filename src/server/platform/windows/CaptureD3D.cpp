@@ -131,7 +131,7 @@ DesktopFrame<TextureSoftware> CaptureD3D::readSoftware() {
 
         context->CopyResource(staging.ptr(), frame.desktop.ptr());
 
-        ensureFormat(&textureArena, oldDesc.Width, oldDesc.Height, AV_PIX_FMT_BGRA);
+        TextureAllocArena::ensureFormat(&textureArena, oldDesc.Width, oldDesc.Height, AV_PIX_FMT_BGRA);
 
         D3D11_MAPPED_SUBRESOURCE mapInfo;
         hr = context->Map(staging.ptr(), 0, D3D11_MAP_READ, 0, &mapInfo);

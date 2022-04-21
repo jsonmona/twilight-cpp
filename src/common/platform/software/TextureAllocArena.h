@@ -11,9 +11,6 @@
 class TextureSoftware;
 class TextureAllocArena;
 
-// Recreate TextureAllocArena if format differs
-void ensureFormat(std::shared_ptr<TextureAllocArena>* arena, int w, int h, AVPixelFormat fmt);
-
 class TextureAllocArena {
     friend class TextureSoftware;
     class Block;
@@ -27,6 +24,7 @@ public:
     TextureAllocArena& operator=(TextureAllocArena&& move) noexcept;
 
     static std::shared_ptr<TextureAllocArena> getArena(int w, int h, AVPixelFormat fmt);
+    static void ensureFormat(std::shared_ptr<TextureAllocArena>* arena, int w, int h, AVPixelFormat fmt);
 
     ~TextureAllocArena();
 

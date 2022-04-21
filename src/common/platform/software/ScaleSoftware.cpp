@@ -79,7 +79,7 @@ void ScaleSoftware::convert_() {
                              SWS_FAST_BILINEAR, nullptr, nullptr, nullptr);
     }
     if (outputFormatChanged) {
-        ensureFormat(&outputArena, outputWidth, outputHeight, outputFormat);
+        TextureAllocArena::ensureFormat(&outputArena, outputWidth, outputHeight, outputFormat);
         outputTex = outputArena->alloc();
     }
 

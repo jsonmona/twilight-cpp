@@ -6,11 +6,6 @@
 
 TWILIGHT_DEFINE_LOGGER(TextureAllocArena);
 
-void ensureFormat(std::shared_ptr<TextureAllocArena>* arena, int w, int h, AVPixelFormat fmt) {
-    if (*arena == nullptr || !(*arena)->checkConfig(w, h, fmt))
-        *arena = TextureAllocArena::getArena(w, h, fmt);
-}
-
 void swap(TextureAllocArena& a, TextureAllocArena& b) noexcept {
     using std::swap;
 
@@ -66,6 +61,11 @@ std::shared_ptr<TextureAllocArena> TextureAllocArena::getArena(int w, int h, AVP
 
     ret->textureSize = totalSize;
     return ret;
+}
+
+void TextureAllocArena::ensureFormat(std::shared_ptr<TextureAllocArena>* arena, int w, int h, AVPixelFormat fmt) {
+    if (*arena == nullptr || !(*arena)->checkConfig(w, h, fmt))
+        *arena = TextureAllocArena::getArena(w, h, fmt);
 }
 
 TextureAllocArena::~TextureAllocArena() {
