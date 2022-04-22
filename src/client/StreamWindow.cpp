@@ -1,7 +1,6 @@
 #include "StreamWindow.h"
 
 #include "common/RingBuffer.h"
-#include "common/platform/windows/winheaders.h"
 
 #include "client/platform/windows/StreamViewerD3D.h"
 
@@ -14,7 +13,12 @@
 TWILIGHT_DEFINE_LOGGER(StreamWindow);
 
 StreamWindow::StreamWindow(HostListEntry host, bool playAudio)
-    : QWidget(), sc(clock), viewer(new StreamViewerD3D(clock, &sc)), boxLayout(this), flagPlayAudio(playAudio) {
+    : QWidget(),
+      clock(std::make_shared<NetworkClock>()),
+      sc(clock),
+      viewer(new StreamViewerD3D(clock, &sc)),
+      boxLayout(this),
+      flagPlayAudio(playAudio) {
     connect(this, &StreamWindow::showLater, this, &StreamWindow::show);
     connect(this, &StreamWindow::closeLater, this, &StreamWindow::close);
     connect(this, &StreamWindow::displayPinLater, this, &StreamWindow::displayPin_);
@@ -92,7 +96,7 @@ void StreamWindow::processNewPacket_(const msg::Packet &pkt, uint8_t *extraData)
         break;
     case msg::Packet::kPingResponse: {
         auto &res = pkt.ping_response();
-        clock.adjust(res.id(), res.time());
+        clock->adjust(res.id(), res.time());
         break;
     }
     case msg::Packet::kAudioFrame: {

@@ -61,6 +61,7 @@ set(COMMON_WINDOWS_SRC
 )
 
 set(CLIENT_SRC
+    ./client/IDecoder.h
     ./client/StreamViewerBase.h
 
     ./client/FlowLayout.h
@@ -81,6 +82,8 @@ set(CLIENT_SRC
     ./client/StreamWindow.h
     ./client/StreamWindow.cpp
 
+    ./client/platform/software/IDecoderSoftware.h
+
     ./client/platform/software/DecoderFFmpeg.h
     ./client/platform/software/DecoderFFmpeg.cpp
     ./client/platform/software/DecoderOpenH264.h
@@ -88,6 +91,12 @@ set(CLIENT_SRC
 )
 
 set(CLIENT_WINDOWS_SRC
+    ./client/platform/windows/D3DTextureUploader.h
+    ./client/platform/windows/D3DTextureUploader.cpp
+    ./client/platform/windows/DecodePipelineSoftD3D.h
+    ./client/platform/windows/DecodePipelineSoftD3D.cpp
+    ./client/platform/windows/RendererD3D.h
+    ./client/platform/windows/RendererD3D.cpp
     ./client/platform/windows/StreamViewerD3D.h
     ./client/platform/windows/StreamViewerD3D.cpp
 

@@ -4,87 +4,72 @@
 
 TWILIGHT_DEFINE_LOGGER(DecoderOpenH264);
 
-DecoderOpenH264::DecoderOpenH264(NetworkClock &clock)
-    : clock(clock), idrPacketInQueue(false), outputWidth(-1), outputHeight(-1), flagRun(false) {}
+DecoderOpenH264::DecoderOpenH264() : flagRun(false), width(-1), height(-1) {}
 
 DecoderOpenH264::~DecoderOpenH264() {
     log.assert_quit(!flagRun.load(std::memory_order_relaxed), "Being destructed without stopping");
 
-    if (looper.joinable())
-        looper.join();
+    if (runThread.joinable())
+        runThread.join();
 }
 
-void DecoderOpenH264::pushData(DesktopFrame<ByteBuffer> &&nextData) {
-    std::lock_guard<std::mutex> lock(packetLock);
+std::vector<CodecType> DecoderOpenH264::enumSupportedCodecs() {
+    std::vector<CodecType> ret;
+    ret.reserve(1);
 
-    if (nextData.isIDR) {
-        if (idrPacketInQueue) {
-            // Two IDR packets in queue. Skip all remaining packets
-            log.warn("Skipping {} frames! Is decoder overloaded?", packetQueue.size());
-
-            std::shared_ptr<CursorPos> lastPos;
-            std::shared_ptr<CursorShape> lastShape;
-            for (auto &now : packetQueue) {
-                if (now.cursorPos)
-                    lastPos = std::move(now.cursorPos);
-                if (now.cursorShape)
-                    lastShape = std::move(now.cursorShape);
-            }
-
-            packetQueue.clear();
-
-            if (lastPos && !nextData.cursorPos)
-                nextData.cursorPos = std::move(lastPos);
-            if (lastShape && !nextData.cursorShape)
-                nextData.cursorShape = std::move(lastShape);
-        }
-        idrPacketInQueue = true;
-    }
-
-    packetQueue.push_back(std::move(nextData));
-    packetCV.notify_one();
-}
-
-DesktopFrame<TextureSoftware> DecoderOpenH264::popData() {
-    DesktopFrame<TextureSoftware> ret;
-
-    std::unique_lock lock(frameLock);
-    while (frameQueue.empty() && flagRun.load(std::memory_order_relaxed))
-        frameCV.wait(lock);
-
-    if (!flagRun.load(std::memory_order_acquire))
-        return ret;
-
-    // Prevent excessive buffering
-    // FIXME: This also needs to be logged
-    frameBufferHistory.push(frameQueue.size());
-    while (frameBufferHistory.max - frameBufferHistory.min + 1 < frameQueue.size())
-        frameQueue.pop_front();
-
-    ret = std::move(frameQueue.front());
-    frameQueue.pop_front();
+    ret.push_back(CodecType::H264_BASELINE);
     return ret;
 }
 
+void DecoderOpenH264::setVideoResolution(int width_, int height_) {
+    log.assert_quit(!flagRun.load(std::memory_order_relaxed), "Tried to set resolution while running!");
+
+    width = width_;
+    height = height_;
+}
+
+void DecoderOpenH264::init(CodecType codecType, std::shared_ptr<NetworkClock> clock_) {
+    log.assert_quit(codecType == CodecType::H264_BASELINE, "Unsupported codec {} was requested!", (int)codecType);
+    clock = std::move(clock_);
+}
+
 void DecoderOpenH264::start() {
+    log.assert_quit(clock != nullptr, "Not initialized before start!");
+
     if (loader == nullptr) {
         loader = OpenH264Loader::getInstance();
         loader->prepare();
     }
 
     flagRun.store(true, std::memory_order_release);
-    looper = std::thread([this]() { run_(); });
+    runThread = std::thread([this]() { run_(); });
 }
 
 void DecoderOpenH264::stop() {
     flagRun.store(false, std::memory_order_release);
+
+    std::scoped_lock lock(packetLock, frameLock);
     packetCV.notify_all();
     frameCV.notify_all();
 }
 
-void DecoderOpenH264::setOutputResolution(int width, int height) {
-    outputWidth = width;
-    outputHeight = height;
+void DecoderOpenH264::pushData(DesktopFrame<ByteBuffer> &&nextData) {
+    std::lock_guard lock(packetLock);
+    packetQueue.push_back(std::move(nextData));
+    packetCV.notify_one();
+}
+
+bool DecoderOpenH264::readSoftware(DesktopFrame<TextureSoftware> *output) {
+    std::unique_lock lock(frameLock);
+    while (frameQueue.empty() && flagRun.load(std::memory_order_relaxed))
+        frameCV.wait(lock);
+
+    if (!flagRun.load(std::memory_order_relaxed))
+        return false;
+
+    *output = std::move(frameQueue.front());
+    frameQueue.pop_front();
+    return true;
 }
 
 void DecoderOpenH264::run_() {
@@ -93,6 +78,8 @@ void DecoderOpenH264::run_() {
 
     err = loader->CreateDecoder(&decoder);
     log.assert_quit(err == 0 && decoder != nullptr, "Failed to create decoder instance");
+
+    std::shared_ptr<TextureAllocArena> arena;
 
     SDecodingParam decParam = {};
     decParam.sVideoProperty.eVideoBsType = VIDEO_BITSTREAM_AVC;
@@ -115,8 +102,6 @@ void DecoderOpenH264::run_() {
 
             data = std::move(packetQueue.front());
             packetQueue.pop_front();
-            if (data.isIDR)
-                idrPacketInQueue = false;
         }
 
         uint8_t *framebuffer[3] = {};
@@ -145,16 +130,16 @@ void DecoderOpenH264::run_() {
                          (uintptr_t)decBufferInfo.pDst[2]);
             }
 
-            TextureSoftware yuv = TextureSoftware::reference(framebuffer, linesize, w, h, fmt);
-            scale.setOutputFormat(outputWidth, outputHeight, AV_PIX_FMT_RGBA);
-            scale.pushInput(std::move(yuv));
+            if (arena == nullptr) {
+                arena = TextureAllocArena::getArena(w, h, fmt);
+            } else {
+                log.assert_quit(arena->checkConfig(w, h, fmt), "Texture format changed while running!");
+            }
 
-            auto frame = data.getOtherType(scale.popOutput());
-            frame.timeDecoded = clock.time();
-
+            auto frame = data.getOtherType(TextureSoftware::reference(framebuffer, linesize, w, h, fmt).clone(arena));
+            frame.timeDecoded = clock->time();
             std::lock_guard lock(frameLock);
             frameQueue.push_back(std::move(frame));
-            frameCV.notify_one();
         } else
             log.info("No frame provided");
     }
@@ -163,4 +148,9 @@ void DecoderOpenH264::run_() {
     if (err != 0)
         log.warn("Failed to uninitialize decoder");
     loader->DestroyDecoder(decoder);
+
+    /* Deallocate all texture before destructing alloc arena */ {
+        std::lock_guard lock(frameLock);
+        frameQueue.clear();
+    }
 }

@@ -55,30 +55,30 @@ public:
     void push_front(const T& copy) {
         if (full())
             NamedLogger("ArrayCircularQueue").error_quit("push() called on a full queue");
-        new (&front()) T(copy);
         first_ = (first_ + LEN + 1) % LEN;
+        new (data() + first_) T(copy);
         size_++;
     }
 
     void push_front(T&& move) {
         if (full())
             NamedLogger("ArrayCircularQueue").error_quit("push() called on a full queue");
-        new (&front()) T(std::move(move));
         first_ = (first_ + LEN + 1) % LEN;
+        new (data() + first_) T(std::move(move));
         size_++;
     }
 
     void push_back(const T& copy) {
         if (full())
             NamedLogger("ArrayCircularQueue").error_quit("push() called on a full queue");
-        new (&back()) T(copy);
+        new (data() + (first_ + size_) % LEN) T(copy);
         size_++;
     }
 
     void push_back(T&& move) {
         if (full())
             NamedLogger("ArrayCircularQueue").error_quit("push() called on a full queue");
-        new (&back()) T(std::move(move));
+        new (data() + (first_ + size_) % LEN) T(std::move(move));
         size_++;
     }
 

@@ -4,41 +4,50 @@
 #include "common/DesktopFrame.h"
 #include "common/ffmpeg-headers.h"
 #include "common/log.h"
+#include "common/CircularDeque.h"
 
 #include "common/platform/software/ScaleSoftware.h"
 #include "common/platform/software/TextureSoftware.h"
 
 #include "client/NetworkClock.h"
 
-#include <queue>
-#include <thread>
+#include "client/platform/software/IDecoderSoftware.h"
 
-class DecoderFFmpeg {
+#include <deque>
+#include <mutex>
+
+class DecoderFFmpeg : public IDecoderSoftware {
 public:
-    explicit DecoderFFmpeg(NetworkClock& clock);
+    DecoderFFmpeg();
     ~DecoderFFmpeg();
 
-    void setOutputResolution(int width, int height);
+    std::vector<CodecType> enumSupportedCodecs() override;
 
-    void start();
-    void stop();
+    void setVideoResolution(int width, int height) override;
 
-    void pushData(DesktopFrame<ByteBuffer>&& frame);
-    bool readFrame(DesktopFrame<TextureSoftware>* output);
+    void init(CodecType codecType_, std::shared_ptr<NetworkClock> clock_) override;
+
+    void start() override;
+    void stop() override;
+
+    void pushData(DesktopFrame<ByteBuffer>&& frame) override;
+    bool readSoftware(DesktopFrame<TextureSoftware>* output) override;
 
 private:
     void run_();
 
     static NamedLogger log;
 
-    NetworkClock& clock;
+    std::shared_ptr<NetworkClock> clock;
+
+    std::atomic<bool> flagRun;
+    bool flagKeyInPacket;
+    bool flagNextFrameAvailable;
 
     CodecType codecType;
-    int width, height;
 
     const AVCodec* codec;
     AVCodecContext* avctx;
-    ScaleSoftware scale;
 
     std::thread runThread;
 
@@ -48,11 +57,8 @@ private:
 
     std::mutex frameLock;
     std::condition_variable frameCV;
-    DesktopFrame<TextureSoftware> nextFrame;
-
-    std::atomic<bool> flagRun;
-    bool flagKeyInPacket;
-    bool flagNextFrameAvailable;
+    CircularDeque<DesktopFrame<AVFramePtr>, 4> frameQueue;
+    AVFramePtr prevReadFrame;
 };
 
 #endif

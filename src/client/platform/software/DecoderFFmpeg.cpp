@@ -2,23 +2,11 @@
 
 TWILIGHT_DEFINE_LOGGER(DecoderFFmpeg);
 
-DecoderFFmpeg::DecoderFFmpeg(NetworkClock& clock)
-    : clock(clock),
-      codecType(CodecType::VP8),
-      width(-1),
-      height(-1),
-      flagRun(false),
-      codec(nullptr),
-      avctx(nullptr),
-      flagKeyInPacket(false),
-      flagNextFrameAvailable(false) {
-    codec = avcodec_find_decoder_by_name("vp8");
-    log.assert_quit(codec != nullptr, "Failed to find ffvp8 encoder");
-}
+DecoderFFmpeg::DecoderFFmpeg() : flagRun(false), flagKeyInPacket(false), codec(nullptr), avctx(nullptr) {}
 
 DecoderFFmpeg::~DecoderFFmpeg() {
     bool wasRunning = flagRun.exchange(false, std::memory_order_relaxed);
-    log.assert_quit(!wasRunning, "Begin destructed while running!");
+    log.assert_quit(!wasRunning, "Being destructed while running!");
 
     if (runThread.joinable())
         runThread.join();
@@ -26,21 +14,61 @@ DecoderFFmpeg::~DecoderFFmpeg() {
     avcodec_free_context(&avctx);
 }
 
-void DecoderFFmpeg::setOutputResolution(int width_, int height_) {
-    width = width_;
-    height = height_;
+std::vector<CodecType> DecoderFFmpeg::enumSupportedCodecs() {
+    std::vector<CodecType> ret;
+    ret.reserve(1);
+
+    ret.push_back(CodecType::VP8);
+    return ret;
+}
+
+void DecoderFFmpeg::setVideoResolution(int width_, int height_) {
+    log.assert_quit(!flagRun.load(std::memory_order_relaxed), "Tried to set resolution while running!");
+}
+
+void DecoderFFmpeg::init(CodecType codecType_, std::shared_ptr<NetworkClock> clock_) {
+    codecType = codecType_;
+    clock = std::move(clock_);
+
+    switch (codecType) {
+    case CodecType::VP8:
+        codec = avcodec_find_decoder_by_name("vp8");
+        log.assert_quit(codec != nullptr, "Failed to find ffvp8 decoder");
+        break;
+    default:
+        log.error_quit("Unknown codec type ({}) requested!", (intmax_t)codecType);
+    }
+}
+
+bool DecoderFFmpeg::readSoftware(DesktopFrame<TextureSoftware>* output) {
+    std::unique_lock lock(frameLock);
+
+    while (frameQueue.empty() && flagRun.load(std::memory_order_relaxed))
+        frameCV.wait(lock);
+
+    if (!flagRun.load(std::memory_order_relaxed))
+        return false;
+
+    // Keep a reference so that it does not get freed
+    prevReadFrame = std::move(frameQueue.front().desktop);
+    *output = frameQueue.front().getOtherType(TextureSoftware::reference(prevReadFrame->data, prevReadFrame->linesize,
+                                                                         prevReadFrame->width, prevReadFrame->height,
+                                                                         (AVPixelFormat)prevReadFrame->format));
+    frameQueue.pop_front();
+    frameCV.notify_one();
+
+    return true;
 }
 
 void DecoderFFmpeg::start() {
     int err;
-    log.assert_quit(0 < width && 0 < height, "Not initialized before start!");
     log.assert_quit(!flagRun.load(std::memory_order_relaxed), "Not stopped before start!");
+    log.assert_quit(codec != nullptr, "Codec not set before start!");
 
     if (runThread.joinable())
         runThread.join();
 
     flagKeyInPacket = false;
-    flagNextFrameAvailable = false;
 
     avcodec_free_context(&avctx);
 
@@ -69,7 +97,7 @@ void DecoderFFmpeg::start() {
 
     av_dict_free(&options);
 
-    flagRun.store(true, std::memory_order_relaxed);
+    flagRun.store(true, std::memory_order_release);
     runThread = std::thread(&DecoderFFmpeg::run_, this);
 }
 
@@ -77,8 +105,9 @@ void DecoderFFmpeg::stop() {
     bool wasRunning = flagRun.exchange(false, std::memory_order_relaxed);
     log.assert_quit(wasRunning, "Not started before stopping!");
 
-    frameCV.notify_all();
+    std::scoped_lock lock(packetLock, frameLock);
     packetCV.notify_all();
+    frameCV.notify_all();
 }
 
 void DecoderFFmpeg::pushData(DesktopFrame<ByteBuffer>&& frame) {
@@ -110,19 +139,6 @@ void DecoderFFmpeg::pushData(DesktopFrame<ByteBuffer>&& frame) {
     packetCV.notify_one();
 }
 
-bool DecoderFFmpeg::readFrame(DesktopFrame<TextureSoftware>* output) {
-    std::unique_lock lock(frameLock);
-    while (!flagNextFrameAvailable && flagRun.load(std::memory_order_relaxed))
-        frameCV.wait(lock);
-    if (!flagRun.load(std::memory_order_relaxed))
-        return false;
-
-    *output = std::move(nextFrame);
-    flagNextFrameAvailable = false;
-    frameCV.notify_one();
-    return true;
-}
-
 void DecoderFFmpeg::run_() {
     int err;
 
@@ -147,28 +163,25 @@ void DecoderFFmpeg::run_() {
             }
             log.assert_quit(0 <= extraData.desktop, "Failed to find matching extra data for {}", fr->pts);
 
-            scale.setOutputFormat(width, height, AV_PIX_FMT_RGBA);
-            scale.pushInput(
-                TextureSoftware::reference(fr->data, fr->linesize, fr->width, fr->height, (AVPixelFormat)fr->format));
-            TextureSoftware rgbTex = scale.popOutput();
+            DesktopFrame<AVFramePtr> output = extraData.getOtherType(std::move(fr));
+            output.timeDecoded = clock->time();
+
+            /* acquire lock */ {
+                std::unique_lock lock(frameLock);
+                while (frameQueue.full() && flagRun.load(std::memory_order_relaxed))
+                    frameCV.wait(lock);
+                if (!flagRun.load(std::memory_order_relaxed))
+                    continue;
+                frameQueue.push_back(std::move(output));
+                frameCV.notify_one();
+            }
 
             av_frame_unref(fr.get());
-
-            std::unique_lock lock(frameLock);
-            while (flagNextFrameAvailable && flagRun.load(std::memory_order_relaxed))
-                frameCV.wait(lock);
-            if (!flagRun.load(std::memory_order_relaxed))
-                continue;
-
-            flagNextFrameAvailable = true;
-            nextFrame = extraData.getOtherType(std::move(rgbTex));
-            nextFrame.timeDecoded = clock.time();
-            frameCV.notify_one();
         } else if (err == AVERROR(EAGAIN)) {
             DesktopFrame<ByteBuffer> packet;
             /* acquire lock */ {
                 std::unique_lock lock(packetLock);
-                if (packetQueue.empty() && flagRun.load(std::memory_order_relaxed))
+                while (packetQueue.empty() && flagRun.load(std::memory_order_relaxed))
                     packetCV.wait(lock);
                 if (!flagRun.load(std::memory_order_relaxed))
                     continue;
@@ -195,5 +208,11 @@ void DecoderFFmpeg::run_() {
         } else {
             log.error_quit("Unknown error from encoder!");
         }
+    }
+
+    /* Drop all frames to save memory */ {
+        std::lock_guard lock(frameLock);
+        frameQueue.clear();
+        prevReadFrame.free();
     }
 }

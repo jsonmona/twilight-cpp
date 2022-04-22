@@ -13,7 +13,8 @@ TWILIGHT_DEFINE_LOGGER(StreamClient);
 constexpr uint16_t SERVICE_PORT = 6495;
 constexpr int32_t PROTOCOL_VERSION = 2;
 
-StreamClient::StreamClient(NetworkClock &clock) : clock(clock), captureWidth(-1), captureHeight(-1) {
+StreamClient::StreamClient(std::shared_ptr<NetworkClock> clock_)
+    : clock(std::move(clock_)), captureWidth(-1), captureHeight(-1), videoWidth(-1), videoHeight(-1) {
     conn.setOnDisconnected([this](std::string_view msg) { onStateChange(State::DISCONNECTED, msg); });
 
     std::unique_ptr<Keypair> keypair = std::make_unique<Keypair>();
@@ -63,12 +64,19 @@ void StreamClient::disconnect() {
     recvThread.join();
 
     captureWidth = captureHeight = -1;
+    videoWidth = videoHeight = -1;
 }
 
 void StreamClient::getCaptureResolution(int *width, int *height) {
     log.assert_quit(0 < captureWidth && 0 < captureHeight, "Capture resolution not set!");
     *width = captureWidth;
     *height = captureHeight;
+}
+
+void StreamClient::getVideoResolution(int* width, int* height) {
+    log.assert_quit(0 < videoWidth && 0 < videoHeight, "Video resolution not set!");
+    *width = videoWidth;
+    *height = videoHeight;
 }
 
 bool StreamClient::send(const msg::Packet &pkt, const ByteBuffer &extraData) {
@@ -100,7 +108,7 @@ void StreamClient::runPing_() {
         uint32_t pingId;
         std::chrono::milliseconds sleepAmount;
 
-        bool sendPing = clock.generatePing(&pingId, &sleepAmount);
+        bool sendPing = clock->generatePing(&pingId, &sleepAmount);
         if (!sendPing) {
             std::this_thread::sleep_for(sleepAmount);
             continue;
@@ -111,7 +119,7 @@ void StreamClient::runPing_() {
 
         auto *req = pkt.mutable_ping_request();
         req->set_id(pingId);
-        req->set_latency(clock.latency());
+        req->set_latency(clock->latency());
 
         send(pkt, nullptr);
         std::this_thread::sleep_for(sleepAmount);
@@ -243,6 +251,8 @@ bool StreamClient::doIntro_(const HostListEntry &host, bool forceAuth) {
 
     captureWidth = configureStreamResponse.capture_width();
     captureHeight = configureStreamResponse.capture_height();
+    videoWidth = configureStreamResponse.video_width();
+    videoHeight = configureStreamResponse.video_height();
 
     pkt.mutable_start_stream_request();
     if (!conn.send(pkt, nullptr))

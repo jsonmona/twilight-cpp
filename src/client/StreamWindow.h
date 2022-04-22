@@ -41,7 +41,7 @@ private slots:
 private:
     static NamedLogger log;
 
-    NetworkClock clock;
+    std::shared_ptr<NetworkClock> clock;
     StreamClient sc;
 
     QVBoxLayout boxLayout;

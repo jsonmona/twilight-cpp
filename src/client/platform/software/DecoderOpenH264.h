@@ -6,12 +6,15 @@
 #include "common/ffmpeg-headers.h"
 #include "common/log.h"
 #include "common/util.h"
+#include "common/CircularDeque.h"
 
 #include "common/platform/software/OpenH264Loader.h"
 #include "common/platform/software/ScaleSoftware.h"
 #include "common/platform/software/TextureSoftware.h"
 
 #include "client/NetworkClock.h"
+
+#include "client/platform/software/IDecoderSoftware.h"
 
 #include <atomic>
 #include <deque>
@@ -20,31 +23,35 @@
 #include <mutex>
 #include <thread>
 
-class DecoderOpenH264 {
+class DecoderOpenH264 : public IDecoderSoftware {
 public:
-    explicit DecoderOpenH264(NetworkClock& clock);
+    DecoderOpenH264();
     ~DecoderOpenH264();
 
-    void start();
-    void stop();
+    std::vector<CodecType> enumSupportedCodecs() override;
 
-    void setOutputResolution(int width, int height);
+    void setVideoResolution(int width, int height) override;
 
-    void pushData(DesktopFrame<ByteBuffer>&& nextData);
-    DesktopFrame<TextureSoftware> popData();
+    void init(CodecType codecType, std::shared_ptr<NetworkClock> clock) override;
+
+    void start() override;
+    void stop() override;
+
+    void pushData(DesktopFrame<ByteBuffer>&& frame) override;
+    bool readSoftware(DesktopFrame<TextureSoftware>* output) override;
 
 private:
+    void run_();
+
     static NamedLogger log;
 
-    NetworkClock& clock;
+    std::shared_ptr<NetworkClock> clock;
     std::shared_ptr<OpenH264Loader> loader;
-    ScaleSoftware scale;
 
-    bool idrPacketInQueue;
-    int outputWidth, outputHeight;
+    std::thread runThread;
 
     std::atomic<bool> flagRun;
-    std::thread looper;
+    int width, height;
 
     std::mutex packetLock;
     std::condition_variable packetCV;
@@ -52,10 +59,7 @@ private:
 
     std::mutex frameLock;
     std::condition_variable frameCV;
-    std::deque<DesktopFrame<TextureSoftware>> frameQueue;
-    MinMaxTrackingRingBuffer<size_t, 32> frameBufferHistory;
-
-    void run_();
+    CircularDeque<DesktopFrame<TextureSoftware>, 4> frameQueue;
 };
 
 #endif
