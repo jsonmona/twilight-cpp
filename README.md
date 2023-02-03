@@ -1,4 +1,9 @@
+## Note
+Currently working to rewrite this in Rust.
+Will push things to here when I'm ready.
+
 ## Twilight Remote Desktop
+
 This project aims to build a open source remote desktop suitable for any uses including gaming.
 
 This project is currently in pre-alpha, so no prebuilt binaries are provided.
